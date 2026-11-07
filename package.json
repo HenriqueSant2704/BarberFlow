@@ -9,7 +9,8 @@
     "start": "node src/server.js",
     "db:setup": "node src/setup-db.js",
     "db:demo": "node src/setup-db.js --demo",
-    "db:login": "node src/reset-login.js"
+    "db:login": "node src/reset-login.js",
+    "db:limpar-demo": "node src/limpar-demo.js"
   },
   "engines": { "node": ">=18.18" },
   "dependencies": {
