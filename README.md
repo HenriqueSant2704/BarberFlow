@@ -66,6 +66,8 @@ Para testar com clientes e agendamentos fictícios, use `npm run db:demo` (num b
 
 **Esqueceu a senha ou quer trocar o usuário?** Ajuste `ADMIN_USER` e `ADMIN_PASSWORD` no `.env` e rode `npm run db:login`. Isso troca só o login do barbeiro e não mexe em mais nada.
 
+**Apagar os dados de exemplo.** Se rodou o `npm run db:demo` e quer começar a usar de verdade, rode `npm run db:limpar-demo`. Ele apaga só os clientes, agendamentos e despesas de exemplo.
+
 ## 5. Rodar
 
 ```bash
