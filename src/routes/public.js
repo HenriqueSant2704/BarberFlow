@@ -39,7 +39,6 @@ r.post('/identificar', ah(async (req, res) => {
 // Confirmar agendamento
 r.post('/agendar', ah(async (req, res) => {
   const { date, time, serviceId } = req.body;
-  guard.honeypot(req);
   const tokenClientId = readClient(req);
   const device = guard.deviceOf(req);
   const ipHash = guard.ipHashOf(req);

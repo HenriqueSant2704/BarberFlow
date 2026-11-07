@@ -18,11 +18,6 @@ function ipHashOf(req) {
   return crypto.createHash('sha256').update(ip + '|' + (process.env.JWT_SECRET || '')).digest('hex').slice(0, 24);
 }
 
-/** Campo escondido que pessoas não veem; se veio preenchido, foi um robô. */
-function honeypot(req) {
-  if (String(req.body.website || '').trim()) fail(400, 'Não foi possível concluir o agendamento.');
-}
-
 /** Muitos agendamentos saindo do mesmo aparelho (ou da mesma rede) nas últimas 24 horas. */
 async function checkDevice(c, settings, device, ipHash) {
   const max = settings.maxDevice;
@@ -64,4 +59,4 @@ async function checkClient(c, settings, client, date) {
   }
 }
 
-module.exports = { deviceOf, ipHashOf, honeypot, checkDevice, checkClient };
+module.exports = { deviceOf, ipHashOf, checkDevice, checkClient };

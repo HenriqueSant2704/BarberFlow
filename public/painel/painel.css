@@ -450,9 +450,6 @@ input[type=date].input,input[type=time].input{min-width:0;width:100%}
 }
 
 /* ===== Proteção contra trote ===== */
-.btn.wab{color:var(--ok);text-decoration:none}
-.acard .acts2 .btn.wab{flex:0 0 auto;width:40px;padding-left:0;padding-right:0;justify-content:center}
-.drawer .btn.wab{background:var(--ok-bg);border-color:transparent;justify-content:center}
 .blkbox{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--bad-bg);color:var(--bad);border-radius:14px;padding:12px 14px}
 .blkbox .ic{display:grid;place-items:center;flex:0 0 auto}
 .blkbox .t{flex:1 1 180px;min-width:0;display:flex;flex-direction:column;gap:2px}

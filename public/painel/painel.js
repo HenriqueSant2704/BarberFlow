@@ -204,18 +204,10 @@
     </div></div>`;
   }
 
-  // Link do WhatsApp com a mensagem de confirmação já escrita
-  function waConfirm(x, c) {
-    const d = A.parse(x.date);
-    const dia = x.date === TODAY ? 'hoje' : x.date === TOMORROW ? 'amanhã' : d.toLocaleDateString('pt-BR', { weekday: 'long' });
-    const txt = `Olá, ${c.name.split(' ')[0]}! Aqui é da ${S.settings.shopName}. Passando para confirmar seu horário ${dia} (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) às ${x.time}, ${x.service}. Posso confirmar?`;
-    return `https://wa.me/55${digits(c.phone)}?text=${encodeURIComponent(txt)}`;
-  }
-
   // ===== Agenda =====
   function acard(x) {
     const c = cById(x.clientId);
-    return `<div class="acard ${x.status}" role="button" tabindex="0" data-a="dr-ap" data-id="${x.id}"><div class="top1"><div class="hh">${x.time}<small>até ${A.fromMin(A.toMin(x.time) + x.dur)}</small></div><span class="st st-${x.status}">${STATUS[x.status]}</span></div><div class="cl">${avatar(c, 36)}<div style="min-width:0"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></div></div><div class="ft"><span>${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${x.status === 'agendado' ? `<div class="acts2"><button class="btn sm okb" data-a="st" data-id="${x.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn sm badb" data-a="st" data-id="${x.id}" data-s="faltou">${IC.x} Não veio</button><a class="btn sm wab" href="${waConfirm(x, c)}" target="_blank" rel="noopener" data-a="wa" aria-label="Confirmar pelo WhatsApp" title="Confirmar pelo WhatsApp">${IC.chat}</a></div>` : ''}</div>`;
+    return `<div class="acard ${x.status}" role="button" tabindex="0" data-a="dr-ap" data-id="${x.id}"><div class="top1"><div class="hh">${x.time}<small>até ${A.fromMin(A.toMin(x.time) + x.dur)}</small></div><span class="st st-${x.status}">${STATUS[x.status]}</span></div><div class="cl">${avatar(c, 36)}<div style="min-width:0"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></div></div><div class="ft"><span>${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${x.status === 'agendado' ? `<div class="acts2"><button class="btn sm okb" data-a="st" data-id="${x.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn sm badb" data-a="st" data-id="${x.id}" data-s="faltou">${IC.x} Não veio</button></div>` : ''}</div>`;
   }
   function vAgenda() {
     const lists = {
@@ -439,7 +431,6 @@
       <button class="pitem" style="border:1px solid var(--line);padding:12px" data-a="dr-cli" data-id="${c.id}">${avatar(c, 44)}<span class="t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha →</small></span>${c.blocked ? '<span class="tag red">Bloqueado</span>' : ''}</button>
       <div class="kv"><div><span>Serviço</span><b>${esc(x.service)}</b></div><div><span>Duração</span><b>${x.dur} min</b></div><div><span>Valor</span><b class="num">${money(x.price)}</b></div></div>
       ${x.status === 'agendado' ? `<div class="actgrid"><button class="btn okb" data-a="st" data-id="${x.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn badb" data-a="st" data-id="${x.id}" data-s="faltou">${IC.x} Não veio</button></div>
-       <a class="btn wab" href="${waConfirm(x, c)}" target="_blank" rel="noopener" data-a="wa">${IC.chat} Confirmar pelo WhatsApp</a>
        ${V.dConfirm === 'a' + x.id ? `<div class="confirm-inline"><span>Cancelar e liberar o horário?</span><button class="btn sm badb" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button class="btn sm" data-a="confirm-no">Não</button></div>` : `<button class="btn ghost" data-a="ap-cancel-ask" data-id="${x.id}">Cancelar agendamento</button>`}`
         : `<button class="btn" data-a="st" data-id="${x.id}" data-s="agendado">Voltar para agendado</button>`}
       <button class="btn" data-a="copy" data-v="${maskPhone(c.phone)}">${IC.copy} Copiar WhatsApp</button>`;
@@ -637,7 +628,6 @@
           (r) => `Cliente bloqueado.${r && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`);
         break;
       case 'cli-unblock': act(() => api('POST', `/api/admin/clientes/${el.dataset.id}/desbloquear`, {}), 'Cliente desbloqueado. Já pode marcar pelo site de novo.'); break;
-      case 'wa': e.stopPropagation(); break;
       case 'cfg-color': saveSettings({ color: el.dataset.c }, 'Cor atualizada.'); break;
       case 'cfg-logo-rm': saveSettings({ logo: null }, 'Logo removida.'); break;
       case 'bk-quick': {
