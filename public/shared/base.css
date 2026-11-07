@@ -1,0 +1,41 @@
+
+/* Cores, fontes e peças comuns às duas telas. A cor da marca (--acc-*) vem das configurações. */
+:root{
+  --acc-l:#8c6a2b; --acc-d:#d2b06b; --on-acc-l:#ffffff; --on-acc-d:#17130d;
+  --acc:var(--acc-l); --on-acc:var(--on-acc-l);
+  --bg:#efede8; --surface:#ffffff; --surface-2:#f7f5f1; --ink:#1c1915; --muted:#6f685e; --line:#e5e0d7;
+  --rail:#15120f; --rail-ink:#ede6da; --rail-muted:#8f8679; --rail-line:#2a251f;
+  --ok:#2f7a4e; --ok-bg:#e4f1e8; --bad:#b0402f; --bad-bg:#f8e5e0; --info:#2e5f8a; --info-bg:#e3edf6; --warn:#9a6512; --warn-bg:#f8eedb;
+  --shadow:0 1px 2px rgba(28,25,21,.05),0 10px 30px rgba(28,25,21,.07);
+  --shadow-lg:0 30px 80px rgba(28,25,21,.18),0 4px 14px rgba(28,25,21,.08);
+  /* celular: visual escuro fixo */
+  --p-bg:#0e0c0a; --p-surface:#191612; --p-surface-2:#221e19; --p-line:#332d26; --p-ink:#f4eee5; --p-muted:#a39a8d;
+  --f-display:"Bodoni Moda","Didot","Bodoni 72",Georgia,serif;
+  --f-body:"Manrope",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --acc:var(--acc-d); --on-acc:var(--on-acc-d);
+  --bg:#0c0b09; --surface:#161411; --surface-2:#1d1a16; --ink:#efe9df; --muted:#9d9488; --line:#2b2620;
+  --rail:#100e0b; --rail-line:#26211b;
+  --ok:#74cf98; --ok-bg:#16301f; --bad:#f08f7e; --bad-bg:#3a1d18; --info:#93bde6; --info-bg:#182a3b; --warn:#e8b45c; --warn-bg:#382a12;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3); --shadow-lg:0 30px 80px rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --acc:var(--acc-d); --on-acc:var(--on-acc-d);
+  --bg:#0c0b09; --surface:#161411; --surface-2:#1d1a16; --ink:#efe9df; --muted:#9d9488; --line:#2b2620;
+  --rail:#100e0b; --rail-line:#26211b;
+  --ok:#74cf98; --ok-bg:#16301f; --bad:#f08f7e; --bad-bg:#3a1d18; --info:#93bde6; --info-bg:#182a3b; --warn:#e8b45c; --warn-bg:#382a12;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3); --shadow-lg:0 30px 80px rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.5;margin:0}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+.serif{font-family:var(--f-display);font-weight:500;letter-spacing:-.01em}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:11px 20px;border-radius:999px;font-weight:600;z-index:90;box-shadow:var(--shadow-lg);max-width:calc(100% - 32px);text-align:center}
+.av{display:grid;place-items:center;border-radius:50%;font-weight:800;flex:none;overflow:hidden;letter-spacing:.02em}
+.av img{width:100%;height:100%;object-fit:cover}
+.logo{background:var(--acc);color:var(--on-acc);font-family:var(--f-display);font-weight:700}
+

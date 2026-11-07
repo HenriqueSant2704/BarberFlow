@@ -1,0 +1,39 @@
+const { Pool, types } = require('pg');
+
+// Datas voltam como texto 'AAAA-MM-DD' (sem confusão de fuso) e valores em reais como número.
+types.setTypeParser(1082, (v) => v);
+types.setTypeParser(1700, (v) => parseFloat(v));
+
+if (!process.env.DATABASE_URL) {
+  console.error('\n  Falta a variável DATABASE_URL no arquivo .env (veja o .env.example).\n');
+  process.exit(1);
+}
+
+// O Neon manda "sslmode=require"; o pg já trata isso como verify-full (conexão segura),
+// então deixamos explícito para não aparecer o aviso no terminal.
+const connectionString = process.env.DATABASE_URL.trim().replace(/sslmode=(prefer|require|verify-ca)\b/, 'sslmode=verify-full');
+
+const pool = new Pool({
+  connectionString,
+  max: 5,
+  idleTimeoutMillis: 30000,
+});
+pool.on('error', (err) => console.error('Erro na conexão com o banco:', err.message));
+
+/** Roda várias consultas numa transação: ou grava tudo, ou nada. */
+async function tx(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { pool, query: (text, params) => pool.query(text, params), tx };
