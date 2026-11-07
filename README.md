@@ -28,7 +28,19 @@ Na pasta do projeto, abra o terminal e rode:
 npm install
 ```
 
-Depois copie o arquivo `.env.example` para um novo arquivo chamado `.env` e preencha:
+Depois crie na pasta do projeto um arquivo chamado `.env` com estas linhas e preencha cada uma:
+
+```
+DATABASE_URL=postgresql://usuario:senha@ep-xxxxx.sa-east-1.aws.neon.tech/neondb?sslmode=verify-full
+JWT_SECRET=uma-frase-bem-grande-e-aleatoria
+ADMIN_USER=barbeiro
+ADMIN_PASSWORD=uma-senha-com-6-ou-mais
+ADMIN_NAME=Seu Nome
+PORT=3000
+TZ_BARBEARIA=America/Sao_Paulo
+```
+
+O que vai em cada uma:
 
 | Variável | O que colocar |
 |---|---|
@@ -37,6 +49,8 @@ Depois copie o arquivo `.env.example` para um novo arquivo chamado `.env` e pree
 | `ADMIN_USER` | O usuário do barbeiro (ex.: `barbeiro`) |
 | `ADMIN_PASSWORD` | A senha inicial do barbeiro (mínimo 6 caracteres) |
 | `ADMIN_NAME` | O nome do barbeiro |
+| `PORT` | A porta do servidor (pode deixar 3000) |
+| `TZ_BARBEARIA` | O fuso horário (deixe `America/Sao_Paulo`) |
 
 > O `.env` tem senhas. Ele já está no `.gitignore` e nunca deve ir para o GitHub.
 

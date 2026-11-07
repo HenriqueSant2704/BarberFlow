@@ -3,7 +3,7 @@ const { fail } = require('./util');
 
 const SECRET = process.env.JWT_SECRET;
 if (!SECRET || SECRET.length < 16) {
-  console.error('\n  Defina JWT_SECRET no .env com pelo menos 16 caracteres (veja o .env.example).\n');
+  console.error('\n  Defina JWT_SECRET no .env com pelo menos 16 caracteres (veja o README).\n');
   process.exit(1);
 }
 const ADMIN_COOKIE = 'painel_sessao';

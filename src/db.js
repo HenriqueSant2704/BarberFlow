@@ -5,7 +5,7 @@ types.setTypeParser(1082, (v) => v);
 types.setTypeParser(1700, (v) => parseFloat(v));
 
 if (!process.env.DATABASE_URL) {
-  console.error('\n  Falta a variável DATABASE_URL no arquivo .env (veja o .env.example).\n');
+  console.error('\n  Falta a variável DATABASE_URL no arquivo .env (veja o README).\n');
   process.exit(1);
 }
 
