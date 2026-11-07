@@ -125,9 +125,11 @@
   function bell() {
     const n = unread();
     const list = S.notifications;
+    const tr = (w) => IC.trash.replace('<svg', `<svg width="${w}" height="${w}"`);
     return `<div class="bellwrap"><button class="bellbtn" data-a="bell" aria-label="Avisos${n ? `, ${n} novos` : ''}" aria-expanded="${V.bellOpen}">${IC.bell}${n ? `<span class="cnt">${n > 9 ? '9+' : n}</span>` : ''}</button>
-     ${V.bellOpen ? `<div class="bellpanel" role="dialog" aria-label="Avisos"><div class="bh"><b>Avisos</b><button class="btn sm ghost" data-a="sound-toggle">${Som.enabled() ? IC.sound.replace('<svg', '<svg width="16" height="16"') + ' Som ligado' : IC.mute.replace('<svg', '<svg width="16" height="16"') + ' Som desligado'}</button></div>
-      <div class="bl">${list.length ? list.map((x) => `<button class="nitem ${x.read ? '' : 'unread'}" data-a="dr-ap" data-id="${x.appointmentId}"><span class="dot"></span><span class="ic ${x.type}">${x.type === 'novo' ? IC.cal : IC.x}</span><span class="t"><b>${esc(x.clientName)}</b> ${x.type === 'novo' ? 'agendou' : 'cancelou'} ${esc(x.service.toLowerCase())}<small>${cap(longDate(x.date))} às ${x.time} · ${timeAgo(x.at)}</small></span></button>`).join('') : '<div class="empty" style="border:0">Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</div>'}</div></div>` : ''}</div>`;
+     ${V.bellOpen ? `<div class="bellpanel" role="dialog" aria-label="Avisos"><div class="bh"><b>Avisos</b><div style="display:flex;gap:2px"><button class="btn sm ghost" data-a="sound-toggle">${Som.enabled() ? IC.sound.replace('<svg', '<svg width="16" height="16"') + ' Som ligado' : IC.mute.replace('<svg', '<svg width="16" height="16"') + ' Som desligado'}</button>${list.length ? `<button class="btn sm ghost badb" data-a="n-clear-ask" title="Apagar todos os avisos">${tr(16)} Limpar</button>` : ''}</div></div>
+      ${V.nClearAsk ? `<div class="confirm-inline" style="margin:8px"><span style="flex:1">Apagar todos os avisos? Os agendamentos continuam.</span><button class="btn sm badb" data-a="n-clear">Apagar</button><button class="btn sm" data-a="n-clear-no">Não</button></div>` : ''}
+      <div class="bl">${list.length ? list.map((x) => `<div class="nrow"><button class="nitem ${x.read ? '' : 'unread'}" data-a="dr-ap" data-id="${x.appointmentId}"><span class="dot"></span><span class="ic ${x.type}">${x.type === 'novo' ? IC.cal : IC.x}</span><span class="t"><b>${esc(x.clientName)}</b> ${x.type === 'novo' ? 'agendou' : 'cancelou'} ${esc(x.service.toLowerCase())}<small>${cap(longDate(x.date))} às ${x.time} · ${timeAgo(x.at)}</small></span></button><button class="ndel" data-a="n-del" data-id="${x.id}" aria-label="Apagar este aviso" title="Apagar aviso">${tr(16)}</button></div>`).join('') : '<div class="empty" style="border:0">Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</div>'}</div></div>` : ''}</div>`;
   }
   function timeAgo(at) {
     const m = Math.round((Date.now() - new Date(at).getTime()) / 60000);
@@ -148,7 +150,7 @@
     <section class="main"><div class="topline"><div class="tbrand">${logo(34)}<b>${esc(S.settings.shopName)}</b></div><span class="live ${V.live ? 'on' : ''}" id="live"><i></i>${V.live ? 'Ao vivo' : 'Conectando…'}</span>${bell()}</div>
     ${needSound ? `<div class="soundbar"><span>${IC.sound.replace('<svg', '<svg width="18" height="18" style="vertical-align:-4px;margin-right:6px"')}Clique em "Ativar som" para ouvir a campainha quando chegar agendamento novo.</span><button class="btn sm" data-a="sound-on">Ativar som</button></div>` : ''}
     ${view}</section></div>
-    ${['inicio', 'agenda'].includes(V.sec) ? `<button class="fab" data-a="dr-novo" aria-label="Novo agendamento">${IC.plus}</button>` : ''}
+    ${['inicio', 'agenda'].includes(V.sec) && !V.bellOpen ? `<button class="fab" data-a="dr-novo" aria-label="Novo agendamento">${IC.plus}</button>` : ''}
     <nav class="mnav" aria-label="Menu">${[['inicio', 'Início', IC.home], ['agenda', 'Agenda', IC.cal], ['fin', 'Financeiro', IC.chart], ['cli', 'Clientes', IC.users]].map(([k, l, i]) => `<button class="${V.sec === k ? 'on' : ''}" data-a="sec" data-s="${k}" ${V.sec === k ? 'aria-current="page"' : ''}>${i}${l}${k === 'agenda' && todayN ? `<span class="dotn">${todayN}</span>` : ''}</button>`).join('')}
      <button class="${['cfg', 'perfil'].includes(V.sec) ? 'on' : ''}" data-a="more">${IC.menu}Mais</button></nav>`;
   }
@@ -371,7 +373,7 @@
       <div class="row2"><div class="field"><label for="cfg-bf">Clientes podem marcar de</label><input type="date" class="input" id="cfg-bf" value="${st.bookFrom}" data-ch="cfg" data-k="bookFrom"></div><div class="field"><label for="cfg-bt">até</label><input type="date" class="input" id="cfg-bt" value="${st.bookTo}" data-ch="cfg" data-k="bookTo"></div></div>
       <div class="chips">${[['Até o fim deste mês', 0], ['Até o fim do próximo mês', 1], ['Até o fim de 3 meses', 2]].map(([l, n]) => `<button class="chipb" data-a="bk-quick" data-n="${n}">${l}</button>`).join('')}</div>
       <div style="display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--line);padding-top:14px"><span class="lab" style="font-size:12.5px;font-weight:700;color:var(--muted)">Dias bloqueados (folgas, feriados, cursos)</span>
-       <form class="expform" id="blkForm" style="grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto;margin:0"><input type="date" class="input" id="blk-date" min="${TODAY}" aria-label="Dia"><input class="input" id="blk-why" placeholder="Motivo. Ex.: feriado" maxlength="80"><button class="btn acc" type="submit">Bloquear</button></form>
+       <form class="expform blkform" id="blkForm"><input type="date" class="input" id="blk-date" min="${TODAY}" aria-label="Dia"><input class="input" id="blk-why" placeholder="Motivo. Ex.: feriado" maxlength="80"><button class="btn acc" type="submit">Bloquear</button></form>
        ${blocked.map((b) => `<div class="exp"><span class="ic">${IC.cal}</span><span class="t"><b>${cap(longDate(b.date))}</b><small>${esc(b.why || 'Bloqueado')}</small></span><button class="btn sm ghost" data-a="blk-del" data-d="${b.date}">Liberar</button></div>`).join('') || '<div class="muted" style="font-size:12.5px">Nenhum dia bloqueado.</div>'}</div></div>
      <div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="card-h" style="margin:0 0 4px"><h3>Serviços e preços</h3><button class="btn sm acc" data-a="svc-add">${IC.plus} Novo serviço</button></div>
       ${S.services.map((s) => `<div class="svrow" data-svc="${s.id}"><span class="ic">${svcIcon(s.name)}</span><input class="input" value="${esc(s.name)}" data-ch="svc" data-k="name" aria-label="Nome do serviço" maxlength="60"><input class="input" inputmode="decimal" value="${String(s.price).replace('.', ',')}" data-ch="svc" data-k="price" aria-label="Preço em reais"><select class="input" data-ch="svc" data-k="dur" aria-label="Duração">${[30, 60, 90, 120].map((m) => `<option value="${m}" ${s.dur === m ? 'selected' : ''}>${m} min</option>`).join('')}</select>${V.dConfirm === 's' + s.id ? `<span style="display:flex;gap:4px"><button class="btn sm badb" data-a="svc-del" data-id="${s.id}">Remover</button><button class="btn sm ghost" data-a="confirm-no">Não</button></span>` : `<button class="btn sm ghost badb" data-a="svc-ask" data-id="${s.id}" aria-label="Remover serviço">${IC.x.replace('<svg', '<svg width="15" height="15"')}</button>`}</div>`).join('')}
@@ -489,13 +491,19 @@
     }
     if (f.id === 'cliForm') {
       const name = $('#cd-name').value.trim(), phone = digits($('#cd-phone').value);
+      const err = A.nameError(name) || A.phoneError(phone);
+      if (err) { toast(err); return; }
       act(() => put('/api/admin/clientes/' + f.dataset.id, { name, phone }), 'Cliente atualizado.');
     }
     if (f.id === 'nvForm') {
       const nv = V.nv;
       const body = { date: nv.date, time: nv.time, serviceId: nv.svc };
       if (nv.cid) body.clientId = nv.cid;
-      else if (nv.isNew) { body.name = nv.name; body.phone = digits(nv.phone); }
+      else if (nv.isNew) {
+        const ne = A.nameError(nv.name), pe = A.phoneError(nv.phone);
+        if (ne || pe) { nv.err = ne || pe; render(); return; }
+        body.name = A.tidyName(nv.name); body.phone = A.phoneDigits(nv.phone);
+      }
       else { nv.err = 'Escolha o cliente: digite o nome e toque nele na lista, ou cadastre um cliente novo.'; render(); return; }
       api('POST', '/api/admin/agendamentos', body)
         .then(async () => { V.drawer = null; await reload(); toast(`Agendado para ${shortDate(nv.date)} às ${nv.time}.`); render(); })
@@ -532,11 +540,19 @@
       case 'go-agenda': V.sec = 'agenda'; V.agView = 'lista'; V.agTab = 'hoje'; V.pg.ag = 1; render(); break;
       case 'go-sumidos': V.sec = 'cli'; V.cliFilter = 'sumidos'; V.pg.cli = 1; render(); break;
       case 'bell':
-        V.bellOpen = !V.bellOpen; render();
+        V.bellOpen = !V.bellOpen; V.nClearAsk = false; render();
         if (V.bellOpen && unread()) {
           api('POST', '/api/admin/avisos/lidos').then(() => { setTimeout(() => { S.notifications.forEach((n) => (n.read = true)); render(); }, 2500); }).catch(() => {});
         }
         break;
+      case 'n-del': {
+        const id = el.dataset.id; S.notifications = S.notifications.filter((x) => x.id !== id); render();
+        api('DELETE', '/api/admin/avisos/' + id).catch((err) => { toast(err.message); reload().then(render); });
+        break;
+      }
+      case 'n-clear-ask': V.nClearAsk = true; render(); break;
+      case 'n-clear-no': V.nClearAsk = false; render(); break;
+      case 'n-clear': V.nClearAsk = false; act(() => api('DELETE', '/api/admin/avisos'), 'Avisos apagados.'); break;
       case 'sound-toggle': Som.setEnabled(!Som.enabled()); if (Som.enabled()) { Som.unlock(); setTimeout(() => Som.play('novo'), 100); } render(); break;
       case 'sound-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); toast('Som ativado. É assim que vai tocar quando chegar agendamento.'); break;
       case 'ag-view': V.agView = el.dataset.v; render(); break;

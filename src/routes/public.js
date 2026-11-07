@@ -5,7 +5,7 @@ const repo = require('../repo');
 const { signClient, readClient, requireClient } = require('../auth');
 const { createAppointment, findOrCreateClient } = require('../booking');
 const notify = require('../notify');
-const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, cleanId } = require('../util');
+const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, lookupPhone, cleanId } = require('../util');
 
 const r = express.Router();
 
@@ -28,7 +28,7 @@ r.get('/ocupados', ah(async (req, res) => {
 
 // "Já sou cliente": procura pelo WhatsApp
 r.post('/identificar', ah(async (req, res) => {
-  const phone = cleanPhone(req.body.phone);
+  const phone = lookupPhone(req.body.phone);
   const { rows } = await db.query('SELECT * FROM clients WHERE phone = $1', [phone]);
   if (!rows[0]) return res.status(404).json({ error: 'Não achamos esse número.' });
   const client = repo.mapClient(rows[0]);

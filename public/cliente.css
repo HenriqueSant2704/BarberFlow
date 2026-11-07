@@ -61,3 +61,17 @@ body{color:var(--p-ink);color-scheme:dark}
   .v-ok{max-width:560px;margin:0 auto}
   .toast{bottom:32px}
 }
+
+/* celulares bem estreitos */
+.tabbar button{white-space:nowrap}
+.tabbar .ls{display:none}
+@media (max-width:360px){
+  .tabbar .lf{display:none}
+  .tabbar .ls{display:inline}
+  .pscroll{padding-left:14px;padding-right:14px}
+  .hscroll,.daystrip{margin:0 -14px;padding-left:14px;padding-right:14px;scroll-padding:0 14px}
+  .cover h1{font-size:32px}
+  .ptitle{font-size:30px}
+  .times{gap:6px}
+  .tm{padding:10px 0;font-size:14px}
+}

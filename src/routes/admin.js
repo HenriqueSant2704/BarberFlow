@@ -78,6 +78,15 @@ r.post('/avisos/lidos', ah(async (req, res) => {
   await db.query('UPDATE notifications SET read = true WHERE NOT read');
   res.json({ ok: true });
 }));
+// Lixeira do sino: apaga um aviso ou todos. Só some o aviso; o agendamento continua.
+r.delete('/avisos', ah(async (req, res) => {
+  await db.query('DELETE FROM notifications');
+  res.json({ ok: true });
+}));
+r.delete('/avisos/:id', ah(async (req, res) => {
+  await db.query('DELETE FROM notifications WHERE id = $1', [cleanId(req.params.id)]);
+  res.json({ ok: true });
+}));
 
 // ----- Agendamentos -----
 r.patch('/agendamentos/:id', ah(async (req, res) => {

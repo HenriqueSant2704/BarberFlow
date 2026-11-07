@@ -68,7 +68,7 @@
       ${portal('dportal')}</div></header>
       <main class="pscroll v-${V.tab}" id="pscroll">${view}</main>
       ${V.tab === 'agendar' && V.date && !desk() ? bookbar() : ''}
-      <nav class="tabbar" aria-label="Menu">${tabs.map(([k, l, i]) => `<button class="${(V.tab === 'ok' ? 'agendar' : V.tab) === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${(V.tab === 'ok' ? 'agendar' : V.tab) === k ? 'aria-current="page"' : ''}>${i}${l}</button>`).join('')}</nav>
+      <nav class="tabbar" aria-label="Menu">${tabs.map(([k, l, i]) => `<button class="${(V.tab === 'ok' ? 'agendar' : V.tab) === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${(V.tab === 'ok' ? 'agendar' : V.tab) === k ? 'aria-current="page"' : ''}>${i}${k === 'horarios' ? '<span class="lf">Meus horários</span><span class="ls">Horários</span>' : l}</button>`).join('')}</nav>
       ${V.sheet ? sheet() : ''}`;
     if (keep) window.scrollTo(0, top); else window.scrollTo(0, 0);
   }
@@ -160,8 +160,8 @@
       body = `<div><span class="eyebrow">Quase lá</span><h2 class="ptitle" style="font-size:28px">Quem é você?</h2></div>
       <div class="ptabs"><button class="${V.who === 'cliente' ? 'on' : ''}" data-a="who" data-w="cliente">Já sou cliente</button><button class="${V.who === 'novo' ? 'on' : ''}" data-a="who" data-w="novo">Primeira vez</button></div>
       ${V.who === 'cliente'
-        ? `<div class="pfield"><label for="c-phone">Seu WhatsApp</label><input class="pin" id="c-phone" inputmode="tel" placeholder="(11) 98765-4321" value="${esc(maskPhone(V.phone))}" data-in="c-phone" autocomplete="tel"></div>`
-        : `<div class="pfield"><label for="n-name">Seu nome</label><input class="pin" id="n-name" placeholder="Nome e sobrenome" value="${esc(V.newName)}" data-in="n-name" autocomplete="name"></div><div class="pfield"><label for="n-phone">WhatsApp</label><input class="pin" id="n-phone" inputmode="tel" placeholder="(11) 98765-4321" value="${esc(maskPhone(V.newPhone))}" data-in="n-phone" autocomplete="tel"></div><div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>`}
+        ? `<div class="pfield"><label for="c-phone">Seu WhatsApp</label><input class="pin" id="c-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.phone))}" data-in="c-phone" autocomplete="tel"></div>`
+        : `<div class="pfield"><label for="n-name">Seu nome</label><input class="pin" id="n-name" placeholder="Nome e sobrenome" value="${esc(V.newName)}" data-in="n-name" autocomplete="name"></div><div class="pfield"><label for="n-phone">WhatsApp</label><input class="pin" id="n-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.newPhone))}" data-in="n-phone" autocomplete="tel"></div><div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>`}
       ${V.err ? `<div class="perr" role="alert">${esc(V.err)}</div>` : ''}
       ${V.notFound ? `<div class="pcard" style="display:flex;flex-direction:column;gap:8px"><b>Não achamos esse número.</b><span class="muted" style="font-size:13px">Deve ser sua primeira vez aqui. O cadastro leva 10 segundos.</span><button class="pbtn ghost" data-a="to-new">Fazer cadastro</button></div>` : ''}
       <button class="pbtn gold ${V.busyAction ? 'busy' : ''}" data-a="id-next" ${V.busyAction ? 'disabled' : ''}>${V.busyAction ? 'Procurando…' : 'Continuar'}</button>`;
@@ -189,7 +189,7 @@
 
   function entry(title) {
     return `<div><span class="eyebrow">${title}</span><h2 class="ptitle">Entre com seu <br>WhatsApp</h2></div>
-    <div class="pcard" style="display:flex;flex-direction:column;gap:12px"><div class="pfield"><label for="e-phone">WhatsApp</label><input class="pin" id="e-phone" inputmode="tel" placeholder="(11) 98765-4321" data-in="mask" autocomplete="tel"></div>${V.entryErr ? `<div class="perr" role="alert">${esc(V.entryErr)}</div>` : ''}<button class="pbtn gold" data-a="entry" ${V.busyAction ? 'disabled' : ''}>Entrar</button><div class="muted" style="font-size:12.5px">Não precisa de senha. Se ainda não tem cadastro, ele é criado no seu primeiro agendamento.</div></div>`;
+    <div class="pcard" style="display:flex;flex-direction:column;gap:12px"><div class="pfield"><label for="e-phone">WhatsApp</label><input class="pin" id="e-phone" inputmode="tel" placeholder="(11) 97425-8136" data-in="mask" autocomplete="tel"></div>${V.entryErr ? `<div class="perr" role="alert">${esc(V.entryErr)}</div>` : ''}<button class="pbtn gold" data-a="entry" ${V.busyAction ? 'disabled' : ''}>Entrar</button><div class="muted" style="font-size:12.5px">Não precisa de senha. Se ainda não tem cadastro, ele é criado no seu primeiro agendamento.</div></div>`;
   }
 
   function vHorarios() {
@@ -258,8 +258,9 @@
             } catch (err) { if (err.status === 404) { V.notFound = true; V.err = ''; } else throw err; }
           });
         } else {
-          if (V.newName.trim().length < 3) { V.err = 'Digite seu nome e sobrenome.'; render(true); break; }
-          if (digits(V.newPhone).length < 10) { V.err = 'Digite um WhatsApp válido, com DDD.'; render(true); break; }
+          const ne = A.nameError(V.newName), pe = A.phoneError(V.newPhone);
+          if (ne || pe) { V.err = ne || pe; render(true); break; }
+          V.newName = A.tidyName(V.newName);
           V.justId = true; V.sheet = 'confirm'; render(true);
         }
         break;
@@ -309,8 +310,8 @@
       }
       case 'psave': {
         const name = $('#p-name').value.trim(), phone = digits($('#p-wa').value);
-        if (name.length < 3) { V.err = 'Digite seu nome.'; render(true); break; }
-        if (phone.length < 10) { V.err = 'WhatsApp inválido.'; render(true); break; }
+        const ne = A.nameError(name), pe = A.phoneError(phone);
+        if (ne || pe) { V.err = ne || pe; render(true); break; }
         V.err = '';
         run(async () => { const d = await api('PUT', '/api/public/me', { name, phone }, authH()); ME = d.client; toast('Dados atualizados.'); V.err = ''; });
         break;
