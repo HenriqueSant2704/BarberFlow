@@ -75,3 +75,6 @@ body{color:var(--p-ink);color-scheme:dark}
   .times{gap:6px}
   .tm{padding:10px 0;font-size:14px}
 }
+
+/* Campo-isca invisível para robôs (pessoas não veem nem alcançam com Tab) */
+.hp{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}

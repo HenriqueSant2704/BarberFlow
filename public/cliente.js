@@ -18,6 +18,14 @@
 
   const token = () => store.get(TOKEN_KEY);
   const authH = () => (token() ? { Authorization: 'Bearer ' + token() } : {});
+  // Número aleatório deste aparelho (não identifica a pessoa): ajuda a barbearia a frear trotes
+  function deviceId() {
+    try {
+      let d = localStorage.getItem('barbearia_dev');
+      if (!d) { d = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9-]/g, ''); localStorage.setItem('barbearia_dev', d); }
+      return d;
+    } catch { return ''; }
+  }
 
   // ----- regras da agenda com os dados carregados -----
   const daySlots = (ds) => A.daySlots(S.settings, S.blocked, ds);
@@ -161,7 +169,7 @@
       <div class="ptabs"><button class="${V.who === 'cliente' ? 'on' : ''}" data-a="who" data-w="cliente">Já sou cliente</button><button class="${V.who === 'novo' ? 'on' : ''}" data-a="who" data-w="novo">Primeira vez</button></div>
       ${V.who === 'cliente'
         ? `<div class="pfield"><label for="c-phone">Seu WhatsApp</label><input class="pin" id="c-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.phone))}" data-in="c-phone" autocomplete="tel"></div>`
-        : `<div class="pfield"><label for="n-name">Seu nome</label><input class="pin" id="n-name" placeholder="Nome e sobrenome" value="${esc(V.newName)}" data-in="n-name" autocomplete="name"></div><div class="pfield"><label for="n-phone">WhatsApp</label><input class="pin" id="n-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.newPhone))}" data-in="n-phone" autocomplete="tel"></div><div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>`}
+        : `<div class="pfield"><label for="n-name">Seu nome</label><input class="pin" id="n-name" placeholder="Nome e sobrenome" value="${esc(V.newName)}" data-in="n-name" autocomplete="name"></div><div class="pfield"><label for="n-phone">WhatsApp</label><input class="pin" id="n-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.newPhone))}" data-in="n-phone" autocomplete="tel"></div><div class="hp" aria-hidden="true"><label>Site <input tabindex="-1" autocomplete="off" data-in="hp" value="${esc(V.hp || '')}"></label></div><div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>`}
       ${V.err ? `<div class="perr" role="alert">${esc(V.err)}</div>` : ''}
       ${V.notFound ? `<div class="pcard" style="display:flex;flex-direction:column;gap:8px"><b>Não achamos esse número.</b><span class="muted" style="font-size:13px">Deve ser sua primeira vez aqui. O cadastro leva 10 segundos.</span><button class="pbtn ghost" data-a="to-new">Fazer cadastro</button></div>` : ''}
       <button class="pbtn gold ${V.busyAction ? 'busy' : ''}" data-a="id-next" ${V.busyAction ? 'disabled' : ''}>${V.busyAction ? 'Procurando…' : 'Continuar'}</button>`;
@@ -268,9 +276,10 @@
         V.err = '';
         run(async () => {
           try {
-            const body = { date: V.date, time: V.time, serviceId: V.svc };
+            const body = { date: V.date, time: V.time, serviceId: V.svc, website: V.hp || '' };
             if (!ME) { body.name = V.newName.trim(); body.phone = digits(V.newPhone); }
-            const d = await api('POST', '/api/public/agendar', body, authH());
+            const dev = deviceId();
+            const d = await api('POST', '/api/public/agendar', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
             store.set(TOKEN_KEY, d.token);
             await Promise.all([loadMe(), loadBusy()]);
             Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', done: true });
@@ -325,6 +334,7 @@
     if (k === 'c-phone') { V.phone = el.value; V.notFound = false; }
     if (k === 'n-name') V.newName = el.value;
     if (k === 'n-phone') V.newPhone = el.value;
+    if (k === 'hp') V.hp = el.value;
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && V.sheet) { V.sheet = null; render(true); }

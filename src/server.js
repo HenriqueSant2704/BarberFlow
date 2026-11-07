@@ -28,8 +28,22 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
-app.listen(PORT, () => {
+
+// Ao ligar, garante que o banco tem todas as tabelas e colunas novas (é seguro rodar sempre).
+// Assim uma atualização no Render já ajusta o Neon sozinha, sem precisar rodar db:setup.
+async function migrate() {
+  const fs = require('fs');
+  const db = require('./db');
+  try {
+    await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
+    await db.query('INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING');
+  } catch (err) {
+    console.error('Não consegui atualizar as tabelas do banco:', err.message);
+  }
+}
+
+migrate().then(() => app.listen(PORT, () => {
   console.log(`\n  Barbearia rodando:`);
   console.log(`  Site do cliente:   http://localhost:${PORT}`);
   console.log(`  Painel do barbeiro: http://localhost:${PORT}/painel\n`);
-});
+}));

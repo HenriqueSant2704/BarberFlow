@@ -106,9 +106,23 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
       if (!Agenda.fits(settings, blocked, appts, a.date, a.time, a.duration, a.id)) fail(409, 'Esse horário já foi ocupado por outro cliente.');
     }
     const up = await c.query('UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2 RETURNING *', [status, id]);
-    return repo.mapAppt(up.rows[0]);
+    // Bloqueio automático: o cliente faltou X vezes e não pode mais marcar pelo site
+    let blockedClient = null;
+    if (status === 'faltou' && a.status !== 'faltou') {
+      const settings = await repo.getSettings(c);
+      if (settings.autoBlock > 0) {
+        const { rows: f } = await c.query("SELECT count(*)::int AS n FROM appointments WHERE client_id = $1 AND status = 'faltou'", [a.client_id]);
+        if (f[0].n >= settings.autoBlock) {
+          const { rows: cl } = await c.query(
+            'UPDATE clients SET blocked = true, blocked_reason = $2 WHERE id = $1 AND NOT blocked RETURNING *',
+            [a.client_id, `Faltou ${f[0].n} vezes sem avisar`]);
+          if (cl[0]) blockedClient = repo.mapClient(cl[0]);
+        }
+      }
+    }
+    return { appt: repo.mapAppt(up.rows[0]), blockedClient };
   });
-  res.json({ appointment: appt });
+  res.json({ appointment: appt.appt, blockedClient: appt.blockedClient });
 }));
 
 r.post('/agendamentos', ah(async (req, res) => {
@@ -157,6 +171,26 @@ r.put('/clientes/:id', ah(async (req, res) => {
   res.json({ client: repo.mapClient(rows[0]) });
 }));
 
+// Bloquear: o cliente não consegue mais marcar pelo site, e os horários futuros dele são liberados.
+r.post('/clientes/:id/bloquear', ah(async (req, res) => {
+  const id = cleanId(req.params.id);
+  const reason = String(req.body.reason || '').trim().slice(0, 120) || 'Bloqueado pelo barbeiro';
+  const out = await db.tx(async (c) => {
+    const { rows } = await c.query('UPDATE clients SET blocked = true, blocked_reason = $2 WHERE id = $1 RETURNING *', [id, reason]);
+    if (!rows[0]) fail(404, 'Cliente não encontrado.');
+    const { rows: cancel } = await c.query(
+      "UPDATE appointments SET status = 'cancelado', updated_at = now() WHERE client_id = $1 AND status = 'agendado' AND date >= $2 RETURNING *",
+      [id, today()]);
+    return { client: repo.mapClient(rows[0]), cancelled: cancel.map(repo.mapAppt) };
+  });
+  res.json(out);
+}));
+r.post('/clientes/:id/desbloquear', ah(async (req, res) => {
+  const { rows } = await db.query("UPDATE clients SET blocked = false, blocked_reason = '' WHERE id = $1 RETURNING *", [cleanId(req.params.id)]);
+  if (!rows[0]) fail(404, 'Cliente não encontrado.');
+  res.json({ client: repo.mapClient(rows[0]) });
+}));
+
 // ----- Configurações -----
 const COLORS = ['latao', 'verde', 'bordo', 'petroleo', 'cobre', 'branco', 'preto', 'azul', 'roxo', 'vermelho', 'custom'];
 const FIELDS = {
@@ -178,7 +212,19 @@ const FIELDS = {
   closed: ['closed_days', (v) => { if (!Array.isArray(v) || v.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) fail(400, 'Dias inválidos.'); if (v.length >= 7) fail(400, 'A barbearia precisa abrir pelo menos um dia na semana.'); return [...new Set(v)]; }],
   bookFrom: ['book_from', (v) => { if (!Agenda.isDate(v)) fail(400, 'Data inválida.'); return v; }],
   bookTo: ['book_to', (v) => { if (!Agenda.isDate(v)) fail(400, 'Data inválida.'); return v; }],
+  // Proteção contra trote (0 = sem limite)
+  maxActive: ['max_active', limit(0, 20, 'Horários marcados por cliente')],
+  maxPerDay: ['max_per_day', limit(0, 10, 'Horários por dia')],
+  maxDevice: ['max_device', limit(0, 50, 'Agendamentos por aparelho')],
+  autoBlock: ['auto_block', limit(0, 20, 'Faltas para bloquear')],
 };
+function limit(min, max, label) {
+  return (v) => {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < min || n > max) fail(400, `${label}: use um número de ${min} a ${max}.`);
+    return n;
+  };
+}
 r.put('/configuracoes', ah(async (req, res) => {
   const cur = await repo.getSettings();
   const next = { ...cur };
