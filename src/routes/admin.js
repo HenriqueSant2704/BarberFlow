@@ -192,7 +192,7 @@ r.post('/clientes/:id/desbloquear', ah(async (req, res) => {
 }));
 
 // ----- Configurações -----
-const COLORS = ['latao', 'verde', 'bordo', 'petroleo', 'cobre', 'branco', 'preto', 'azul', 'roxo', 'vermelho', 'custom'];
+const COLORS = ['latao', 'verde', 'bordo', 'petroleo', 'cobre', 'branco', 'preto', 'azul', 'roxo', 'vermelho', 'laranja', 'rosa', 'ciano', 'custom'];
 const FIELDS = {
   shopName: ['shop_name', (v) => { const s = String(v || '').trim(); if (!s || s.length > 60) fail(400, 'O nome da barbearia precisa ter entre 1 e 60 letras.'); return s; }],
   tagline: ['tagline', (v) => { const s = String(v || '').trim(); if (!s || s.length > 140) fail(400, 'A frase precisa ter entre 1 e 140 letras.'); return s; }],

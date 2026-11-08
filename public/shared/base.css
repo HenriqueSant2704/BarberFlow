@@ -42,3 +42,40 @@ button{cursor:pointer}
 
 /* Números grandes (horários, valores) na fonte sem serifa: fica mais fácil de ler de longe */
 .numd{font-family:var(--f-body)!important;font-weight:800!important;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+
+/* ---- Avisos que chamam atenção (site e painel) ---- */
+#alertas{position:fixed;z-index:200;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(560px,calc(100% - 20px));pointer-events:none}
+.alerta{--a:#2563eb;position:relative;overflow:hidden;pointer-events:auto;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:start;padding:16px 14px 18px 16px;border-radius:14px;background:var(--a);color:#fff;font-family:var(--f-body);box-shadow:0 20px 44px color-mix(in srgb,var(--a) 45%,transparent),0 2px 0 rgba(255,255,255,.22) inset;animation:al-cai .55s cubic-bezier(.34,1.56,.64,1) both,al-treme .5s .45s ease both}
+.alerta[data-t="erro"]{--a:#dc2626}
+.alerta[data-t="aviso"]{--a:#ea580c}
+.alerta[data-t="ok"]{--a:#16a34a}
+.alerta[data-t="info"]{--a:#2563eb}
+.alerta.sai{animation:al-sai .3s ease forwards}
+.al-ico{width:44px;height:44px;display:grid;place-items:center;border-radius:10px;background:rgba(255,255,255,.22);animation:al-pulso 1.4s ease-out 2}
+.al-txt{min-width:0}
+.al-txt strong{display:block;font-size:16.5px;font-weight:800;line-height:1.3}
+.al-txt p{margin:4px 0 0;font-size:14px;line-height:1.5;opacity:.95}
+.al-acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.al-acoes button{padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.14);color:#fff;font-weight:700;font-size:13.5px}
+.al-acoes button.pri{background:#fff;color:var(--a);border-color:#fff}
+.al-acoes button:hover{transform:translateY(-1px)}
+.al-x{width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:10px;background:rgba(255,255,255,.16);color:#fff;padding:0}
+.al-tempo{position:absolute;left:0;bottom:0;height:4px;width:100%;background:rgba(255,255,255,.55);transform-origin:left;animation:al-tempo linear forwards}
+.alerta:hover .al-tempo{animation-play-state:paused}
+@keyframes al-cai{from{opacity:0;transform:translateY(-40px) scale(.9)}}
+@keyframes al-treme{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+@keyframes al-sai{to{opacity:0;transform:translateY(-24px) scale(.96)}}
+@keyframes al-tempo{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@keyframes al-pulso{0%{box-shadow:0 0 0 0 rgba(255,255,255,.5)}100%{box-shadow:0 0 0 14px rgba(255,255,255,0)}}
+/* borda da tela pisca quando aparece um erro */
+#flash-borda{position:fixed;inset:0;z-index:199;pointer-events:none}
+#flash-borda.flash-erro{animation:flash-erro 1.1s ease-out}
+#flash-borda.flash-aviso{animation:flash-aviso 1.1s ease-out}
+@keyframes flash-erro{0%{box-shadow:inset 0 0 0 6px #ef4444,inset 0 0 70px rgba(239,68,68,.35)}100%{box-shadow:inset 0 0 0 0 transparent}}
+@keyframes flash-aviso{0%{box-shadow:inset 0 0 0 6px #f59e0b,inset 0 0 70px rgba(245,158,11,.35)}100%{box-shadow:inset 0 0 0 0 transparent}}
+/* o item que causou o problema treme com um anel colorido */
+.tremer{animation:tremer .55s ease both;box-shadow:0 0 0 3px #dc2626,0 0 0 9px rgba(220,38,38,.22)!important;border-color:#dc2626!important}
+.tremer.tremer-aviso{box-shadow:0 0 0 3px #ea580c,0 0 0 9px rgba(234,88,12,.22)!important;border-color:#ea580c!important}
+@keyframes tremer{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(2px)}}
+@media (max-width:600px){.alerta{padding:14px 10px 16px 12px;gap:10px}.al-ico{width:38px;height:38px}.al-txt strong{font-size:15.5px}.al-txt p{font-size:13px}}
+@media (prefers-reduced-motion:reduce){.alerta,.tremer,#flash-borda,.al-ico{animation-duration:.01ms!important;animation-iteration-count:1!important}}

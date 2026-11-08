@@ -1,20 +1,24 @@
-// Site do cliente: agendar, ver e cancelar horários, editar o perfil.
-// Funciona no celular (abas embaixo) e no computador (menu no topo, agendamento em 3 colunas).
+// Site do cliente: início, agendar, ver e cancelar horários, editar o perfil.
+// Celular: abas embaixo e barra "Confirmar" fixa. Computador: menu no topo e resumo ao lado.
+// Quando algo impede o agendamento (horário ocupado, serviço que não cabe, dia lotado),
+// aparece um aviso colorido no topo, a borda da tela pisca e o item culpado treme.
 (function () {
   const A = window.Agenda;
-  const { esc, money, money0, digits, maskPhone, MESES, DOW, longDate, shortDate, cap, IC, svcIcon, applyTheme, toast, api, store } = window.U;
+  const { esc, money, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, ic, svcIcon, applyTheme, api, store, alerta, marcar } = window.U;
   const $ = (s) => document.querySelector(s);
   const TOKEN_KEY = 'barbearia_cliente';
 
   // Dados vindos do servidor
   let S = { settings: null, services: [], blocked: [], busy: [] };
-  let TODAY = A.todayIn(), TOMORROW;
+  let TODAY = A.todayIn();
   let ME = null, MYAP = [];
   const nowMin = () => A.nowMinIn();
-  const DESK = window.matchMedia('(min-width: 960px)');
-  const desk = () => DESK.matches;
+  const MOBILE = window.matchMedia('(max-width: 760px)');
 
-  const V = { tab: 'inicio', date: null, time: null, svc: null, sheet: null, who: 'cliente', phone: '', newName: '', newPhone: '', err: '', cancelAsk: null, calOpen: false, calMonth: null, lastBooking: null, entryErr: '', done: false, busyAction: false };
+  const V = {
+    tab: 'inicio', date: null, time: null, svc: null, sheet: null, phone: '', newName: '', newPhone: '',
+    errs: {}, notFound: false, cancelAsk: null, lastBooking: null, done: false, busyAction: false, calOpen: false, calMonth: null,
+  };
 
   const token = () => store.get(TOKEN_KEY);
   const authH = () => (token() ? { Authorization: 'Bearer ' + token() } : {});
@@ -31,24 +35,69 @@
   const daySlots = (ds) => A.daySlots(S.settings, S.blocked, ds);
   const busy = (ds) => A.busySet(S.busy, ds);
   const isPast = (ds, t) => A.isPast(ds, t, TODAY, nowMin());
-  const freeCount = (ds) => { const b = busy(ds); return daySlots(ds).filter((t) => !b.has(t) && !isPast(ds, t)).length; };
   const fits = (ds, t, dur) => A.fits(S.settings, S.blocked, S.busy, ds, t, dur);
   const blockedOf = (ds) => S.blocked.find((b) => b.date === ds);
   const sortAp = (l) => l.sort((p, q) => (p.date + p.time).localeCompare(q.date + q.time));
-  const logo = (size) => window.U.logo(S.settings, size);
-  const avatar = (c, size) => window.U.avatar(c, size);
+  const svcById = (id) => S.services.find((x) => String(x.id) === String(id));
+  const endOf = (t, dur) => A.fromMin(A.toMin(t) + dur);
+  const tempo = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? A.pad(m % 60) : ''}` : `${m} min`);
+  const first = (n) => String(n || '').split(' ')[0];
+  const plural = (d) => `${d === 0 || d === 6 ? 'aos' : 'às'} ${DOWL[d]}s`;
+  const hasLunch = () => S.settings.lunchStart !== S.settings.lunchEnd;
+  const winStart = () => (S.settings.bookFrom > TODAY ? S.settings.bookFrom : TODAY);
+  const inWindow = (ds) => ds >= winStart() && ds <= S.settings.bookTo;
+  const daysTo = (ds) => Math.round((A.parse(ds) - A.parse(TODAY)) / 864e5);
+
+  /** Situação do dia para o cliente: livre, poucas vagas, lotado, fechado ou folga. */
+  function dayStatus(ds) {
+    const d = A.parse(ds);
+    if (!inWindow(ds)) return { st: 'fora', r: '' };
+    if (S.settings.closed.includes(d.getDay())) return { st: 'fechado', r: 'Fechado' };
+    const b = blockedOf(ds); if (b) return { st: 'folga', r: 'Fechado', why: b.why };
+    const bz = busy(ds); const free = daySlots(ds).filter((t) => !bz.has(t) && !isPast(ds, t)).length;
+    if (!free) return { st: 'lotado', r: 'Lotado' };
+    return { st: free <= 4 ? 'poucas' : 'livre', r: `${free} vaga${free > 1 ? 's' : ''}`, n: free };
+  }
+  /** Por que um serviço de "dur" minutos não cabe começando em "t". */
+  function whyNot(ds, t, dur) {
+    const st = S.settings; const slots = new Set(daySlots(ds)); const bz = busy(ds);
+    const n = Math.ceil(dur / A.STEP);
+    for (let i = 0; i < n; i++) {
+      const m = A.toMin(t) + A.STEP * i; const s = A.fromMin(m);
+      if (!slots.has(s)) {
+        if (hasLunch() && m >= A.toMin(st.lunchStart) && m < A.toMin(st.lunchEnd)) return { m: 'almoco' };
+        return { m: 'fecha' };
+      }
+      if (i > 0 && bz.has(s)) return { m: 'ocupado', t: s };
+    }
+    return null;
+  }
+  /** Até 4 horários livres do dia, perto de "perto", em que um serviço de "dur" cabe. */
+  function suggest(ds, dur, perto) {
+    const bz = busy(ds); const p = A.toMin(perto || '12:00');
+    return daySlots(ds).filter((t) => !bz.has(t) && !isPast(ds, t) && fits(ds, t, dur))
+      .sort((a, b) => Math.abs(A.toMin(a) - p) - Math.abs(A.toMin(b) - p)).slice(0, 4).sort();
+  }
+  /** "Aberto agora", "No almoço" ou "Fechado", para o topo do site. */
+  function shopNow() {
+    const st = S.settings; const d = A.parse(TODAY); const m = nowMin();
+    if (st.closed.includes(d.getDay()) || blockedOf(TODAY)) return { st: 'fechado', r: 'Fechado hoje' };
+    if (m < A.toMin(st.open)) return { st: 'fechado', r: `Abre hoje às ${st.open}` };
+    if (m >= A.toMin(st.close)) return { st: 'fechado', r: 'Fechado agora' };
+    if (hasLunch() && m >= A.toMin(st.lunchStart) && m < A.toMin(st.lunchEnd)) return { st: 'almoco', r: `No almoço · volta às ${st.lunchEnd}` };
+    return { st: 'aberto', r: `Aberto agora · até ${st.close}` };
+  }
 
   // ----- carregar -----
   async function loadInfo() {
     const d = await api('GET', '/api/public/info');
     S.settings = d.settings; S.services = d.services; S.blocked = d.blocked; TODAY = d.today;
-    TOMORROW = A.iso(A.addDays(A.parse(TODAY), 1));
     applyTheme(S.settings);
     document.title = `${S.settings.shopName} · Agendar horário`;
   }
   async function loadBusy() {
     const st = S.settings;
-    const from = st.bookFrom > TODAY ? st.bookFrom : TODAY;
+    const from = winStart();
     let to = st.bookTo;
     const max = A.iso(A.addDays(A.parse(from), 180));
     if (to > max) to = max;
@@ -65,247 +114,447 @@
     }
   }
 
-  // ----- telas -----
+  // ----- tela -----
+  const TABS = [['inicio', 'Início', 'home'], ['agendar', 'Agendar', 'cal'], ['horarios', 'Meus horários', 'clock'], ['perfil', 'Perfil', 'user']];
+  let lastTab = null, lastSheet = null;
   function render(keep) {
     const top = window.scrollY;
+    // anima só quando troca de aba ou abre a janela, não a cada toque
+    const animTab = V.tab !== lastTab, animSheet = V.sheet !== lastSheet;
+    lastTab = V.tab; lastSheet = V.sheet;
     const view = { inicio: vHome, agendar: vAgendar, horarios: vHorarios, perfil: vPerfil, ok: vOk }[V.tab]();
-    const tabs = [['inicio', 'Início', IC.home], ['agendar', 'Agendar', IC.cal], ['horarios', 'Meus horários', IC.clock], ['perfil', 'Perfil', IC.user]];
     const cur = V.tab === 'ok' ? 'agendar' : V.tab;
-    $('#app').innerHTML = `<header class="dtop"><div class="dtop-in"><button class="dbrand" data-a="tab" data-t="inicio">${logo(38)}<b>${esc(S.settings.shopName)}</b></button>
-      <nav class="dnav" aria-label="Menu">${tabs.map(([k, l]) => `<button class="${cur === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${cur === k ? 'aria-current="page"' : ''}>${l}</button>`).join('')}</nav>
-      ${portal('dportal')}</div></header>
-      <main class="pscroll v-${V.tab}" id="pscroll">${view}</main>
-      ${V.tab === 'agendar' && V.date && !desk() ? bookbar() : ''}
-      <nav class="tabbar" aria-label="Menu">${tabs.map(([k, l, i]) => `<button class="${(V.tab === 'ok' ? 'agendar' : V.tab) === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${(V.tab === 'ok' ? 'agendar' : V.tab) === k ? 'aria-current="page"' : ''}>${i}${k === 'horarios' ? '<span class="lf">Meus horários</span><span class="ls">Horários</span>' : l}</button>`).join('')}</nav>
-      ${V.sheet ? sheet() : ''}`;
+    const now = shopNow();
+    const tabBtn = (size) => ([k, l, i]) => `<button type="button" class="${cur === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${cur === k ? 'aria-current="page"' : ''}>${ic(i, size)}${l}</button>`;
+    const barra = V.tab === 'agendar' && MOBILE.matches;
+    $('#app').innerHTML = `<div class="c-app ${barra ? 'tem-barra' : ''}">
+      <header class="c-topo"><div class="c-topo-in">
+        <button type="button" class="c-logo" data-a="tab" data-t="inicio">${window.U.logo(S.settings, 44)}<div><b>${esc(S.settings.shopName)}</b><small data-st="${now.st}">${now.r}</small></div></button>
+        <nav class="c-nav" aria-label="Menu">${TABS.map(tabBtn(18)).join('')}</nav>
+        <a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
+      </div><div class="listra" aria-hidden="true"></div></header>
+      <main class="c-main ${animTab ? 'vista' : ''}">${view}</main>
+      ${barra ? bookbar() : ''}
+      <nav class="c-tabbar" aria-label="Menu">${TABS.map(tabBtn(21)).join('')}</nav>
+    </div>${V.sheet ? sheet(animSheet) : ''}`;
     if (keep) window.scrollTo(0, top); else window.scrollTo(0, 0);
+    wireCarousel();
   }
-
-  // Entrada discreta para o barbeiro. O painel pede usuário e senha, então cliente não entra.
-  function portal(cls) { return `<a class="${cls}" href="/painel/" rel="nofollow">${IC.lock.replace('<svg', '<svg width="14" height="14"')} Área do barbeiro</a>`; }
+  /** Rola a tela até a seção, se ela estiver fora de vista. */
+  function rolar(sel) {
+    requestAnimationFrame(() => {
+      const el = $(sel); if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.top < 80 || r.top > innerHeight * 0.6) window.scrollTo({ top: window.scrollY + r.top - 84, behavior: 'smooth' });
+    });
+  }
 
   function myNext() {
-    return sortAp(MYAP.filter((a) => a.status === 'agendado' && (a.date > TODAY || (a.date === TODAY && !isPast(a.date, a.time)))))[0] || null;
+    return sortAp(MYAP.filter((a) => a.status === 'agendado' && !isPast(a.date, a.time)))[0] || null;
   }
 
+  // ===== Início =====
   function vHome() {
     const st = S.settings; const nx = myNext();
-    return `<div class="mtop" style="display:flex;justify-content:space-between;align-items:center">${logo(40)}<span class="eyebrow">${ME ? `Olá, ${esc(ME.name.split(' ')[0])}` : 'Bem-vindo'}</span></div>
-    <div class="hgrid"><div class="hcol">
-    <div class="cover"><span class="pole"></span><span class="eyebrow">Agendamento online</span><h1>${esc(st.shopName)}</h1><p>${esc(st.tagline)}</p><button class="pbtn gold" data-a="tab" data-t="agendar">${IC.cal.replace('<svg', '<svg width="18" height="18"')} Agendar horário</button></div>
-    ${nx ? `<div class="nextcard"><span class="eyebrow" style="color:inherit;opacity:.7">Seu próximo horário</span><span class="big">${cap(longDate(nx.date).split(',')[0])}, ${shortDate(nx.date)} · ${nx.time}</span><span style="font-weight:600">${esc(nx.service)} · ${money(nx.price)}</span></div>` : ''}
-    </div><div class="hcol">
-    <div style="display:flex;flex-direction:column;gap:10px"><div class="sec-h"><h3>Serviços</h3><span class="muted swipe" style="font-size:12px">arraste para o lado</span></div>
-     <div class="hscroll">${S.services.map((s) => `<div class="scard"><span class="ic">${svcIcon(s.name)}</span><b>${esc(s.name)}</b><span class="muted" style="font-size:12px">${s.dur} min</span><span class="pr">${money0(s.price)}</span></div>`).join('')}</div></div>
-    <div class="pcard" style="display:flex;flex-direction:column;gap:12px"><div class="sec-h"><h3>Funcionamento</h3><span class="muted" style="font-size:12.5px">${st.open} às ${st.close}</span></div>
-     <div class="week">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<span class="${st.closed.includes(d) ? 'off' : ''}">${DOW[d]}</span>`).join('')}</div>
-     <div class="muted" style="font-size:12.5px">${st.lunchStart !== st.lunchEnd ? `Pausa para almoço das ${st.lunchStart} às ${st.lunchEnd}<br>` : ''}${esc(st.address)}</div>
-     ${st.bookTo >= TODAY ? `<div style="font-size:12.5px;font-weight:700;color:var(--acc-d)">Agendamentos abertos até ${A.parse(st.bookTo).getDate()} de ${MESES[A.parse(st.bookTo).getMonth()]}</div>` : ''}</div>
-    </div></div>
-    <div class="mportal">${portal('plink-portal')}</div>`;
-  }
-
-  function vAgendar() {
-    const st = S.settings; const limit = st.bookTo; const start = st.bookFrom > TODAY ? st.bookFrom : TODAY;
-    if (start > limit) return `<div><span class="eyebrow">Novo agendamento</span><h2 class="ptitle">Agenda <br>fechada</h2></div><div class="hint">A barbearia ainda não abriu novas datas para agendamento. Volte em breve.</div>`;
-    const strip = [];
-    for (let i = 0; i < 21; i++) {
-      const ds = A.iso(A.addDays(A.parse(start), i)); if (ds > limit) break;
-      const d = A.parse(ds); const closed = st.closed.includes(d.getDay()); const blk = blockedOf(ds); const f = freeCount(ds);
-      const why = closed ? 'fechado' : blk ? 'folga' : 'lotado';
-      strip.push(`<button class="dp ${f > 0 && f <= 4 ? 'few' : ''} ${V.date === ds ? 'sel' : ''}" ${f === 0 ? 'disabled' : ''} data-a="day" data-d="${ds}" aria-label="${longDate(ds)}${f === 0 ? ', ' + why : ''}"><small>${ds === TODAY ? 'Hoje' : ds === TOMORROW ? 'Amanhã' : DOW[d.getDay()]}</small><b>${d.getDate()}</b>${f === 0 ? `<small style="font-size:9px">${why}</small>` : '<i></i>'}</button>`);
-    }
-    let cal = '';
-    if (V.calOpen || desk()) {
-      const sm = A.iso(new Date(A.parse(start).getFullYear(), A.parse(start).getMonth(), 1));
-      if (!V.calMonth || V.calMonth < sm) V.calMonth = sm;
-      const m = A.parse(V.calMonth); const first = new Date(m.getFullYear(), m.getMonth(), 1); const last = new Date(m.getFullYear(), m.getMonth() + 1, 0);
-      let cells = DOW.map((d) => `<span class="dow">${d[0]}</span>`).join('');
-      for (let i = 0; i < first.getDay(); i++) cells += '<span></span>';
-      for (let d = 1; d <= last.getDate(); d++) {
-        const ds = A.iso(new Date(m.getFullYear(), m.getMonth(), d)); const f = ds < start || ds > limit ? 0 : freeCount(ds);
-        cells += `<button class="${f > 0 && f <= 4 ? 'few' : ''} ${V.date === ds ? 'sel' : ''}" ${f === 0 ? 'disabled' : ''} data-a="day" data-d="${ds}" aria-label="${longDate(ds)}">${d}</button>`;
-      }
-      cal = `<div class="pcard"><div class="calhead"><button data-a="cm" data-n="-1" ${V.calMonth <= sm ? 'disabled' : ''} aria-label="Mês anterior">‹</button><b>${MESES[m.getMonth()]} ${m.getFullYear()}</b><button data-a="cm" data-n="1" ${A.iso(new Date(m.getFullYear(), m.getMonth() + 1, 1)) > limit ? 'disabled' : ''} aria-label="Próximo mês">›</button></div><div class="mcal">${cells}</div></div>`;
-    }
-    let times = '<div class="hint">Escolha um dia para ver os horários.</div>';
-    if (V.date) {
-      const b = busy(V.date); const sl = daySlots(V.date);
-      const grp = (t, l) => (l.length ? `<div class="tlabel">${t}</div><div class="times">${l.map((x) => { const isB = b.has(x), isP = isPast(V.date, x); return `<button class="tm ${isB ? 'busy' : ''} ${isP && !isB ? 'past' : ''} ${V.time === x ? 'sel' : ''}" ${isB || isP ? 'disabled' : ''} data-a="time" data-t="${x}" aria-label="${x}${isB ? ' ocupado' : ''}">${x}</button>`; }).join('')}</div>` : '');
-      times = `${grp('Manhã', sl.filter((x) => A.toMin(x) < 720))}${grp('Tarde', sl.filter((x) => A.toMin(x) >= 720 && A.toMin(x) < 1080))}${grp('Noite', sl.filter((x) => A.toMin(x) >= 1080))}<div class="muted" style="font-size:12px">Horários riscados já estão ocupados.</div>`;
-    }
-    let svcs = '<div class="hint">Escolha um horário para ver os serviços.</div>';
-    if (V.time) {
-      svcs = `<div class="svcs">${S.services.map((s) => { const ok = fits(V.date, V.time, s.dur); return `<button class="sv ${V.svc === s.id ? 'sel' : ''}" ${ok ? '' : 'disabled'} data-a="svc" data-id="${s.id}"><span class="ic">${svcIcon(s.name)}</span><span class="t"><b>${esc(s.name)}</b><small>${ok ? `${s.dur} min · até ${A.fromMin(A.toMin(V.time) + s.dur)}` : 'Não cabe neste horário'}</small></span><span class="pr">${money0(s.price)}</span></button>`; }).join('')}</div>`;
-    }
-    const n = (k, done) => `<span class="n ${done ? 'done' : ''}">${done ? '✓' : k}</span>`;
-    return `<div><span class="eyebrow">Novo agendamento</span><h2 class="ptitle">Quando fica <br>bom pra você?</h2><div class="muted" style="font-size:12.5px;margin-top:6px">Datas abertas até ${A.parse(limit).getDate()} de ${MESES[A.parse(limit).getMonth()]}.</div></div>
-    <div class="bgrid">
-    <section style="display:flex;flex-direction:column;gap:12px"><div class="sec-h"><h3>${n(1, V.date)}Dia</h3><button class="plink calbtn" data-a="calopen">${V.calOpen ? 'Fechar calendário' : 'Ver calendário do mês'}</button></div>${desk() ? '' : `<div class="daystrip">${strip.join('')}</div>`}${cal}</section>
-    <section id="sec-time" style="display:flex;flex-direction:column;gap:10px"><div class="sec-h"><h3>${n(2, V.time)}Horário</h3>${V.date ? `<span class="muted" style="font-size:12.5px">${cap(longDate(V.date))}</span>` : ''}</div>${times}</section>
-    <section id="sec-svc" style="display:flex;flex-direction:column;gap:10px"><div class="sec-h"><h3>${n(3, V.svc)}Serviço</h3></div>${svcs}${desk() ? summary() : ''}</section>
-    </div>
-    <div class="spacer" style="height:70px;flex:none"></div>`;
-  }
-
-  function bookbar() {
-    const s = S.services.find((x) => x.id === V.svc); const d = A.parse(V.date);
-    return `<div class="bookbar"><div class="s"><b>${s ? esc(s.name) : V.time ? 'Escolha o serviço' : 'Escolha o horário'}</b>${DOW[d.getDay()]} ${shortDate(V.date)}${V.time ? ` · ${V.time}` : ''}${s ? ` · ${money0(s.price)}` : ''}</div><button data-a="continue" ${s ? '' : 'disabled'}>Continuar</button></div>`;
-  }
-
-  // Resumo ao lado dos serviços (só no computador; no celular é a barra "Continuar")
-  function summary() {
-    if (!V.date) return '';
-    const s = S.services.find((x) => x.id === V.svc);
-    return `<div class="bsum"><span class="eyebrow">Seu horário</span>
-     <div class="recibo"><div><span>Dia</span><b>${cap(longDate(V.date))}</b></div><div><span>Horário</span><b class="num">${V.time ? (s ? `${V.time} às ${A.fromMin(A.toMin(V.time) + s.dur)}` : V.time) : '—'}</b></div><div><span>Serviço</span><b>${s ? esc(s.name) : '—'}</b></div><div><span>Total</span><span class="tot">${s ? money(s.price) : '—'}</span></div></div>
-     <button class="pbtn gold" data-a="continue" ${s ? '' : 'disabled'}>${s ? 'Continuar' : V.time ? 'Escolha o serviço' : 'Escolha o horário'}</button></div>`;
-  }
-
-  function sheet() {
-    let body = '';
-    if (V.sheet === 'id') {
-      body = `<div><span class="eyebrow">Quase lá</span><h2 class="ptitle" style="font-size:28px">Quem é você?</h2></div>
-      <div class="ptabs"><button class="${V.who === 'cliente' ? 'on' : ''}" data-a="who" data-w="cliente">Já sou cliente</button><button class="${V.who === 'novo' ? 'on' : ''}" data-a="who" data-w="novo">Primeira vez</button></div>
-      ${V.who === 'cliente'
-        ? `<div class="pfield"><label for="c-phone">Seu WhatsApp</label><input class="pin" id="c-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.phone))}" data-in="c-phone" autocomplete="tel"></div>`
-        : `<div class="pfield"><label for="n-name">Seu nome</label><input class="pin" id="n-name" placeholder="Nome e sobrenome" value="${esc(V.newName)}" data-in="n-name" autocomplete="name"></div><div class="pfield"><label for="n-phone">WhatsApp</label><input class="pin" id="n-phone" inputmode="tel" placeholder="(11) 97425-8136" value="${esc(maskPhone(V.newPhone))}" data-in="n-phone" autocomplete="tel"></div><div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>`}
-      ${V.err ? `<div class="perr" role="alert">${esc(V.err)}</div>` : ''}
-      ${V.notFound ? `<div class="pcard" style="display:flex;flex-direction:column;gap:8px"><b>Não achamos esse número.</b><span class="muted" style="font-size:13px">Deve ser sua primeira vez aqui. O cadastro leva 10 segundos.</span><button class="pbtn ghost" data-a="to-new">Fazer cadastro</button></div>` : ''}
-      <button class="pbtn gold ${V.busyAction ? 'busy' : ''}" data-a="id-next" ${V.busyAction ? 'disabled' : ''}>${V.busyAction ? 'Procurando…' : 'Continuar'}</button>`;
+    let prox;
+    if (nx) {
+      const d = A.parse(nx.date); const dd = daysTo(nx.date);
+      prox = `<section class="cartao ini-prox"><div class="cartao-topo"><h3><span class="ico-k">${ic('cal', 17)}</span>Seu próximo horário</h3><span class="pilula viva" data-k="verde">Confirmado</span></div>
+        <div class="ini-prox-corpo"><div class="cal-g"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b><small>${MESES[d.getMonth()].slice(0, 3)}</small></div>
+          <div style="min-width:0"><h4>${esc(nx.service)}</h4><p>${cap(longDate(nx.date))}<br>das <b>${nx.time}</b> às ${endOf(nx.time, nx.dur)}</p></div>
+          <div class="ini-valor"><small>Valor</small><b class="preco">${money(nx.price)}</b><small>pago na barbearia</small></div></div>
+        <div class="faixa p" data-t="ok"><span class="f-ico">${ic('clock', 15)}</span><p>${dd === 0 ? '<b>É hoje!</b>' : dd === 1 ? '<b>É amanhã!</b>' : `Faltam <b>${dd} dias</b>.`} Chegue 5 minutos antes.</p></div>
+        <div class="ini-acoes"><button type="button" class="btn pri" data-a="tab" data-t="horarios">${ic('clock', 17)}Ver meus horários</button><button type="button" class="btn" data-a="tab" data-t="agendar">${ic('plus', 17)}Agendar outro</button></div></section>`;
     } else {
-      const s = S.services.find((x) => x.id === V.svc);
-      const who = ME || { name: V.newName.trim(), phone: digits(V.newPhone) };
-      body = `<div><span class="eyebrow">Confira os dados</span><h2 class="ptitle" style="font-size:28px">Tudo certo?</h2></div>
-      <div class="recibo"><div><span>Dia</span><b>${cap(longDate(V.date))}</b></div><div><span>Horário</span><b class="num">${V.time} às ${A.fromMin(A.toMin(V.time) + s.dur)}</b></div><div><span>Serviço</span><b>${esc(s.name)}</b></div><div><span>Nome</span><b>${esc(who.name)}</b></div><div><span>WhatsApp</span><b class="num">${maskPhone(who.phone)}</b></div><div><span>Total</span><span class="tot">${money(s.price)}</span></div></div>
-      <div class="muted" style="font-size:12.5px;text-align:center">Pagamento na barbearia, no dia do atendimento.</div>
-      ${V.err ? `<div class="perr" role="alert">${esc(V.err)}</div>` : ''}
-      <button class="pbtn gold ${V.busyAction ? 'busy' : ''}" data-a="confirm" ${V.busyAction ? 'disabled' : ''}>${V.busyAction ? 'Agendando…' : 'Confirmar agendamento'}</button>
-      ${ME && !V.justId ? `<button class="plink" style="align-self:center" data-a="notme">Não é ${esc(ME.name.split(' ')[0])}? Trocar</button>` : ''}`;
+      prox = `<section class="cartao ini-prox"><div class="cartao-topo" style="margin:0"><h3><span class="ico-k">${ic('cal', 17)}</span>Seu próximo horário</h3></div>
+        <div class="vazio" style="padding:14px 10px 4px"><h4>${ME ? 'Você não tem horário marcado' : 'Nenhum horário por aqui ainda'}</h4><p>${ME ? 'Que tal já deixar o próximo corte reservado?' : 'Agende em menos de 1 minuto. Se já agendou antes, entre com seu WhatsApp para ver seu horário.'}</p>
+        <div class="ini-acoes" style="justify-content:center;margin-top:6px"><button type="button" class="btn pri" data-a="tab" data-t="agendar">${ic('cal', 17)}Agendar horário</button>${ME ? '' : `<button type="button" class="btn" data-a="tab" data-t="horarios">${ic('phone', 17)}Já sou cliente</button>`}</div></div></section>`;
     }
-    return `<div class="sheet-bg" data-a="sheet-close"></div><div class="sheet" role="dialog" aria-modal="true"><span class="grab"></span>${body}</div>`;
+    const svcs = S.services;
+    const carousel = svcs.length ? `<section class="cartao"><div class="cartao-topo"><h3><span class="ico-k">${ic('scissors', 17)}</span>Serviços e valores</h3>${svcs.length > 2 ? `<div class="car-setas"><button type="button" class="btn-icone" data-a="carro" data-n="-1" aria-label="Serviços anteriores">${ic('left', 18)}</button><button type="button" class="btn-icone" data-a="carro" data-n="1" aria-label="Próximos serviços">${ic('right', 18)}</button></div>` : ''}</div>
+      <div class="carrossel" id="carrossel">${svcs.map((x) => `<button type="button" class="car-svc" data-a="ini-svc" data-id="${x.id}"><span class="ico-k">${svcIcon(x.name).replace('<svg', '<svg width="22" height="22"')}</span><b>${esc(x.name)}</b><span class="car-rod"><span class="tag">${ic('clock', 13)}${tempo(x.dur)}</span><b class="preco">${money(x.price)}</b></span><span class="car-cta">Agendar ${ic('arrow', 14)}</span></button>`).join('')}</div>
+      ${svcs.length > 1 ? `<div class="car-pontos" id="carPontos" aria-hidden="true">${svcs.map((_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div>` : ''}</section>` : '';
+    const addr = (st.address || '').trim();
+    const q = encodeURIComponent(addr);
+    const onde = `<section class="cartao"><div class="cartao-topo"><h3><span class="ico-k">${ic('pin', 17)}</span>Onde estamos</h3></div>
+      ${addr ? `<div class="mapa"><iframe title="Mapa: ${esc(addr)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${q}&output=embed"></iframe></div>
+        <div class="ini-end"><b>${esc(addr)}</b></div>
+        <div class="ini-acoes"><a class="btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${ic('pin', 17)}Abrir no mapa</a></div>`
+      : '<div class="mapa sem">O endereço aparece aqui assim que a barbearia cadastrar.</div>'}</section>`;
+    const today = A.parse(TODAY).getDay(); const now = shopNow();
+    const horas = `<section class="cartao"><div class="cartao-topo"><h3><span class="ico-k">${ic('clock', 17)}</span>Horário de funcionamento</h3><span class="pilula ${now.st === 'aberto' ? 'viva' : ''}" data-k="${now.st === 'aberto' ? 'verde' : now.st === 'almoco' ? 'laranja' : 'cinza'}">${now.st === 'aberto' ? 'Aberto agora' : now.st === 'almoco' ? 'No almoço' : 'Fechado agora'}</span></div>
+      <div class="ini-horas">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const off = st.closed.includes(i); return `<div class="${i === today ? 'hoje' : ''} ${off ? 'fech' : ''}"><span>${cap(DOWL[i])}${i === today ? ' <small>hoje</small>' : ''}</span><b class="num">${off ? 'Fechado' : `${st.open} às ${st.close}`}</b></div>`; }).join('')}
+      ${hasLunch() ? `<div class="almoco"><span>${ic('coffee', 15)}Almoço</span><b class="num">${st.lunchStart} às ${st.lunchEnd}</b></div>` : ''}</div>
+      ${st.bookTo >= TODAY ? `<div class="ini-limite">Agendamentos abertos até ${A.parse(st.bookTo).getDate()} de ${MESES[A.parse(st.bookTo).getMonth()]}.</div>` : ''}</section>`;
+    return `<div class="ini">
+      <section class="c-hero"><div><small class="sobre">${ME ? `Olá, ${esc(first(ME.name))}` : 'Agendamento online'}</small><h1>${esc(st.tagline || st.shopName)}</h1><p>Atendimento com hora marcada, sem fila. Escolha seu horário pelo celular e pague na barbearia.</p>
+        <div class="ini-acoes" style="margin-top:18px"><button type="button" class="btn-claro" data-a="tab" data-t="agendar">${ic('cal', 18)}Agendar meu horário</button></div></div>
+        <div class="ini-selo" aria-hidden="true">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span>${esc(initials(st.shopName.replace(/barbearia/i, '').trim() || st.shopName) || 'B')}</span><small>Barbearia</small>`}</div></section>
+      <div class="ini-grid"><div class="col">${prox}${carousel}</div><div class="col">${onde}${horas}</div></div>
+    </div>`;
+  }
+  // Bolinhas do carrossel acompanham o deslize
+  function wireCarousel() {
+    const c = $('#carrossel'); const dots = document.querySelectorAll('#carPontos i');
+    if (!c || !dots.length) return;
+    c.addEventListener('scroll', () => {
+      const card = c.querySelector('.car-svc'); const w = card ? card.offsetWidth + 12 : 200;
+      let i = Math.round(c.scrollLeft / w);
+      if (c.scrollLeft + c.clientWidth >= c.scrollWidth - 4) i = dots.length - 1;
+      dots.forEach((d, k) => d.classList.toggle('on', k === Math.min(i, dots.length - 1)));
+    }, { passive: true });
   }
 
+  // ===== Agendar =====
+  function vAgendar() {
+    const st = S.settings; const start = winStart();
+    if (start > st.bookTo) {
+      return `<div class="cartao"><div class="vazio"><span class="ico-k">${ic('cal', 26)}</span><h4>Agenda fechada no momento</h4><p>A barbearia ainda não abriu novas datas para agendamento. Volte em breve.</p></div></div>`;
+    }
+    const s = svcById(V.svc);
+    const steps = [
+      ['Dia', V.date ? shortDate(V.date) : 'Escolha', !!V.date], ['Horário', V.time || 'Escolha', !!V.time],
+      ['Serviço', s ? s.name : 'Escolha', !!s], ['Confirmar', 'Seu WhatsApp', false],
+    ];
+    const cur = steps.findIndex((p) => !p[2]);
+    return `<div class="c-grid"><div class="col">
+      <section class="c-hero ag"><div><small class="sobre">Agendamento online</small><h1>Reserve sua cadeira.</h1><p>Escolha o dia, o horário e o serviço. O pagamento é feito na barbearia.</p></div>
+        <div class="infos">${st.address ? `<span>${ic('pin', 16)}${esc(st.address)}</span>` : ''}<span>${ic('clock', 16)}${st.open} às ${st.close}</span></div></section>
+      <div class="passos">${steps.map(([t, v, f], i) => `<div class="passo ${f ? 'feito' : ''} ${i === cur ? 'atual' : ''}"><span class="n">${f ? ic('check', 15) : i + 1}</span><div><span>${t}</span><small>${esc(v)}</small></div></div>`).join('')}</div>
+      ${blocoDia()}${blocoHora()}${blocoSvc()}
+    </div><aside class="c-lado">${resumo()}
+      <div class="info-casa">${ic('info', 16)}<span>Chegue 5 minutos antes. Se não puder vir, cancele em <b>Meus horários</b> para liberar a vaga.</span></div></aside></div>`;
+  }
+  function blocoDia() {
+    const start = winStart(); const days = [];
+    for (let i = 0; i < 21; i++) { const ds = A.iso(A.addDays(A.parse(start), i)); if (ds > S.settings.bookTo) break; days.push(ds); }
+    const m = A.parse(V.date || start);
+    const strip = days.map((ds) => { const x = dayStatus(ds); const d = A.parse(ds); return `<button type="button" class="dia ${V.date === ds ? 'sel' : ''} ${ds === TODAY ? 'hoje' : ''}" data-st="${x.st}" data-a="day" data-d="${ds}" aria-label="${longDate(ds)}, ${x.r}"><span class="dw">${DOW[d.getDay()]}</span><span class="dn">${d.getDate()}</span><span class="dm">${ds === TODAY ? 'hoje' : MESES[d.getMonth()].slice(0, 3)}</span><span class="ds">${x.r}</span></button>`; }).join('');
+    return `<section class="bloco" id="b-dia">
+      <div class="bloco-topo"><span class="ico-k">${ic('cal', 20)}</span><div><h2>1. Escolha o dia</h2><p>${cap(MESES[m.getMonth()])} de ${m.getFullYear()} · datas abertas até ${shortDate(S.settings.bookTo)}</p></div>
+        <div class="legenda dir"><span data-k="verde"><i></i>Com vagas</span><span data-k="laranja"><i></i>Poucas vagas</span><span data-k="vermelho"><i></i>Lotado</span><span data-k="cinza"><i></i>Fechado</span></div></div>
+      <div class="dias">${strip}</div>
+      <div><button type="button" class="link" data-a="calopen">${ic('cal', 15)}${V.calOpen ? 'Fechar calendário' : 'Ver o mês inteiro'}</button></div>
+      ${V.calOpen ? monthCal() : ''}
+    </section>`;
+  }
+  function monthCal() {
+    const start = winStart(); const limit = S.settings.bookTo;
+    const sm = start.slice(0, 8) + '01';
+    if (!V.calMonth || V.calMonth < sm) V.calMonth = sm;
+    const m = A.parse(V.calMonth); const f = new Date(m.getFullYear(), m.getMonth(), 1); const last = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+    let cells = DOW.map((d) => `<span class="dw">${d[0]}</span>`).join('');
+    for (let i = 0; i < f.getDay(); i++) cells += '<span></span>';
+    for (let d = 1; d <= last.getDate(); d++) {
+      const ds = A.iso(new Date(m.getFullYear(), m.getMonth(), d)); const x = dayStatus(ds);
+      cells += `<button type="button" class="${V.date === ds ? 'sel' : ''}" data-st="${x.st}" ${x.st === 'fora' ? 'disabled' : `data-a="day" data-d="${ds}"`} aria-label="${longDate(ds)}${x.r ? ', ' + x.r : ''}">${d}</button>`;
+    }
+    const next = A.iso(new Date(m.getFullYear(), m.getMonth() + 1, 1));
+    return `<div><div class="mes-cab"><button type="button" class="btn-icone" data-a="cm" data-n="-1" ${V.calMonth <= sm ? 'disabled' : ''} aria-label="Mês anterior">${ic('left', 18)}</button><b>${MESES[m.getMonth()]} de ${m.getFullYear()}</b><button type="button" class="btn-icone" data-a="cm" data-n="1" ${next > limit ? 'disabled' : ''} aria-label="Próximo mês">${ic('right', 18)}</button></div><div class="mes">${cells}</div></div>`;
+  }
+  function blocoHora() {
+    let body;
+    if (!V.date) body = `<div class="faixa"><span class="f-ico">${ic('info', 18)}</span><div><strong>Primeiro, escolha um dia</strong><p>Os horários livres aparecem aqui assim que você tocar em um dia.</p></div></div>`;
+    else {
+      const bz = busy(V.date); const sl = daySlots(V.date);
+      const grp = (t, l) => (l.length ? `<div><div class="periodo-t">${t}</div><div class="horas">${l.map((x) => { const oc = bz.has(x), pa = isPast(V.date, x); return `<button type="button" class="hora ${oc ? 'ocup' : ''} ${pa && !oc ? 'passou' : ''} ${V.time === x ? 'sel' : ''}" data-a="time" data-t="${x}" aria-label="${x}${oc ? ', ocupado' : pa ? ', já passou' : ''}">${x}</button>`; }).join('')}</div></div>` : '');
+      body = `${grp('Manhã', sl.filter((x) => A.toMin(x) < 720))}${grp('Tarde', sl.filter((x) => A.toMin(x) >= 720 && A.toMin(x) < 1080))}${grp('Noite', sl.filter((x) => A.toMin(x) >= 1080))}
+        ${hasLunch() ? `<div class="faixa p" data-t="neutro"><span class="f-ico">${ic('coffee', 15)}</span><p>Pausa para o almoço das <b>${S.settings.lunchStart} às ${S.settings.lunchEnd}</b>.</p></div>` : ''}`;
+    }
+    return `<section class="bloco" id="b-hora">
+      <div class="bloco-topo"><span class="ico-k">${ic('clock', 20)}</span><div><h2>2. Escolha o horário</h2><p>${V.date ? cap(longDate(V.date)) : 'Cada horário dura 30 minutos'}</p></div>
+        <div class="legenda dir"><span data-k="verde"><i></i>Livre</span><span data-k="vermelho"><i></i>Ocupado</span><span data-k="sel"><i></i>Escolhido</span></div></div>
+      ${body}</section>`;
+  }
+  function blocoSvc() {
+    const noFit = V.date && V.time ? S.services.filter((s) => !fits(V.date, V.time, s.dur)) : [];
+    return `<section class="bloco" id="b-svc">
+      <div class="bloco-topo"><span class="ico-k">${ic('scissors', 20)}</span><div><h2>3. Escolha o serviço</h2><p>Preço e tempo de cada um</p></div></div>
+      ${noFit.length ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${noFit.length === 1 ? '1 serviço não cabe' : `${noFit.length} serviços não cabem`} às ${V.time}</strong><p>Eles precisam de mais tempo do que está livre nesse horário. Estão marcados em vermelho.</p></div></div>` : ''}
+      ${S.services.length ? `<div class="servicos">${S.services.map((s) => { const nc = noFit.includes(s); return `<button type="button" class="svc ${String(V.svc) === String(s.id) ? 'sel' : ''} ${nc ? 'nao-cabe' : ''}" data-a="svc" data-id="${s.id}" id="s-${s.id}">
+        <span class="ico-k">${svcIcon(s.name).replace('<svg', '<svg width="22" height="22"')}</span><b>${esc(s.name)}</b><small>${V.time && !nc ? `das ${V.time} às ${endOf(V.time, s.dur)}` : tempo(s.dur)}</small>
+        <span class="rodape"><span class="tag ${nc ? 'verm' : ''}">${ic('clock', 13)}${tempo(s.dur)}</span><span class="preco">${money(s.price)}</span></span>
+        ${nc ? `<span class="nc">${ic('ban', 15)}Não cabe às ${V.time}</span>` : ''}</button>`; }).join('')}</div>` : '<div class="faixa" data-t="aviso"><span class="f-ico">' + ic('alert', 18) + '</span><div><strong>Nenhum serviço cadastrado</strong><p>A barbearia ainda está montando a lista de serviços.</p></div></div>'}
+    </section>`;
+  }
+  function resumo() {
+    const s = svcById(V.svc);
+    const ln = (i, rot, v, falta) => `<div class="r-linha ${falta ? 'falta' : ''}"><span class="ico-k">${ic(i, 17)}</span><div><small>${rot}</small><b>${v}</b></div></div>`;
+    const ok = V.date && V.time && s;
+    return `<div class="resumo"><h3><span class="ico-k">${ic('receipt', 17)}</span>Seu agendamento</h3>
+      <div class="r-linhas">${ln('cal', 'Dia', V.date ? cap(longDate(V.date)) : 'Falta escolher', !V.date)}${ln('clock', 'Horário', V.time ? (s ? `${V.time} às ${endOf(V.time, s.dur)}` : V.time) : 'Falta escolher', !V.time)}${ln('scissors', 'Serviço', s ? `${esc(s.name)} · ${tempo(s.dur)}` : 'Falta escolher', !s)}</div>
+      <div class="r-total"><span>Total</span><b class="preco">${s ? money(s.price) : 'R$ 0,00'}</b></div>
+      <button type="button" class="btn pri bloco-btn ${ok ? '' : 'apagado'}" data-a="continue">${ic('check', 18)}Confirmar agendamento</button>
+      <div class="r-obs">${ic('money', 15)}Pagamento na barbearia, no dia</div></div>`;
+  }
+  function bookbar() {
+    const s = svcById(V.svc); const ok = V.date && V.time && s;
+    const txt = [V.date ? shortDate(V.date) : null, V.time, s ? s.name : null].filter(Boolean).join(' · ') || 'Escolha dia, horário e serviço';
+    return `<div class="barra-fixa"><div class="txt"><small>${esc(txt)}</small><b class="preco">${s ? money(s.price) : 'R$ 0,00'}</b></div><button type="button" class="btn pri ${ok ? '' : 'apagado'}" data-a="continue">${ic('check', 17)}Confirmar</button></div>`;
+  }
+
+  // ----- janela "Quem é você?" -----
+  function field(id, label, icon, value, err, extra = '') {
+    return `<div class="campo"><label for="${id}">${label}</label><div class="entrada ${err ? 'erro' : ''}" id="e-${id}">${ic(icon, 18)}<input id="${id}" ${extra} value="${esc(value)}"></div>${err ? `<div class="erro-campo" role="alert">${ic('alert', 16)}${esc(err)}</div>` : ''}</div>`;
+  }
+  function sheet(anim) {
+    const s = svcById(V.svc);
+    const mini = s && V.date && V.time ? `<div class="mini-resumo">${ic('cal', 16)}${shortDate(V.date)} · ${V.time} às ${endOf(V.time, s.dur)} · ${esc(s.name)} · ${money(s.price)}</div>` : '';
+    const wait = V.busyAction;
+    let t, sub, body;
+    if (V.sheet === 'quem') {
+      t = 'Quase lá! Quem é você?'; sub = 'Escolha uma opção para finalizar.';
+      body = `<div class="opcoes"><button type="button" class="opcao" data-a="who" data-w="cliente"><span class="ico-k">${ic('userok', 24)}</span><div><b>Já sou cliente</b><br><small>Digito meu WhatsApp e pronto</small></div></button>
+        <button type="button" class="opcao" data-a="who" data-w="novo"><span class="ico-k">${ic('userplus', 24)}</span><div><b>Primeira vez aqui</b><br><small>Faço um cadastro rapidinho</small></div></button></div>`;
+    } else if (V.sheet === 'cliente') {
+      t = 'Digite seu WhatsApp'; sub = 'Seu nome aparece sozinho.';
+      body = `<form class="form-g" data-f="cliente" novalidate>${field('c-phone', 'Seu WhatsApp', 'phone', maskPhone(V.phone), V.errs.phone, 'inputmode="tel" autocomplete="tel" placeholder="(11) 97425-8136" data-in="c-phone"')}
+        ${V.notFound ? `<div class="faixa pisca" data-t="aviso" id="nao-achou"><span class="f-ico">${ic('alert', 18)}</span><div><strong>Não encontramos esse número</strong><p>Confira se digitou certo ou faça seu cadastro em poucos segundos.</p><button type="button" class="btn p" style="margin-top:10px" data-a="to-new">${ic('userplus', 16)}Fazer meu cadastro</button></div></div>` : ''}
+        <button type="submit" class="btn pri bloco-btn" ${wait ? 'disabled' : ''}>${wait ? 'Procurando…' : `${ic('arrow', 18)}Continuar`}</button></form>`;
+    } else if (V.sheet === 'novo') {
+      t = 'Primeira vez aqui? Bem-vindo!'; sub = 'Só precisamos do seu nome e WhatsApp.';
+      body = `<form class="form-g" data-f="novo" novalidate>${field('n-name', 'Nome e sobrenome', 'user', V.newName, V.errs.name, 'autocomplete="name" placeholder="Ex.: João Silva" data-in="n-name"')}
+        ${field('n-phone', 'WhatsApp com DDD', 'phone', maskPhone(V.newPhone), V.errs.phone, 'inputmode="tel" autocomplete="tel" placeholder="(11) 97425-8136" data-in="n-phone"')}
+        <div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>
+        <button type="submit" class="btn verde bloco-btn" ${wait ? 'disabled' : ''}>${wait ? 'Agendando…' : `${ic('check', 18)}Cadastrar e confirmar`}</button></form>`;
+    } else {
+      t = 'Tudo certo?'; sub = 'Confira e confirme o seu horário.';
+      body = `<div class="achou"><span class="av">${esc(initials(ME.name))}</span><div><small>${V.justId ? 'Encontramos você!' : 'Agendando como'}</small><b>${esc(ME.name)}</b></div></div>
+        <button type="button" class="btn pri bloco-btn" data-a="confirm" ${wait ? 'disabled' : ''}>${wait ? 'Agendando…' : `${ic('check', 18)}Confirmar agendamento`}</button>
+        <div class="muted" style="font-size:12.5px;text-align:center">Pagamento na barbearia, no dia do atendimento.</div>
+        <button type="button" class="link" style="align-self:center" data-a="notme">Não é ${esc(first(ME.name))}? Trocar</button>`;
+    }
+    const back = ['cliente', 'novo'].includes(V.sheet) ? `<button type="button" class="link" style="align-self:flex-start" data-a="who" data-w="">${ic('left', 16)}Voltar</button>` : '';
+    return `<div class="overlay ${anim ? 'nova' : ''}" data-a="sheet-close"></div><div class="folha ${anim ? 'nova' : ''}" role="dialog" aria-modal="true" aria-label="${esc(t)}"><span class="alca"></span>
+      <div class="folha-topo"><div><h3>${t}</h3><p class="sub">${sub}</p></div><button type="button" class="btn-icone" data-a="sheet-close" aria-label="Fechar">${ic('x', 18)}</button></div>
+      ${mini}${body}${back}</div>`;
+  }
+
+  // ===== Agendado! =====
   function vOk() {
-    const a = MYAP.find((x) => x.id === V.lastBooking); if (!a) return vHome();
-    const d = A.parse(a.date);
-    return `<div class="ok-wrap"><div class="ok-ic">${IC.check.replace('<svg', '<svg width="40" height="40"')}</div><span class="eyebrow">Agendado</span><h2 class="ptitle">Te esperamos, <br>${esc(ME.name.split(' ')[0])}!</h2></div>
-    <div class="myap"><div class="when"><div class="dbox"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b></div><div><b style="font-size:18px">${a.time} às ${A.fromMin(A.toMin(a.time) + a.dur)}</b><div class="muted" style="font-size:13px">${esc(a.service)} · ${money(a.price)}</div></div></div></div>
-    <div class="muted" style="font-size:13px;text-align:center">Se não puder vir, cancele em <b>Meus horários</b> para liberar a vaga.</div>
-    <div style="display:flex;flex-direction:column;gap:8px"><button class="pbtn gold" data-a="tab" data-t="horarios">Ver meus horários</button><button class="pbtn ghost" data-a="tab" data-t="inicio">Voltar ao início</button></div>`;
+    const a = MYAP.find((x) => String(x.id) === String(V.lastBooking)); if (!a) return vHome();
+    const ln = (i, rot, v) => `<div class="r-linha"><span class="ico-k">${ic(i, 17)}</span><div><small>${rot}</small><b>${v}</b></div></div>`;
+    return `<div class="sucesso"><div class="check-grande">${ic('check', 52)}</div>
+      <div><h1>Horário confirmado!</h1><p>Te esperamos, ${esc(first(ME.name))}. Se não puder vir, cancele em <b>Meus horários</b> para liberar a vaga.</p></div>
+      <div class="ticket">${ln('cal', 'Dia', cap(longDate(a.date)))}${ln('clock', 'Horário', `${a.time} às ${endOf(a.time, a.dur)}`)}${ln('scissors', 'Serviço', esc(a.service))}${ln('money', 'Valor (pago na barbearia)', money(a.price))}</div>
+      <div class="acoes"><button type="button" class="btn pri" data-a="tab" data-t="horarios">${ic('clock', 17)}Ver meus horários</button><button type="button" class="btn" data-a="again">${ic('plus', 17)}Agendar outro</button></div></div>`;
   }
 
-  function entry(title) {
-    return `<div><span class="eyebrow">${title}</span><h2 class="ptitle">Entre com seu <br>WhatsApp</h2></div>
-    <div class="pcard" style="display:flex;flex-direction:column;gap:12px"><div class="pfield"><label for="e-phone">WhatsApp</label><input class="pin" id="e-phone" inputmode="tel" placeholder="(11) 97425-8136" data-in="mask" autocomplete="tel"></div>${V.entryErr ? `<div class="perr" role="alert">${esc(V.entryErr)}</div>` : ''}<button class="pbtn gold" data-a="entry" ${V.busyAction ? 'disabled' : ''}>Entrar</button><div class="muted" style="font-size:12.5px">Não precisa de senha. Se ainda não tem cadastro, ele é criado no seu primeiro agendamento.</div></div>`;
+  // ===== Entrar com o WhatsApp =====
+  function entry(title, sub) {
+    return `<div class="pagina-t"><h1>${title}</h1><p>${sub}</p></div>
+      <form class="cartao entrar" data-f="entry" novalidate><div class="vazio" style="padding:10px 0 18px"><span class="ico-k">${ic('phone', 26)}</span><h4>Entre com seu WhatsApp</h4><p>Use o número que você usou para agendar. Não precisa de senha.</p></div>
+        <div class="form-g">${field('e-phone', 'WhatsApp', 'phone', maskPhone(V.phone), V.errs.entry, 'inputmode="tel" autocomplete="tel" placeholder="(11) 97425-8136" data-in="c-phone"')}
+        <button type="submit" class="btn pri bloco-btn" ${V.busyAction ? 'disabled' : ''}>${V.busyAction ? 'Procurando…' : `${ic('arrow', 18)}Entrar`}</button></div></form>`;
   }
 
+  // ===== Meus horários =====
   function vHorarios() {
-    if (!ME) return entry('Meus horários');
-    const next = sortAp(MYAP.filter((a) => a.status === 'agendado' && a.date >= TODAY));
-    const past = sortAp(MYAP.filter((a) => a.status === 'realizado')).reverse().slice(0, 6);
-    return `<div><span class="eyebrow">Meus horários</span><h2 class="ptitle">Próximos <br>atendimentos</h2></div>
-    ${next.length ? '<div class="mygrid">' + next.map((a) => { const d = A.parse(a.date); return `<div class="myap"><div class="when"><div class="dbox"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b></div><div style="flex:1"><b style="font-size:17px">${a.time}</b><div class="muted" style="font-size:13px">${esc(a.service)} · ${money(a.price)}</div></div></div>
-     ${V.cancelAsk === a.id ? `<div style="display:flex;gap:8px"><button class="pbtn ghost" style="padding:11px;color:#f08f7e" data-a="cancel-yes" data-id="${a.id}" ${V.busyAction ? 'disabled' : ''}>Sim, cancelar</button><button class="pbtn ghost" style="padding:11px" data-a="cancel-no">Manter</button></div>` : `<button class="plink" style="align-self:flex-start;color:#f08f7e" data-a="cancel" data-id="${a.id}">Cancelar este horário</button>`}</div>`; }).join('') + '</div>' : '<div class="hint">Nenhum horário marcado.</div>'}
-    <button class="pbtn ghost" data-a="tab" data-t="agendar">Agendar novo horário</button>
-    ${past.length ? `<div class="pcard"><div class="sec-h" style="margin-bottom:4px"><h3>Últimas visitas</h3></div><div class="hist">${past.map((a) => `<div><span>${shortDate(a.date)} · ${esc(a.service)}</span><b class="num">${money0(a.price)}</b></div>`).join('')}</div></div>` : ''}`;
+    if (!ME) return entry('Meus horários', 'Veja e cancele seus agendamentos.');
+    const next = sortAp(MYAP.filter((a) => a.status === 'agendado' && !isPast(a.date, a.time)));
+    const past = sortAp(MYAP.filter((a) => !next.includes(a))).reverse().slice(0, 8);
+    const card = (a, fut) => {
+      const d = A.parse(a.date); const dd = daysTo(a.date);
+      const pil = fut ? '<span class="pilula viva" data-k="verde">Confirmado</span>'
+        : a.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não compareceu</span>'
+        : a.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : '<span class="pilula" data-k="cinza">Já passou</span>';
+      let extra = '';
+      if (fut) {
+        extra = `<div class="faixa p"><span class="f-ico">${ic('clock', 15)}</span><p>${dd === 0 ? '<b>É hoje!</b>' : dd === 1 ? '<b>É amanhã!</b>' : `Faltam <b>${dd} dias</b>`} · ${money(a.price)} na barbearia</p></div>
+          ${String(V.cancelAsk) === String(a.id) ? `<div class="faixa pisca" data-t="erro"><span class="f-ico">${ic('alert', 18)}</span><div><strong>Cancelar esse horário?</strong><p>A vaga fica livre para outra pessoa.</p><div class="acoes" style="margin-top:10px"><button type="button" class="btn p" style="background:var(--vermelho);border-color:var(--vermelho);color:#fff" data-a="cancel-yes" data-id="${a.id}" ${V.busyAction ? 'disabled' : ''}>Sim, cancelar</button><button type="button" class="btn p" data-a="cancel-no">Manter horário</button></div></div></div>`
+            : `<div class="acoes"><button type="button" class="btn verm p" data-a="cancel" data-id="${a.id}">${ic('x', 16)}Cancelar horário</button></div>`}`;
+      }
+      return `<div class="ag-c"><div class="topo"><div class="quando"><div class="cal ${fut ? '' : 'velho'}"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(a.service)}</h4><p>${cap(DOWL[d.getDay()])} · ${a.time} às ${endOf(a.time, a.dur)}</p></div></div>${pil}</div>${extra}</div>`;
+    };
+    return `<div class="pagina-t"><h1>Meus horários</h1><p>Olá, ${esc(first(ME.name))}! Aqui ficam seus agendamentos.</p></div>
+      <div class="secao-t">${ic('cal', 20)}Próximos <small>${next.length}</small></div>
+      ${next.length ? `<div class="lista-cards">${next.map((a) => card(a, true)).join('')}</div>` : `<div class="cartao"><div class="vazio"><span class="ico-k">${ic('cal', 26)}</span><h4>Nenhum horário marcado</h4><p>Que tal agendar o próximo corte?</p><button type="button" class="btn pri" data-a="tab" data-t="agendar">${ic('plus', 17)}Agendar agora</button></div></div>`}
+      ${past.length ? `<div class="secao-t" style="margin-top:26px">${ic('list', 20)}Últimas visitas <small>${past.length}</small></div><div class="lista-cards">${past.map((a) => card(a, false)).join('')}</div>` : ''}`;
   }
 
+  // ===== Perfil =====
   function vPerfil() {
-    if (!ME) return entry('Meu perfil');
-    const done = MYAP.filter((a) => a.status === 'realizado');
+    if (!ME) return entry('Meu perfil', 'Seus dados de contato.');
+    const done = MYAP.filter((a) => a.status === 'realizado').length;
     const since = A.parse(ME.since);
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">${avatar(ME, 76)}<div><h2 class="ptitle" style="font-size:28px">${esc(ME.name)}</h2><span class="muted" style="font-size:13px">Cliente desde ${MESES[since.getMonth()]} de ${since.getFullYear()} · ${done.length} visita${done.length === 1 ? '' : 's'}</span></div></div>
-    <div class="pcard" style="display:flex;flex-direction:column;gap:12px"><div class="pfield"><label for="p-name">Nome</label><input class="pin" id="p-name" value="${esc(ME.name)}" autocomplete="name"></div><div class="pfield"><label for="p-wa">WhatsApp</label><input class="pin" id="p-wa" inputmode="tel" value="${esc(maskPhone(ME.phone))}" data-in="mask" autocomplete="tel"></div>${V.err ? `<div class="perr" role="alert">${esc(V.err)}</div>` : ''}<button class="pbtn gold" data-a="psave" ${V.busyAction ? 'disabled' : ''}>Salvar alterações</button></div>
-    <button class="pbtn ghost" data-a="logout">${IC.out.replace('<svg', '<svg width="18" height="18"')} ${desk() ? 'Sair deste computador' : 'Sair deste celular'}</button>`;
-  }
-
-  function scrollToSec(id) {
-    if (desk()) return;
-    requestAnimationFrame(() => { const el = document.getElementById(id); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' }); });
+    return `<div class="perfil-c"><div class="perfil-topo"><span class="av">${esc(initials(ME.name))}</span><div><b>${esc(ME.name)}</b><small>Cliente desde ${MESES[since.getMonth()]} de ${since.getFullYear()} · ${done} visita${done === 1 ? '' : 's'}</small></div></div>
+      <form class="cartao form-g" data-f="perfil" novalidate><div class="cartao-topo" style="margin:0"><h3><span class="ico-k">${ic('user', 17)}</span>Meus dados</h3></div>
+        ${field('p-name', 'Nome e sobrenome', 'user', V.pName ?? ME.name, V.errs.name, 'autocomplete="name" data-in="p-name"')}
+        ${field('p-wa', 'WhatsApp', 'phone', maskPhone(V.pPhone ?? ME.phone), V.errs.phone, 'inputmode="tel" autocomplete="tel" data-in="p-wa"')}
+        <div class="acoes"><button type="submit" class="btn pri" ${V.busyAction ? 'disabled' : ''}>${ic('check', 17)}Salvar alterações</button><button type="button" class="btn" data-a="logout">${ic('out', 17)}${MOBILE.matches ? 'Sair deste celular' : 'Sair deste computador'}</button></div></form></div>`;
   }
 
   // ----- ações -----
   async function run(fn) {
     if (V.busyAction) return;
     V.busyAction = true; render(true);
-    try { await fn(); } catch (e) { V.err = e.message; V.entryErr = e.message; }
+    try { await fn(); } catch (e) { alerta('erro', 'Não deu certo', e.message); }
     V.busyAction = false; render(true);
+  }
+  function pickDay(ds, el) {
+    const x = dayStatus(ds); const d = A.parse(ds);
+    if (x.st === 'fechado') { alerta('aviso', `A barbearia não abre ${plural(d.getDay())}`, 'Escolha outro dia na faixa.'); marcar(el, 'aviso'); return; }
+    if (x.st === 'folga') { alerta('aviso', 'Barbearia fechada nesse dia', `${x.why ? x.why + '. ' : ''}Escolha outro dia.`); marcar(el, 'aviso'); return; }
+    if (x.st === 'lotado') {
+      const alt = [];
+      for (let i = 1; i < 30 && alt.length < 2; i++) { const s = A.iso(A.addDays(d, i)); if (!inWindow(s)) break; if (['livre', 'poucas'].includes(dayStatus(s).st)) alt.push(s); }
+      alerta('erro', 'Esse dia está lotado', `Todos os horários de ${shortDate(ds)} já foram reservados.${alt.length ? ' Dias com vaga:' : ''}`, alt.map((s) => ({ r: `Ver ${DOW[A.parse(s).getDay()].toLowerCase()} ${shortDate(s)}`, fn: () => pickDay(s) })));
+      marcar(el); return;
+    }
+    V.date = ds; V.time = null; V.calMonth = ds.slice(0, 8) + '01';
+    render(true); rolar('#b-hora');
+  }
+  function pickTime(t, el) {
+    if (isPast(V.date, t)) { alerta('aviso', 'Esse horário já passou', `Agora são ${A.fromMin(nowMin())}. Escolha um horário mais tarde.`); marcar(el, 'aviso'); return; }
+    if (busy(V.date).has(t)) {
+      const sug = suggest(V.date, A.STEP, t);
+      alerta('erro', `O horário das ${t} já está ocupado`, sug.length ? 'Esses horários perto dele estão livres:' : 'Não sobrou horário livre nesse dia. Tente outro dia.', sug.map((x) => ({ r: x, fn: () => pickTime(x) })));
+      marcar(el); return;
+    }
+    V.time = t;
+    const s = svcById(V.svc);
+    if (s && !fits(V.date, t, s.dur)) {
+      V.svc = null; render(true);
+      alerta('aviso', `${s.name} não cabe às ${t}`, 'Tiramos esse serviço da sua escolha. Escolha outro serviço ou outro horário.');
+      marcar('#b-svc', 'aviso'); return;
+    }
+    render(true); rolar(s ? '#b-svc .svc.sel' : '#b-svc');
+  }
+  function pickSvc(id) {
+    const s = svcById(id); if (!s) return;
+    if (!V.date || !V.time) {
+      V.svc = s.id; render(true);
+      alerta('info', `${s.name} escolhido`, `Agora escolha ${!V.date ? 'o dia e o horário' : 'o horário'}. A gente confere se ele cabe.`, [], 5000);
+      marcar(!V.date ? '#b-dia' : '#b-hora', 'aviso'); return;
+    }
+    if (!fits(V.date, V.time, s.dur)) {
+      const r = whyNot(V.date, V.time, s.dur) || { m: 'ocupado' }; const sug = suggest(V.date, s.dur, V.time);
+      const motivo = r.m === 'fecha' ? `O ${s.name} leva ${tempo(s.dur)} e terminaria às ${endOf(V.time, s.dur)}, depois que a barbearia fecha (${S.settings.close}).`
+        : r.m === 'almoco' ? `O ${s.name} leva ${tempo(s.dur)} e entraria no horário de almoço (${S.settings.lunchStart} às ${S.settings.lunchEnd}).`
+        : `O ${s.name} leva ${tempo(s.dur)}, mas${r.t ? ` às ${r.t}` : ' logo depois'} já tem outro cliente.`;
+      alerta('erro', `Esse serviço não cabe às ${V.time}`, motivo + (sug.length ? ' Horários em que ele cabe:' : ' Nesse dia não sobrou espaço para ele. Tente outro dia.'),
+        sug.map((x) => ({ r: x, fn: () => { V.time = x; V.svc = s.id; render(true); alerta('ok', `Pronto! ${s.name} às ${x}`, 'Agora é só confirmar.'); } })));
+      marcar('#s-' + s.id); return;
+    }
+    V.svc = s.id; render(true);
+  }
+  function goConfirm() {
+    if (!V.date) { alerta('aviso', 'Falta escolher o dia', 'Toque em um dia no passo 1.'); marcar('#b-dia', 'aviso'); return; }
+    if (!V.time) { alerta('aviso', 'Falta escolher o horário', 'Toque em um horário livre no passo 2.'); marcar('#b-hora', 'aviso'); return; }
+    if (!svcById(V.svc)) { alerta('aviso', 'Falta escolher o serviço', 'Toque em um serviço no passo 3.'); marcar('#b-svc', 'aviso'); return; }
+    V.errs = {}; V.notFound = false; V.justId = false;
+    V.sheet = ME ? 'confirma' : 'quem'; render(true);
+  }
+  function focusSheet() { setTimeout(() => { const i = document.querySelector('.folha input'); if (i && !MOBILE.matches) i.focus(); }, 60); }
+
+  async function book() {
+    const body = { date: V.date, time: V.time, serviceId: V.svc };
+    if (!ME) { body.name = A.tidyName(V.newName); body.phone = digits(V.newPhone); }
+    const dev = deviceId();
+    try {
+      const d = await api('POST', '/api/public/agendar', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
+      store.set(TOKEN_KEY, d.token);
+      await Promise.all([loadMe(), loadBusy()]);
+      Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', done: true, errs: {} });
+      setTimeout(() => alerta('ok', 'Agendado com sucesso!', `${cap(longDate(d.appointment.date))} às ${d.appointment.time}. Te esperamos!`), 50);
+    } catch (err) {
+      if (err.status === 409) {
+        await loadBusy().catch(() => {});
+        const s = svcById(V.svc); const t = V.time; V.sheet = null; V.time = null;
+        const sug = s ? suggest(V.date, s.dur, t) : [];
+        setTimeout(() => {
+          alerta('erro', 'Esse horário acabou de ser reservado', `${err.message}${sug.length ? ' Horários livres perto dele:' : ''}`, sug.map((x) => ({ r: x, fn: () => { V.time = x; render(true); alerta('ok', `Pronto! Agora é ${x}`, 'Confira e toque em Confirmar.'); } })));
+          marcar('#b-hora');
+        }, 50);
+        return;
+      }
+      if (err.status === 401) { store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.sheet = 'quem'; setTimeout(() => alerta('aviso', 'Entre de novo', err.message), 50); return; }
+      setTimeout(() => alerta('erro', 'Não foi possível agendar', err.message), 50);
+    }
+  }
+
+  function submitForm(f) {
+    if (f === 'cliente') {
+      const pe = A.phoneError(V.phone);
+      if (pe) { V.errs = { phone: pe }; V.notFound = false; render(true); alerta('erro', 'Confira seu WhatsApp', pe); marcar('#e-c-phone'); return; }
+      V.errs = {}; V.notFound = false;
+      run(async () => {
+        try {
+          const d = await api('POST', '/api/public/identificar', { phone: V.phone });
+          store.set(TOKEN_KEY, d.token); ME = d.client; await loadMe();
+          V.justId = true; V.sheet = 'confirma';
+        } catch (err) {
+          if (err.status !== 404) throw err;
+          V.notFound = true;
+          setTimeout(() => { alerta('aviso', 'Não encontramos esse número', 'Confira se digitou certo ou faça seu cadastro.', [{ r: 'Fazer meu cadastro', fn: toNew }]); marcar('#nao-achou', 'aviso'); }, 30);
+        }
+      });
+      return;
+    }
+    if (f === 'novo') {
+      const ne = A.nameError(V.newName), pe = A.phoneError(V.newPhone);
+      if (ne || pe) { V.errs = { name: ne, phone: pe }; render(true); alerta('erro', 'Confira seus dados', ne || pe); marcar(ne ? '#e-n-name' : '#e-n-phone'); return; }
+      V.errs = {}; V.newName = A.tidyName(V.newName);
+      run(book);
+      return;
+    }
+    if (f === 'entry') {
+      const pe = A.phoneError(V.phone);
+      if (pe) { V.errs = { entry: pe }; render(true); alerta('erro', 'Confira seu WhatsApp', pe); marcar('#e-e-phone'); return; }
+      V.errs = {};
+      run(async () => {
+        try {
+          const d = await api('POST', '/api/public/identificar', { phone: V.phone });
+          store.set(TOKEN_KEY, d.token); await loadMe();
+          setTimeout(() => alerta('ok', `Olá, ${first(ME.name)}!`, 'Você entrou. Seus horários estão aqui.'), 30);
+        } catch (err) {
+          if (err.status !== 404) throw err;
+          setTimeout(() => { alerta('aviso', 'Não achamos esse número', 'Confira se digitou certo. Se é sua primeira vez, o cadastro é feito no primeiro agendamento.', [{ r: 'Agendar agora', fn: () => goTab('agendar') }]); marcar('#e-e-phone', 'aviso'); }, 30);
+        }
+      });
+      return;
+    }
+    if (f === 'perfil') {
+      const name = A.tidyName(V.pName ?? ME.name), phone = digits(V.pPhone ?? ME.phone);
+      const ne = A.nameError(name), pe = A.phoneError(phone);
+      if (ne || pe) { V.errs = { name: ne, phone: pe }; render(true); alerta('erro', 'Não foi possível salvar', ne || pe); marcar(ne ? '#e-p-name' : '#e-p-wa'); return; }
+      V.errs = {};
+      run(async () => {
+        const d = await api('PUT', '/api/public/me', { name, phone }, authH());
+        ME = d.client; V.pName = null; V.pPhone = null;
+        setTimeout(() => alerta('ok', 'Dados atualizados', 'Seu nome e WhatsApp foram salvos.'), 30);
+      });
+    }
+  }
+  function toNew() { V.sheet = 'novo'; V.newPhone = V.phone; V.errs = {}; V.notFound = false; render(true); focusSheet(); }
+  function goTab(t) {
+    V.tab = t; V.errs = {}; V.sheet = null; V.cancelAsk = null; V.pName = null; V.pPhone = null;
+    if (t === 'agendar') {
+      if (V.done) Object.assign(V, { date: null, time: null, svc: null, done: false });
+      loadBusy().then(() => { if (V.tab === 'agendar') render(true); }).catch(() => {});
+    }
+    render();
   }
 
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-a]'); if (!el) return;
-    const a = el.dataset.a;
-    switch (a) {
-      case 'tab':
-        V.tab = el.dataset.t; V.err = ''; V.entryErr = ''; V.sheet = null; V.cancelAsk = null;
-        if (V.tab === 'agendar') {
-          if (V.done) Object.assign(V, { date: null, time: null, svc: null, done: false });
-          loadBusy().then(() => render(true)).catch(() => {});
-        }
-        render(); break;
-      case 'day': V.date = el.dataset.d; V.time = null; V.svc = null; V.calOpen = false; render(true); scrollToSec('sec-time'); break;
+    switch (el.dataset.a) {
+      case 'tab': goTab(el.dataset.t); break;
+      case 'again': Object.assign(V, { date: null, time: null, svc: null, done: false }); goTab('agendar'); break;
+      case 'ini-svc': goTab('agendar'); pickSvc(el.dataset.id); break;
+      case 'carro': { const c = $('#carrossel'); const card = c && c.querySelector('.car-svc'); if (c) c.scrollBy({ left: Number(el.dataset.n) * ((card ? card.offsetWidth : 200) + 12), behavior: 'smooth' }); break; }
+      case 'day': pickDay(el.dataset.d, el); break;
       case 'calopen': V.calOpen = !V.calOpen; render(true); break;
       case 'cm': { const m = A.parse(V.calMonth); V.calMonth = A.iso(new Date(m.getFullYear(), m.getMonth() + Number(el.dataset.n), 1)); render(true); break; }
-      case 'time': V.time = el.dataset.t; V.svc = null; render(true); scrollToSec('sec-svc'); break;
-      case 'svc': V.svc = el.dataset.id; render(true); break;
-      case 'continue': V.err = ''; V.notFound = false; V.justId = false; V.sheet = ME ? 'confirm' : 'id'; render(true); break;
-      case 'sheet-close': V.sheet = null; V.err = ''; render(true); break;
-      case 'notme': store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.sheet = 'id'; render(true); break;
-      case 'who': V.who = el.dataset.w; V.err = ''; V.notFound = false; render(true); break;
-      case 'to-new': V.who = 'novo'; V.newPhone = V.phone; V.err = ''; V.notFound = false; render(true); break;
-      case 'id-next':
-        V.err = ''; V.notFound = false;
-        if (V.who === 'cliente') {
-          if (digits(V.phone).length < 10) { V.err = 'Digite seu WhatsApp com DDD.'; render(true); break; }
-          run(async () => {
-            try {
-              const d = await api('POST', '/api/public/identificar', { phone: V.phone });
-              store.set(TOKEN_KEY, d.token); ME = d.client; await loadMe();
-              V.justId = true; V.sheet = 'confirm'; V.err = '';
-            } catch (err) { if (err.status === 404) { V.notFound = true; V.err = ''; } else throw err; }
-          });
-        } else {
-          const ne = A.nameError(V.newName), pe = A.phoneError(V.newPhone);
-          if (ne || pe) { V.err = ne || pe; render(true); break; }
-          V.newName = A.tidyName(V.newName);
-          V.justId = true; V.sheet = 'confirm'; render(true);
-        }
-        break;
-      case 'confirm':
-        V.err = '';
-        run(async () => {
-          try {
-            const body = { date: V.date, time: V.time, serviceId: V.svc };
-            if (!ME) { body.name = V.newName.trim(); body.phone = digits(V.newPhone); }
-            const dev = deviceId();
-            const d = await api('POST', '/api/public/agendar', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
-            store.set(TOKEN_KEY, d.token);
-            await Promise.all([loadMe(), loadBusy()]);
-            Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', done: true });
-            window.scrollTo(0, 0);
-          } catch (err) {
-            if (err.status === 409) { toast(err.message); V.sheet = null; V.time = null; V.svc = null; await loadBusy(); V.err = ''; return; }
-            if (err.status === 401) { store.set(TOKEN_KEY, null); ME = null; V.sheet = 'id'; }
-            throw err;
-          }
-        });
-        break;
-      case 'entry': {
-        const phone = $('#e-phone').value;
-        if (digits(phone).length < 10) { V.entryErr = 'Digite seu WhatsApp com DDD.'; render(true); break; }
-        run(async () => {
-          try {
-            const d = await api('POST', '/api/public/identificar', { phone });
-            store.set(TOKEN_KEY, d.token); await loadMe(); V.entryErr = '';
-          } catch (err) {
-            if (err.status === 404) { V.entryErr = 'Não achamos esse número. Faça seu primeiro agendamento para criar o cadastro.'; return; }
-            throw err;
-          }
-        });
-        break;
-      }
-      case 'logout': store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.phone = ''; render(); break;
+      case 'time': pickTime(el.dataset.t, el); break;
+      case 'svc': pickSvc(el.dataset.id); break;
+      case 'continue': goConfirm(); break;
+      case 'sheet-close': if (!V.busyAction) { V.sheet = null; V.errs = {}; render(true); } break;
+      case 'notme': store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.sheet = 'quem'; render(true); break;
+      case 'who': V.sheet = el.dataset.w || 'quem'; V.errs = {}; V.notFound = false; render(true); focusSheet(); break;
+      case 'to-new': toNew(); break;
+      case 'confirm': run(book); break;
+      case 'logout': store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.phone = ''; V.tab = 'inicio'; render(); alerta('info', 'Você saiu', 'Para ver seus horários, entre de novo com seu WhatsApp.'); break;
       case 'cancel': V.cancelAsk = el.dataset.id; render(true); break;
       case 'cancel-no': V.cancelAsk = null; render(true); break;
       case 'cancel-yes': {
@@ -313,39 +562,32 @@
         run(async () => {
           await api('POST', `/api/public/me/agendamentos/${id}/cancelar`, {}, authH());
           V.cancelAsk = null; await Promise.all([loadMe(), loadBusy()]);
-          toast('Horário cancelado. A vaga ficou livre.');
+          setTimeout(() => alerta('ok', 'Horário cancelado', 'A vaga ficou livre. Quando quiser, é só agendar de novo.'), 30);
         });
         break;
       }
-      case 'psave': {
-        const name = $('#p-name').value.trim(), phone = digits($('#p-wa').value);
-        const ne = A.nameError(name), pe = A.phoneError(phone);
-        if (ne || pe) { V.err = ne || pe; render(true); break; }
-        V.err = '';
-        run(async () => { const d = await api('PUT', '/api/public/me', { name, phone }, authH()); ME = d.client; toast('Dados atualizados.'); V.err = ''; });
-        break;
-      }
     }
   });
-
+  document.addEventListener('submit', (e) => {
+    const f = e.target.closest('form[data-f]'); if (!f) return;
+    e.preventDefault(); submitForm(f.dataset.f);
+  });
   document.addEventListener('input', (e) => {
     const el = e.target; const k = el.dataset.in; if (!k) return;
-    if (['c-phone', 'n-phone', 'mask'].includes(k)) el.value = maskPhone(el.value);
+    if (['c-phone', 'n-phone', 'p-wa'].includes(k)) el.value = maskPhone(el.value);
     if (k === 'c-phone') { V.phone = el.value; V.notFound = false; }
     if (k === 'n-name') V.newName = el.value;
     if (k === 'n-phone') V.newPhone = el.value;
+    if (k === 'p-name') V.pName = el.value;
+    if (k === 'p-wa') V.pPhone = el.value;
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && V.sheet) { V.sheet = null; render(true); }
-    if (e.key === 'Enter' && e.target.matches('.pin')) {
-      const btn = e.target.closest('.sheet, .pcard')?.querySelector('.pbtn.gold');
-      if (btn) btn.click();
-    }
+    if (e.key === 'Escape' && V.sheet && !V.busyAction) { V.sheet = null; render(true); }
   });
 
   // Mudou de celular para computador (ou girou a tela): redesenha
   const onSize = () => { if (S.settings) render(true); };
-  if (DESK.addEventListener) DESK.addEventListener('change', onSize); else DESK.addListener(onSize);
+  if (MOBILE.addEventListener) MOBILE.addEventListener('change', onSize); else MOBILE.addListener(onSize);
 
   // ----- iniciar -----
   (async function start() {
@@ -354,7 +596,7 @@
       await Promise.all([loadBusy(), loadMe()]);
       render();
     } catch (e) {
-      $('#app').innerHTML = `<div class="loading"><div style="text-align:center;display:flex;flex-direction:column;gap:12px;padding:20px"><b>Não foi possível carregar a agenda.</b><span>${esc(e.message)}</span><button class="pbtn ghost" onclick="location.reload()">Tentar de novo</button></div></div>`;
+      $('#app').innerHTML = `<div class="loading"><div style="text-align:center;display:flex;flex-direction:column;gap:12px;padding:20px;align-items:center"><b>Não foi possível carregar a agenda.</b><span>${esc(e.message)}</span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>`;
     }
   })();
 })();

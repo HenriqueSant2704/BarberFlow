@@ -239,8 +239,7 @@
 .dchk input{position:absolute;opacity:0;pointer-events:none}
 .preview{position:sticky;top:90px;display:flex;flex-direction:column;gap:10px;align-items:center}
 .pmini{width:300px;height:600px;border-radius:40px;padding:9px;background:#0a0908;box-shadow:var(--shadow-lg);overflow:hidden}
-.pmini .scr{width:390px;height:787px;transform:scale(.7231);transform-origin:0 0;border-radius:44px;overflow:hidden;background:var(--p-bg);color:var(--p-ink);position:relative}
-.pmini .pscroll{overflow:hidden;pointer-events:none}
+.pmini .scr{width:390px;height:787px;transform:scale(.7231);transform-origin:0 0;border-radius:44px;overflow:hidden;background:#f3f3f1;color:#17171a;position:relative}
 .logo-up{display:flex;gap:16px;align-items:center}
 
 /* gaveta */
@@ -462,3 +461,52 @@ input[type=date].input,input[type=time].input{min-width:0;width:100%}
 .blkbox .ic svg{width:24px;height:24px}
 .prot .sh svg{width:22px;height:22px}
 @media (max-width:600px){.prot .row2{grid-template-columns:minmax(0,1fr)}}
+
+/* ---- Layout novo (aprovado em 08/11/2026): listra de barbearia, item ativo com filete na cor da marca ---- */
+.rail{position:sticky}
+.rail::before{content:"";position:absolute;top:0;left:0;right:0;height:5px;background:repeating-linear-gradient(-45deg,#b91c1c 0 9px,#fff 9px 18px,#1e3a8a 18px 27px,#fff 27px 36px)}
+.nv:hover{background:rgba(255,255,255,.06)}
+.nv.on{background:rgba(255,255,255,.09);color:var(--rail-ink);box-shadow:inset 3px 0 0 var(--acc-d)}
+.nv.on svg{color:var(--acc-d)}
+.hero-fin .big{overflow-wrap:anywhere}
+@media (max-width:900px){
+  .topline{border-bottom:0}
+  .topline::after{content:"";position:absolute;left:0;right:0;bottom:-5px;height:5px;background:repeating-linear-gradient(-45deg,#b91c1c 0 9px,#fff 9px 18px,#1e3a8a 18px 27px,#fff 27px 36px)}
+  .hero-fin .big{font-size:clamp(30px,10vw,38px)}
+}
+/* Financeiro no celular: um cartão por linha, valor à direita. Valor grande não estoura o quadrado. */
+@media (max-width:640px){
+  .kgrid{grid-template-columns:minmax(0,1fr);gap:8px}
+  .kgrid .stat{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"t v" "s v";align-items:center;gap:2px 12px;padding:12px 14px;border-radius:14px}
+  .kgrid .stat .ic{display:none}
+  .kgrid .stat .eyebrow{grid-area:t}
+  .kgrid .stat .s{grid-area:s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .kgrid .stat .v{grid-area:v;font-size:19px;text-align:right;white-space:nowrap}
+}
+/* Prévia ao vivo do site do cliente (Configurações) */
+.pv{position:absolute;inset:0;display:flex;flex-direction:column;pointer-events:none;font-size:15px;color:#17171a}
+.pv-topo{display:flex;align-items:center;gap:10px;padding:44px 16px 12px;background:#161618;color:#f2f2f0}
+.pv-topo .logo{background:#161618;color:var(--acc-d);border:1px solid color-mix(in srgb,var(--acc-d) 50%,transparent)}
+.pv-topo b{display:block;font-family:var(--f-display);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pv-topo small{color:#4ade80;font-size:11.5px;font-weight:600}
+.pv-listra{height:5px;flex:none;background:repeating-linear-gradient(-45deg,#b91c1c 0 9px,#fff 9px 18px,#1e3a8a 18px 27px,#fff 27px 36px)}
+.pv-corpo{flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.pv-hero{background:#161618;color:#f2f2f0;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.pv-hero small{color:var(--acc-d);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
+.pv-hero h1{font-family:var(--f-display);font-weight:600;font-size:23px;line-height:1.15}
+.pv-btn{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;background:#fff;color:#141414;font-weight:700;font-size:13.5px}
+.pv-card{background:#fff;border:1px solid #e6e5e1;border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.pv-t{font-family:var(--f-display);font-weight:600;font-size:16px}
+.pv-car{display:flex;gap:10px;overflow:hidden}
+.pv-svc{flex:0 0 72%;border:1px solid #e6e5e1;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.pv-ic{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--acc-l) 13%,#fff);color:var(--acc-l)}
+.pv-svc b{font-size:14px}
+.pv-pr{font-weight:800;font-size:16px;padding-top:6px;border-top:1px dashed #d6d4ce}
+.pv-pontos{display:flex;justify-content:center;gap:5px}
+.pv-pontos i{width:6px;height:6px;border-radius:9px;background:#d6d4ce}
+.pv-pontos i.on{width:18px;background:var(--acc-l)}
+.pv-h{display:flex;justify-content:space-between;font-size:13.5px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--acc-l) 13%,#fff)}
+.pv-tab{display:grid;grid-template-columns:repeat(4,1fr);padding:6px 8px 26px;background:#fff;border-top:1px solid #e6e5e1}
+.pv-tab span{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:12px;font-size:11px;font-weight:700;color:#6b6b72}
+.pv-tab span.on{color:#17171a;background:color-mix(in srgb,var(--acc-l) 13%,#fff)}
+.pv-tab span.on svg{color:var(--acc-l)}
