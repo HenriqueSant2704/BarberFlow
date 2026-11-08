@@ -6,6 +6,7 @@ const mapSettings = (r) => ({
   color: r.color, custom: r.custom_color,
   open: r.open_time, close: r.close_time, lunchStart: r.lunch_start, lunchEnd: r.lunch_end,
   closed: (r.closed_days || []).map(Number), bookFrom: r.book_from, bookTo: r.book_to,
+  phone: r.phone || '', hours: r.day_hours || {},
   maxActive: r.max_active, maxPerDay: r.max_per_day, maxDevice: r.max_device, autoBlock: r.auto_block,
 });
 const mapService = (r) => ({ id: String(r.id), name: r.name, price: r.price, dur: r.duration });
@@ -18,7 +19,7 @@ const mapAppt = (r) => ({
   serviceId: r.service_id == null ? null : String(r.service_id), service: r.service_name,
   price: r.price, dur: r.duration, status: r.status, origin: r.origin,
 });
-const mapExpense = (r) => ({ id: String(r.id), desc: r.description, val: r.amount, date: r.date });
+const mapExpense = (r) => ({ id: String(r.id), desc: r.description, val: r.amount, date: r.date, cat: r.category || 'Outros' });
 const mapBlocked = (r) => ({ date: r.date, why: r.reason });
 
 async function getSettings(c = db) {

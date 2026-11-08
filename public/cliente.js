@@ -80,13 +80,22 @@
   }
   /** "Aberto agora", "No almoço" ou "Fechado", para o topo do site. */
   function shopNow() {
-    const st = S.settings; const d = A.parse(TODAY); const m = nowMin();
+    const st = S.settings; const d = A.parse(TODAY); const m = nowMin(); const hh = A.dayHours(st, d.getDay());
     if (st.closed.includes(d.getDay()) || blockedOf(TODAY)) return { st: 'fechado', r: 'Fechado hoje' };
-    if (m < A.toMin(st.open)) return { st: 'fechado', r: `Abre hoje às ${st.open}` };
-    if (m >= A.toMin(st.close)) return { st: 'fechado', r: 'Fechado agora' };
+    if (m < A.toMin(hh.open)) return { st: 'fechado', r: `Abre hoje às ${hh.open}` };
+    if (m >= A.toMin(hh.close)) return { st: 'fechado', r: 'Fechado agora' };
     if (hasLunch() && m >= A.toMin(st.lunchStart) && m < A.toMin(st.lunchEnd)) return { st: 'almoco', r: `No almoço · volta às ${st.lunchEnd}` };
-    return { st: 'aberto', r: `Aberto agora · até ${st.close}` };
+    return { st: 'aberto', r: `Aberto agora · até ${hh.close}` };
   }
+
+  /** Resumo do horário da semana: "09:00 às 19:00" ou "Hoje: 09:00 às 19:00" quando muda por dia. */
+  function hoursLabel() {
+    const st = S.settings; const open = [0, 1, 2, 3, 4, 5, 6].filter((i) => !st.closed.includes(i)).map((i) => A.dayHours(st, i));
+    const same = open.every((h) => h.open === open[0].open && h.close === open[0].close);
+    if (same && open.length) return `${open[0].open} às ${open[0].close}`;
+    const now = shopNow(); return now.r;
+  }
+  function waLink(txt) { return `https://wa.me/55${S.settings.phone}${txt ? `?text=${encodeURIComponent(txt)}` : ''}`; }
 
   // ----- carregar -----
   async function loadInfo() {
@@ -180,10 +189,11 @@
       ${addr ? `<div class="mapa"><iframe title="Mapa: ${esc(addr)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=${q}&output=embed"></iframe></div>
         <div class="ini-end"><b>${esc(addr)}</b></div>
         <div class="ini-acoes"><a class="btn" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">${ic('pin', 17)}Abrir no mapa</a></div>`
-      : '<div class="mapa sem">O endereço aparece aqui assim que a barbearia cadastrar.</div>'}</section>`;
+      : '<div class="mapa sem">O endereço aparece aqui assim que a barbearia cadastrar.</div>'}
+      ${st.phone ? `<a class="ini-contato" href="${waLink('Olá! Vim pelo site de agendamento.')}" target="_blank" rel="noopener">${ic('whats', 17)}<span>WhatsApp <b class="num">${maskPhone(st.phone)}</b></span><span class="ini-contato-ir">Chamar ${ic('arrow', 14)}</span></a>` : ''}</section>`;
     const today = A.parse(TODAY).getDay(); const now = shopNow();
     const horas = `<section class="cartao"><div class="cartao-topo"><h3><span class="ico-k">${ic('clock', 17)}</span>Horário de funcionamento</h3><span class="pilula ${now.st === 'aberto' ? 'viva' : ''}" data-k="${now.st === 'aberto' ? 'verde' : now.st === 'almoco' ? 'laranja' : 'cinza'}">${now.st === 'aberto' ? 'Aberto agora' : now.st === 'almoco' ? 'No almoço' : 'Fechado agora'}</span></div>
-      <div class="ini-horas">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const off = st.closed.includes(i); return `<div class="${i === today ? 'hoje' : ''} ${off ? 'fech' : ''}"><span>${cap(DOWL[i])}${i === today ? ' <small>hoje</small>' : ''}</span><b class="num">${off ? 'Fechado' : `${st.open} às ${st.close}`}</b></div>`; }).join('')}
+      <div class="ini-horas">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const off = st.closed.includes(i); return `<div class="${i === today ? 'hoje' : ''} ${off ? 'fech' : ''}"><span>${cap(DOWL[i])}${i === today ? ' <small>hoje</small>' : ''}</span><b class="num">${off ? 'Fechado' : `${A.dayHours(st, i).open} às ${A.dayHours(st, i).close}`}</b></div>`; }).join('')}
       ${hasLunch() ? `<div class="almoco"><span>${ic('coffee', 15)}Almoço</span><b class="num">${st.lunchStart} às ${st.lunchEnd}</b></div>` : ''}</div>
       ${st.bookTo >= TODAY ? `<div class="ini-limite">Agendamentos abertos até ${A.parse(st.bookTo).getDate()} de ${MESES[A.parse(st.bookTo).getMonth()]}.</div>` : ''}</section>`;
     return `<div class="ini">
@@ -219,7 +229,7 @@
     const cur = steps.findIndex((p) => !p[2]);
     return `<div class="c-grid"><div class="col">
       <section class="c-hero ag"><div><small class="sobre">Agendamento online</small><h1>Reserve sua cadeira.</h1><p>Escolha o dia, o horário e o serviço. O pagamento é feito na barbearia.</p></div>
-        <div class="infos">${st.address ? `<span>${ic('pin', 16)}${esc(st.address)}</span>` : ''}<span>${ic('clock', 16)}${st.open} às ${st.close}</span></div></section>
+        <div class="infos">${st.address ? `<span>${ic('pin', 16)}${esc(st.address)}</span>` : ''}<span>${ic('clock', 16)}${hoursLabel()}</span>${st.phone ? `<span>${ic('whats', 16)}${maskPhone(st.phone)}</span>` : ''}</div></section>
       <div class="passos">${steps.map(([t, v, f], i) => `<div class="passo ${f ? 'feito' : ''} ${i === cur ? 'atual' : ''}"><span class="n">${f ? ic('check', 15) : i + 1}</span><div><span>${t}</span><small>${esc(v)}</small></div></div>`).join('')}</div>
       ${blocoDia()}${blocoHora()}${blocoSvc()}
     </div><aside class="c-lado">${resumo()}
@@ -429,7 +439,7 @@
     }
     if (!fits(V.date, V.time, s.dur)) {
       const r = whyNot(V.date, V.time, s.dur) || { m: 'ocupado' }; const sug = suggest(V.date, s.dur, V.time);
-      const motivo = r.m === 'fecha' ? `O ${s.name} leva ${tempo(s.dur)} e terminaria às ${endOf(V.time, s.dur)}, depois que a barbearia fecha (${S.settings.close}).`
+      const motivo = r.m === 'fecha' ? `O ${s.name} leva ${tempo(s.dur)} e terminaria às ${endOf(V.time, s.dur)}, depois que a barbearia fecha (${A.dayHours(S.settings, A.parse(V.date).getDay()).close}).`
         : r.m === 'almoco' ? `O ${s.name} leva ${tempo(s.dur)} e entraria no horário de almoço (${S.settings.lunchStart} às ${S.settings.lunchEnd}).`
         : `O ${s.name} leva ${tempo(s.dur)}, mas${r.t ? ` às ${r.t}` : ' logo depois'} já tem outro cliente.`;
       alerta('erro', `Esse serviço não cabe às ${V.time}`, motivo + (sug.length ? ' Horários em que ele cabe:' : ' Nesse dia não sobrou espaço para ele. Tente outro dia.'),

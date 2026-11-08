@@ -176,6 +176,10 @@ h1,h2,h3,h4,.disp{font-family:var(--f-display);font-weight:600;letter-spacing:-.
 .mapa iframe{width:100%;height:100%;border:0;display:block}
 .mapa.sem{display:grid;place-items:center;text-align:center;padding:16px;color:var(--muted);font-size:13px;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:28px 28px}
 .ini-end{display:flex;flex-direction:column;gap:2px;margin-top:12px;font-size:14px}
+.ini-contato{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-strong);font-size:14px;color:inherit;text-decoration:none}
+.ini-contato>svg{color:var(--verde);flex:none}
+.ini-contato-ir{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:13px;color:var(--ouro)}
+.ini-contato:hover .ini-contato-ir{text-decoration:underline}
 .ini-horas{display:flex;flex-direction:column}
 .ini-horas>div{display:flex;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:8px;font-size:14px}
 .ini-horas>div:nth-child(odd){background:var(--surface-2)}

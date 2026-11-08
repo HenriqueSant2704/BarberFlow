@@ -95,3 +95,8 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS blocked_reason text    NOT NULL DEF
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS device text;   -- código do aparelho (só para contar agendamentos)
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS ip_hash text;  -- IP embaralhado, nunca o IP de verdade
 CREATE INDEX IF NOT EXISTS appointments_created_idx ON appointments(created_at);
+
+-- ----- Layout novo (v1.4) -----
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS phone     text  NOT NULL DEFAULT '';   -- WhatsApp da barbearia (aparece no site)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS day_hours jsonb NOT NULL DEFAULT '{}'; -- horário próprio de cada dia: {"6":{"open":"08:00","close":"14:00"}}
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category  text  NOT NULL DEFAULT 'Outros';

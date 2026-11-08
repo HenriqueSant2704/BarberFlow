@@ -22,10 +22,10 @@
   const STATUS = { agendado: 'Agendado', realizado: 'Realizado', faltou: 'Não compareceu', cancelado: 'Cancelado' };
   // [nome, cor no fundo claro, cor no fundo escuro]
   const PRESETS = {
-    latao: ['Latão', '#8c6a2b', '#d2b06b'], verde: ['Verde garrafa', '#1f5f4a', '#6cc8a1'], bordo: ['Bordô', '#7a2433', '#e3909b'],
+    latao: ['Dourado', '#8c6a2b', '#d2b06b'], verde: ['Verde garrafa', '#1f5f4a', '#6cc8a1'], bordo: ['Bordô', '#7a2433', '#e3909b'],
     petroleo: ['Petróleo', '#1d4e68', '#7cbde0'], cobre: ['Cobre', '#9a4a24', '#e59a6c'], branco: ['Branco', '#4a4a48', '#f5f3ef'],
     preto: ['Preto', '#111111', '#cfcfcf'], azul: ['Azul royal', '#1f3fa8', '#8ea8ff'], roxo: ['Roxo', '#5b2a86', '#c3a0f0'], vermelho: ['Vermelho', '#b3261e', '#ff8a80'],
-    laranja: ['Laranja', '#b45309', '#f6ad55'], rosa: ['Rosa', '#a3245f', '#f19ac2'], ciano: ['Ciano', '#0e6377', '#6fd3e6'],
+    laranja: ['Laranja', '#b45309', '#f6ad55'], rosa: ['Rosa', '#a3245f', '#f19ac2'], ciano: ['Ciano', '#0e6377', '#6fd3e6'], prata: ['Prata', '#52525b', '#c4c4cc'],
   };
   const AVC = ['#c9a86a', '#7fb8a0', '#d68f8f', '#8fb0d6', '#c7a0d0', '#d6b37f', '#9fc78a'];
   const avColor = (id) => AVC[[...String(id)].reduce((s, c) => s + c.charCodeAt(0), 0) % AVC.length];
@@ -71,6 +71,19 @@
     arrow: I('<path d="M5 12h14M13 6l6 6-6 6"/>', 2.2),
     userplus: I('<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7M19 8v6M16 11h6"/>'),
     userok: I('<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7 1.4 0 2.7.4 3.8 1M16 18l2 2 4-4"/>'),
+    whats: I('<path d="M21 11.5a8.4 8.4 0 01-12.3 7.5L3 21l2-5.6A8.5 8.5 0 1121 11.5z"/>'),
+    eyeoff: I('<path d="M3 3l18 18"/><path d="M10.6 5.1A10 10 0 0112 5c6 0 10 7 10 7a17 17 0 01-3.2 3.9M6.6 6.6C3.8 8.3 2 12 2 12s4 7 10 7a9.6 9.6 0 004.4-1"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/>'),
+    undo: I('<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/>'),
+    trend: I('<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>'),
+    zap: I('<path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/>'),
+    grid: I('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
+    wallet: I('<path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"/><path d="M16 14h.01"/>'),
+    star: I('<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>'),
+    down: I('<path d="m22 17-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/>'),
+    palette: I('<circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 0 0 0 20c1 0 1.6-.8 1.6-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.8-1.7 1.7-1.7H16a6 6 0 0 0 6-6c0-4.4-4.5-8.4-10-8.4z"/>'),
+    upload: I('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>'),
+    userx: I('<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M17 8l5 5M22 8l-5 5"/>'),
+    door: I('<path d="M4 21h16"/><path d="M6 21V4a1 1 0 011-1h10a1 1 0 011 1v17"/><path d="M14 12h.01"/>'),
     list: I('<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>', 2.4),
   };
   /** Ícone com tamanho fixo: ic('cal', 18). */
