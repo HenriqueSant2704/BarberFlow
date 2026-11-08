@@ -1,7 +1,7 @@
 // Painel do barbeiro (computador).
 (function () {
   const A = window.Agenda;
-  const { esc, money, money0, digits, maskPhone, MESES, DOW, longDate, shortDate, cap, initials, STATUS, PRESETS, IC, svcIcon, applyTheme, toast, api } = window.U;
+  const { alerta, marcar, esc, money, money0, digits, maskPhone, MESES, DOW, longDate, shortDate, cap, initials, STATUS, PRESETS, IC, svcIcon, applyTheme, toast, api } = window.U;
   const $ = (s) => document.querySelector(s);
 
   let S = null; // tudo que veio de /api/admin/dados
@@ -67,7 +67,7 @@
       if (msg) toast(msg);
     } catch (e) {
       if (e.status === 401) { V.logged = false; S = null; }
-      toast(e.message);
+      alerta(e.status === 409 ? 'aviso' : 'erro', e.status === 409 ? 'Não deu para fazer isso' : 'Não deu certo', e.message);
     } finally {
       V.saving = false;
       render();
@@ -345,13 +345,14 @@
   }
 
   // ===== Configurações =====
+  // Prévia do site do cliente (versão clara, como o cliente vê no celular)
   function previewPhone() {
     const st = S.settings;
-    return `<div class="pscroll"><div style="display:flex;justify-content:space-between;align-items:center">${logo(40)}<span class="eyebrow">Bem-vindo</span></div>
-    <div class="cover"><span class="pole"></span><span class="eyebrow">Agendamento online</span><h1>${esc(st.shopName)}</h1><p>${esc(st.tagline)}</p><span class="pbtn gold">${IC.cal.replace('<svg', '<svg width="18" height="18"')} Agendar horário</span></div>
-    <div style="display:flex;flex-direction:column;gap:10px"><div class="sec-h"><h3>Serviços</h3></div><div class="hscroll">${S.services.map((s) => `<div class="scard"><span class="ic">${svcIcon(s.name)}</span><b>${esc(s.name)}</b><span class="muted" style="font-size:12px">${s.dur} min</span><span class="pr">${money0(s.price)}</span></div>`).join('')}</div></div>
-    <div class="pcard" style="display:flex;flex-direction:column;gap:12px"><div class="sec-h"><h3>Funcionamento</h3><span class="muted" style="font-size:12.5px">${st.open} às ${st.close}</span></div><div class="week">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<span class="${st.closed.includes(d) ? 'off' : ''}">${DOW[d]}</span>`).join('')}</div></div></div>
-    <nav class="tabbar">${[['Início', IC.home], ['Agendar', IC.cal], ['Meus horários', IC.clock], ['Perfil', IC.user]].map(([l, i], k) => `<span class="${k === 0 ? 'on' : ''}" style="display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;border-radius:16px;font-size:11px;font-weight:700;${k === 0 ? 'color:var(--acc-d);background:var(--p-surface-2)' : 'color:var(--p-muted)'}">${i.replace('<svg', '<svg width="21" height="21"')}${l}</span>`).join('')}</nav>`;
+    return `<div class="pv"><div class="pv-topo">${logo(34)}<div style="min-width:0"><b>${esc(st.shopName)}</b><small>Aberto agora</small></div></div><div class="pv-listra"></div>
+    <div class="pv-corpo"><div class="pv-hero"><small>Agendamento online</small><h1>${esc(st.tagline || st.shopName)}</h1><span class="pv-btn">${IC.cal.replace('<svg', '<svg width="16" height="16"')} Agendar meu horário</span></div>
+    <div class="pv-card"><b class="pv-t">Serviços e valores</b><div class="pv-car">${S.services.slice(0, 4).map((x) => `<div class="pv-svc"><span class="pv-ic">${svcIcon(x.name).replace('<svg', '<svg width="18" height="18"')}</span><b>${esc(x.name)}</b><span class="pv-pr">${money0(x.price)}</span></div>`).join('')}</div><div class="pv-pontos"><i class="on"></i><i></i><i></i></div></div>
+    <div class="pv-card"><b class="pv-t">Horário de funcionamento</b><div class="pv-h"><span>Segunda a sábado</span><b>${st.open} às ${st.close}</b></div></div></div>
+    <nav class="pv-tab">${[['Início', IC.home], ['Agendar', IC.cal], ['Meus horários', IC.clock], ['Perfil', IC.user]].map(([l, i], k) => `<span class="${k === 0 ? 'on' : ''}">${i.replace('<svg', '<svg width="20" height="20"')}${l}</span>`).join('')}</nav></div>`;
   }
   function vCfg() {
     const st = S.settings;
@@ -366,7 +367,7 @@
      <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Cor da marca</h3></div>
       <div class="swatches">${Object.entries(PRESETS).map(([k, [n, l, d]]) => `<button class="sw ${st.color === k ? 'on' : ''}" data-a="cfg-color" data-c="${k}"><i style="background:linear-gradient(135deg,${l} 50%,${d} 50%)"></i>${n}</button>`).join('')}
        <label class="sw ${st.color === 'custom' ? 'on' : ''}" style="cursor:pointer"><i style="background:${st.color === 'custom' ? st.custom : 'conic-gradient(#c33,#cc3,#3c6,#3cc,#36c,#c3c,#c33)'}"><input type="color" value="${st.custom}" data-ch="cfg-custom" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer" aria-label="Escolher outra cor"></i>Outra</label></div>
-      <div class="muted" style="font-size:12.5px">Cada amostra mostra a cor no fundo claro (painel) e no escuro (site do cliente). Veja o resultado ao lado.</div></div>
+      <div class="muted" style="font-size:12.5px">Cada amostra mostra a cor no fundo claro e no fundo escuro. Ela aparece nos botões, no item escolhido e nos detalhes do site do cliente. Veja ao lado.</div></div>
      <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Horário de funcionamento</h3></div>
       <div class="row2"><div class="field"><label for="cfg-open">Abre às</label><input type="time" step="1800" class="input" id="cfg-open" value="${st.open}" data-ch="cfg" data-k="open"></div><div class="field"><label for="cfg-close">Fecha às</label><input type="time" step="1800" class="input" id="cfg-close" value="${st.close}" data-ch="cfg" data-k="close"></div></div>
       <div class="row2"><div class="field"><label for="cfg-ls">Almoço das</label><input type="time" step="1800" class="input" id="cfg-ls" value="${st.lunchStart}" data-ch="cfg" data-k="lunchStart"></div><div class="field"><label for="cfg-le">até</label><input type="time" step="1800" class="input" id="cfg-le" value="${st.lunchEnd}" data-ch="cfg" data-k="lunchEnd"></div></div>
@@ -513,16 +514,16 @@
     }
     if (f.id === 'blkForm') {
       const date = $('#blk-date').value, why = $('#blk-why').value.trim();
-      if (!date) { toast('Escolha o dia que quer bloquear.'); return; }
+      if (!date) { alerta('aviso', 'Falta escolher o dia', 'Escolha o dia que quer bloquear.'); marcar('#blk-date', 'aviso'); return; }
       act(async () => {
         const r = await api('POST', '/api/admin/bloqueios', { date, why });
-        if (r.existing) setTimeout(() => toast(`Dia bloqueado. Atenção: ${r.existing} cliente${r.existing > 1 ? 's já tinham' : ' já tinha'} horário nesse dia.`), 50);
+        if (r.existing) setTimeout(() => alerta('aviso', 'Dia bloqueado', `Atenção: ${r.existing} cliente${r.existing > 1 ? 's já tinham' : ' já tinha'} horário nesse dia.`), 50);
       }, 'Dia bloqueado. Ninguém consegue marcar nele.');
     }
     if (f.id === 'cliForm') {
       const name = $('#cd-name').value.trim(), phone = digits($('#cd-phone').value);
       const err = A.nameError(name) || A.phoneError(phone);
-      if (err) { toast(err); return; }
+      if (err) { alerta('erro', 'Confira os dados', err); return; }
       act(() => put('/api/admin/clientes/' + f.dataset.id, { name, phone }), 'Cliente atualizado.');
     }
     if (f.id === 'nvForm') {
@@ -531,13 +532,13 @@
       if (nv.cid) body.clientId = nv.cid;
       else if (nv.isNew) {
         const ne = A.nameError(nv.name), pe = A.phoneError(nv.phone);
-        if (ne || pe) { nv.err = ne || pe; render(); return; }
+        if (ne || pe) { nv.err = ne || pe; render(); alerta('erro', 'Confira o cliente', nv.err); return; }
         body.name = A.tidyName(nv.name); body.phone = A.phoneDigits(nv.phone);
       }
-      else { nv.err = 'Escolha o cliente: digite o nome e toque nele na lista, ou cadastre um cliente novo.'; render(); return; }
+      else { nv.err = 'Escolha o cliente: digite o nome e toque nele na lista, ou cadastre um cliente novo.'; render(); alerta('aviso', 'Falta escolher o cliente', nv.err); marcar('#nv-q', 'aviso'); return; }
       api('POST', '/api/admin/agendamentos', body)
         .then(async () => { V.drawer = null; await reload(); toast(`Agendado para ${shortDate(nv.date)} às ${nv.time}.`); render(); })
-        .catch((err) => { nv.err = err.message; render(); });
+        .catch((err) => { nv.err = err.message; render(); alerta('erro', 'Não foi possível agendar', err.message); });
     }
     if (f.id === 'profForm') {
       act(() => put('/api/admin/perfil', { name: $('#b-name').value, email: $('#b-email').value, user: $('#b-user').value }), 'Dados salvos.');
@@ -577,7 +578,7 @@
         break;
       case 'n-del': {
         const id = el.dataset.id; S.notifications = S.notifications.filter((x) => x.id !== id); render();
-        api('DELETE', '/api/admin/avisos/' + id).catch((err) => { toast(err.message); reload().then(render); });
+        api('DELETE', '/api/admin/avisos/' + id).catch((err) => { alerta('erro', 'Não deu certo', err.message); reload().then(render); });
         break;
       }
       case 'n-clear-ask': V.nClearAsk = true; render(); break;
@@ -664,7 +665,7 @@
     if (k === 'nv') { V.nv[el.dataset.k] = el.value; V.nv.err = ''; render(); }
     if (k === 'cfg') {
       const v = el.value.trim(); const key = el.dataset.k;
-      if (!v && key !== 'address') { toast('Esse campo não pode ficar vazio.'); render(); return; }
+      if (!v && key !== 'address') { alerta('erro', 'Campo vazio', 'Esse campo não pode ficar vazio.'); render(); return; }
       saveSettings({ [key]: v });
     }
     if (k === 'cfg-num') saveSettings({ [el.dataset.k]: Number(el.value) }, 'Proteção atualizada.');
@@ -676,16 +677,16 @@
     }
     if (k === 'cfg-logo') {
       const f = el.files[0]; if (!f) return;
-      if (f.size > 1.5e6) { toast('Imagem muito grande. Use uma de até 1,5 MB.'); return; }
+      if (f.size > 1.5e6) { alerta('erro', 'Imagem muito grande', 'Use uma imagem de até 1,5 MB.'); return; }
       const fr = new FileReader(); fr.onload = () => saveSettings({ logo: fr.result }, 'Logo atualizada.'); fr.readAsDataURL(f);
     }
     if (k === 'svc') {
       const row = el.closest('[data-svc]'); const id = row.dataset.svc; const s = S.services.find((x) => x.id === id);
       const body = { name: s.name, price: s.price, dur: s.dur };
       const key = el.dataset.k;
-      if (key === 'price') { const v = parseFloat(el.value.replace(',', '.')); if (!(v >= 0)) { toast('Preço inválido.'); render(); return; } body.price = v; }
+      if (key === 'price') { const v = parseFloat(el.value.replace(',', '.')); if (!(v >= 0)) { alerta('erro', 'Preço inválido', 'Digite só números. Ex.: 35 ou 35,50.'); render(); return; } body.price = v; }
       else if (key === 'dur') body.dur = Number(el.value);
-      else { if (!el.value.trim()) { toast('O nome não pode ficar vazio.'); render(); return; } body.name = el.value.trim(); }
+      else { if (!el.value.trim()) { alerta('erro', 'Nome vazio', 'O nome do serviço não pode ficar vazio.'); render(); return; } body.name = el.value.trim(); }
       act(() => put('/api/admin/servicos/' + id, body), 'Serviço salvo.');
     }
   });
