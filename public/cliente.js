@@ -141,7 +141,7 @@
         <button type="button" class="c-logo" data-a="tab" data-t="inicio">${window.U.logo(S.settings, 44)}<div><b>${esc(S.settings.shopName)}</b><small data-st="${now.st}">${now.r}</small></div></button>
         <nav class="c-nav" aria-label="Menu">${TABS.map(tabBtn(18)).join('')}</nav>
         <a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
-      </div><div class="listra" aria-hidden="true"></div></header>
+      </div></header>
       <main class="c-main ${animTab ? 'vista' : ''}">${view}</main>
       ${barra ? bookbar() : ''}
       <nav class="c-tabbar" aria-label="Menu">${TABS.map(tabBtn(21)).join('')}</nav>
@@ -197,8 +197,9 @@
       ${hasLunch() ? `<div class="almoco"><span>${ic('coffee', 15)}Almoço</span><b class="num">${st.lunchStart} às ${st.lunchEnd}</b></div>` : ''}</div>
       ${st.bookTo >= TODAY ? `<div class="ini-limite">Agendamentos abertos até ${A.parse(st.bookTo).getDate()} de ${MESES[A.parse(st.bookTo).getMonth()]}.</div>` : ''}</section>`;
     return `<div class="ini">
-      <section class="c-hero"><div><small class="sobre">${ME ? `Olá, ${esc(first(ME.name))}` : 'Agendamento online'}</small><h1>${esc(st.tagline || st.shopName)}</h1><p>Atendimento com hora marcada, sem fila. Escolha seu horário pelo celular e pague na barbearia.</p>
-        <div class="ini-acoes" style="margin-top:18px"><button type="button" class="btn-claro" data-a="tab" data-t="agendar">${ic('cal', 18)}Agendar meu horário</button></div></div>
+      <section class="c-hero bv"><div class="poste" aria-hidden="true"><span class="tampa"></span><span class="vidro"><i></i></span><span class="tampa b"></span></div><div><small class="sobre bv-ola">${ME ? `Olá, ${esc(first(ME.name))}` : 'Agendamento online'}</small><h1>${esc(st.tagline || st.shopName)}</h1><p>Atendimento com hora marcada, sem fila. Escolha seu horário pelo celular e pague na barbearia.</p>
+        <div class="ini-acoes" style="margin-top:18px"><button type="button" class="btn-claro" data-a="tab" data-t="agendar">${ic('cal', 18)}Agendar meu horário</button></div>
+        <div class="bv-selos"><span>${ic('clock', 14)}Sem fila</span><span>${ic('whats', 14)}Confirmação no WhatsApp</span><span>${ic('check', 14)}Pague na barbearia</span></div></div>
         <div class="ini-selo" aria-hidden="true">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span>${esc(initials(st.shopName.replace(/barbearia/i, '').trim() || st.shopName) || 'B')}</span><small>Barbearia</small>`}</div></section>
       <div class="ini-grid"><div class="col">${prox}${carousel}</div><div class="col">${onde}${horas}</div></div>
     </div>`;
