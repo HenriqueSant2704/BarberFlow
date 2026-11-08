@@ -49,12 +49,12 @@
 
   // ----- paginação (16 por página) -----
   const PER = 16;
-  function pagina(list, key) {
-    const tot = Math.max(1, Math.ceil(list.length / PER));
+  function pagina(list, key, per = PER, rot = '') {
+    const tot = Math.max(1, Math.ceil(list.length / per));
     const p = Math.min(Math.max(1, V.pg[key] || 1), tot); V.pg[key] = p;
-    const ini = (p - 1) * PER; const itens = list.slice(ini, ini + PER);
+    const ini = (p - 1) * per; const itens = list.slice(ini, ini + per);
     const nums = []; for (let i = 1; i <= tot; i++) if (i === 1 || i === tot || Math.abs(i - p) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
-    const html = list.length > PER ? `<div class="pag"><small>Mostrando ${ini + 1} a ${ini + itens.length} de ${list.length}</small><div class="pag-bts">
+    const html = list.length > per ? `<div class="pag"><small>Mostrando ${ini + 1} a ${ini + itens.length} de ${list.length}${rot}</small><div class="pag-bts">
       <button type="button" data-a="pag" data-k="${key}" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''} aria-label="Página anterior">${ic('left', 16)}</button>
       ${nums.map((n) => (n === '…' ? '<button type="button" disabled>…</button>' : `<button type="button" class="${n === p ? 'on' : ''}" data-a="pag" data-k="${key}" data-p="${n}" ${n === p ? 'aria-current="page"' : ''}>${n}</button>`)).join('')}
       <button type="button" data-a="pag" data-k="${key}" data-p="${p + 1}" ${p === tot ? 'disabled' : ''} aria-label="Próxima página">${ic('right', 16)}</button></div></div>` : '';
@@ -261,6 +261,10 @@
   }
 
   // ===== Agenda =====
+  // cores de cartaz: cada dia da semana tem sempre o mesmo tom; cada cliente também
+  const TONS = ['vinho', 'terracota', 'mostarda', 'salvia', 'petroleo', 'ardosia', 'ameixa'];
+  const tomDia = (ds) => TONS[A.parse(ds).getDay()];
+  const tomCli = (id) => TONS[[...String(id)].reduce((t, c) => t + c.charCodeAt(0), 0) % TONS.length];
   function listaAgenda(ab) {
     if (ab === 'hoje') return sortAp(S.appts.filter((x) => x.date === TODAY && x.status === 'agendado'));
     if (ab === 'amanha') return sortAp(S.appts.filter((x) => x.date === TOMORROW && x.status === 'agendado'));
@@ -276,13 +280,18 @@
     let corpo;
     if (V.vista === 'mes') corpo = vMes();
     else {
-      const lista = listaAgenda(V.ab); const { itens, html } = pagina(lista, 'ag');
+      const lista = listaAgenda(V.ab); const porDia = !['hoje', 'amanha', 'dia'].includes(V.ab);
+      const grupos = []; lista.forEach((x) => { const g = grupos[grupos.length - 1]; if (g && g.date === x.date) g.l.push(x); else grupos.push({ date: x.date, l: [x] }); });
+      const pg = porDia ? pagina(grupos, 'ag', 7, ' dias') : pagina(lista, 'ag'); const html = pg.html;
+      const itens = porDia ? pg.itens.flatMap((g) => g.l) : pg.itens;
       const titulo = V.ab === 'dia' ? `<div class="faixa" data-t="info"><span class="f-ico">${ic('cal', 18)}</span><div><strong>${cap(longDate(V.agDia))}</strong><p>${lista.length ? `${lista.length} atendimento${lista.length > 1 ? 's' : ''} neste dia.` : !daySlots(V.agDia).length ? 'A barbearia está fechada neste dia.' : 'Nenhum agendamento neste dia ainda.'}</p></div><button type="button" class="btn p" data-a="vista" data-v="mes">${ic('left', 15)}Voltar ao mês</button></div>` : '';
-      let ultimo = null;
-      const cards = itens.map((x) => { let lab = ''; if (!['hoje', 'amanha', 'dia'].includes(V.ab) && x.date !== ultimo) { ultimo = x.date; lab = `<div class="ag dia-label">${ic('cal', 16)}${cap(longDate(x.date))}</div>`; } return lab + agCard(x); }).join('');
+      const col = (g, unico) => { const d = A.parse(g.date); const n = g.l.length; return `<section class="ag-col ${unico ? 'unico' : ''}" data-tom="${tomDia(g.date)}"><header class="ag-col-topo"><div class="ag-col-cal"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b></div><div class="tx"><h4>${g.date === TODAY ? 'Hoje' : g.date === TOMORROW ? 'Amanhã' : cap(DOWL[d.getDay()])}</h4><p>${d.getDate()} de ${MESES[d.getMonth()]}${d.getFullYear() !== A.parse(TODAY).getFullYear() ? ' de ' + d.getFullYear() : ''}</p></div><span class="qtd">${n} ${n === 1 ? 'horário' : 'horários'}</span></header><div class="ag-col-corpo">${g.l.map(agCard).join('')}</div></section>`; };
+      const dias = porDia ? pg.itens : itens.length ? [{ date: itens[0].date, l: itens }] : [];
+      const cards = !porDia ? dias.map((g) => col(g, true)).join('')
+        : `<div class="ag-cols-topo"><small>${dias.length} ${dias.length === 1 ? 'dia' : 'dias'} com horário marcado<span class="ag-cols-dica">· arraste para o lado ${ic('right', 14)}</span></small><div class="ag-cols-setas"><button type="button" data-a="ag-rola" data-v="-1" aria-label="Dias anteriores">${ic('left', 18)}</button><button type="button" data-a="ag-rola" data-v="1" aria-label="Próximos dias">${ic('right', 18)}</button></div></div><div class="ag-cols" id="agCols">${dias.map((g) => col(g, false)).join('')}</div>`;
       const vazioTxt = V.ab === 'hoje' ? (daySlots(TODAY).length ? (S.appts.some((x) => x.date === TODAY && x.status === 'realizado') ? 'Todos os clientes de hoje já foram atendidos.' : 'Ninguém marcado para hoje ainda.') : 'Hoje a barbearia está fechada.')
         : V.ab === 'amanha' && !daySlots(TOMORROW).length ? 'Amanhã a barbearia está fechada.' : 'Nenhum agendamento nesta lista.';
-      corpo = titulo + (itens.length ? `<div class="ag-grid">${cards}</div>${html}` : V.ab === 'dia' ? '' : `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="verde">${ic('check', 26)}</span><h4>Nada por aqui</h4><p>${vazioTxt}</p></div></div>`);
+      corpo = titulo + (itens.length ? `${cards}${html}` : V.ab === 'dia' ? '' : `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="verde">${ic('check', 26)}</span><h4>Nada por aqui</h4><p>${vazioTxt}</p></div></div>`);
     }
     return `<div class="barra-filtros">
         <div class="esq"><div class="chips">${abas.map(chip).join('')}<span class="divisor-v"></span>${filtros.map(chip).join('')}</div></div>
@@ -300,7 +309,7 @@
       else if (x.date <= TODAY) acoes = `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`;
       else acoes = `<div class="acoes">${c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}WhatsApp</a>` : ''}<button type="button" class="btn verm p" data-a="cancel-ask" data-id="${x.id}">${ic('x', 15)}Cancelar</button></div>`;
     }
-    return `<div class="ag"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
+    return `<div class="ag" data-tom="${tomDia(x.date)}"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
       <button type="button" class="quem" data-a="ap" data-id="${x.id}">${avk(c)}<div><b>${esc(c.name)}</b><small>${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}</small></div></button>
       <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${acoes}</div>`;
   }
@@ -367,7 +376,7 @@
       const msg = !S.clients.length ? ['Nenhum cliente ainda', 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'] : V.cliQ ? ['Nenhum cliente encontrado', 'Confira o nome ou tente buscar pelo WhatsApp.'] : V.cliF === 'sumidos' ? ['Ninguém sumido', 'Todo mundo que costuma vir já voltou este mês ou tem horário marcado.'] : V.cliF === 'bloq' ? ['Ninguém bloqueado', 'Para bloquear alguém, abra a ficha do cliente.'] : ['Ninguém nesta lista', 'Assim que tiver atendimentos, a lista enche.'];
       return `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="laranja">${ic('search', 26)}</span><h4>${msg[0]}</h4><p>${msg[1]}</p></div></div>`;
     }
-    return `<div class="cli-grid">${itens.map((x) => `<div class="cli ${x.c.blocked ? 'bloq' : ''}" role="button" tabindex="0" data-a="cli" data-id="${x.c.id}"><div class="topo">${avk(x.c)}<div><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div></div>
+    return `<div class="cli-grid">${itens.map((x) => `<div class="cli ${x.c.blocked ? 'bloq' : ''}" data-tom="${tomCli(x.c.id)}" role="button" tabindex="0" data-a="cli" data-id="${x.c.id}"><div class="topo">${avk(x.c)}<div><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div></div>
       <div class="tags">${x.tags.map(([k, t]) => `<span class="tag" data-k="${k}">${t}</span>`).join('')}</div>
       <div class="nums"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Última</small><b>${x.last ? shortDate(x.last) : '—'}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div></div>
       ${x.c.blocked ? `<button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${x.c.id}">${ic('check', 15)}Desbloquear</button>` : ''}</div>`).join('')}</div>${html}`;
@@ -461,7 +470,7 @@
   }
   function previa(d) {
     const fake = { ...S.settings, shopName: d.shopName || 'Sua barbearia', logo: d.logo };
-    return `<div class="previa-cel" aria-hidden="true"><div><div class="pc-topo">${logo(24, fake)}<b>${esc(fake.shopName)}</b></div><div class="listra" style="height:3px"></div>
+    return `<div class="previa-cel" aria-hidden="true"><div><div class="pc-topo">${logo(24, fake)}<b>${esc(fake.shopName)}</b></div>
       <div class="pc-corpo"><div class="ph"><small>Agendamento online</small><b>${esc(d.tagline || fake.shopName)}</b><span>Agendar meu horário</span></div>
       <div class="pc-svc">${d.svcs.slice(0, 2).map((s) => `<div><i></i>${esc(s.name)}<em>R$ ${esc(s.price)}</em></div>`).join('')}</div><div class="pb">Confirmar agendamento</div></div></div></div>`;
   }
@@ -766,6 +775,7 @@
       case 'n-clear': V.nClearAsk = false; act(() => api('DELETE', '/api/admin/avisos'), () => alerta('ok', 'Avisos apagados', 'Os agendamentos continuam na agenda.')); break;
       case 'som-toggle': Som.setEnabled(!Som.enabled()); if (Som.enabled()) { Som.unlock(); setTimeout(() => Som.play('novo'), 100); } render(); break;
       case 'som-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); alerta('ok', 'Som ativado', 'É assim que vai tocar quando chegar agendamento novo.'); break;
+      case 'ag-rola': { const el2 = $('#agCols'); if (el2) el2.scrollBy({ left: Number(v) * 628, behavior: 'smooth' }); break; }
       case 'pag': {
         V.pg[el.dataset.k] = Number(el.dataset.p); render();
         const t = $('.p-main'); if (t) window.scrollTo({ top: 0, behavior: 'smooth' });
