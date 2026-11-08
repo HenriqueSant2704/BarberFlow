@@ -36,11 +36,18 @@
 
   function isBlocked(blocked, ds) { return (blocked || []).some((b) => b.date === ds); }
 
+  /** Horário de abrir e fechar de um dia da semana (0 = domingo). Cada dia pode ter o seu. */
+  function dayHours(settings, dow) {
+    const h = (settings.hours || {})[dow];
+    return h && isTime(h.open) && isTime(h.close) ? { open: h.open, close: h.close } : { open: settings.open, close: settings.close };
+  }
+
   /** Todos os horários de início possíveis num dia (sem olhar se estão ocupados). */
   function daySlots(settings, blocked, ds) {
     const d = parse(ds);
     if ((settings.closed || []).includes(d.getDay()) || isBlocked(blocked, ds)) return [];
-    const o = toMin(settings.open), c = toMin(settings.close);
+    const hh = dayHours(settings, d.getDay());
+    const o = toMin(hh.open), c = toMin(hh.close);
     const ls = toMin(settings.lunchStart), le = toMin(settings.lunchEnd);
     const out = [];
     for (let m = o; m + STEP <= c; m += STEP) {
@@ -122,5 +129,5 @@
     return '';
   }
 
-  return { STEP, TZ, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError };
+  return { STEP, TZ, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError };
 });

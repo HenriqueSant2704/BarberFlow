@@ -143,15 +143,17 @@ r.post('/agendamentos', ah(async (req, res) => {
 }));
 
 // ----- Despesas -----
+const EXP_CATS = ['Produtos', 'Contas', 'Aluguel', 'Manutenção', 'Outros'];
 r.post('/despesas', ah(async (req, res) => {
   const desc = String(req.body.desc || '').trim();
   const val = Number(req.body.val);
   const date = req.body.date;
+  const cat = EXP_CATS.includes(req.body.cat) ? req.body.cat : 'Outros';
   if (!desc) fail(400, 'Escreva o que foi pago.');
   if (desc.length > 120) fail(400, 'A descrição está muito grande.');
   if (!(val > 0) || val > 1e7) fail(400, 'Digite um valor maior que zero.');
   if (!Agenda.isDate(date)) fail(400, 'Escolha a data.');
-  const { rows } = await db.query('INSERT INTO expenses (description, amount, date) VALUES ($1, $2, $3) RETURNING *', [desc, Math.round(val * 100) / 100, date]);
+  const { rows } = await db.query('INSERT INTO expenses (description, amount, date, category) VALUES ($1, $2, $3, $4) RETURNING *', [desc, Math.round(val * 100) / 100, date, cat]);
   res.status(201).json({ expense: repo.mapExpense(rows[0]) });
 }));
 r.delete('/despesas/:id', ah(async (req, res) => {
@@ -192,7 +194,7 @@ r.post('/clientes/:id/desbloquear', ah(async (req, res) => {
 }));
 
 // ----- Configurações -----
-const COLORS = ['latao', 'verde', 'bordo', 'petroleo', 'cobre', 'branco', 'preto', 'azul', 'roxo', 'vermelho', 'laranja', 'rosa', 'ciano', 'custom'];
+const COLORS = ['latao', 'verde', 'bordo', 'petroleo', 'cobre', 'branco', 'preto', 'azul', 'roxo', 'vermelho', 'laranja', 'rosa', 'ciano', 'prata', 'custom'];
 const FIELDS = {
   shopName: ['shop_name', (v) => { const s = String(v || '').trim(); if (!s || s.length > 60) fail(400, 'O nome da barbearia precisa ter entre 1 e 60 letras.'); return s; }],
   tagline: ['tagline', (v) => { const s = String(v || '').trim(); if (!s || s.length > 140) fail(400, 'A frase precisa ter entre 1 e 140 letras.'); return s; }],
@@ -210,6 +212,18 @@ const FIELDS = {
   lunchStart: ['lunch_start', (v) => { if (!Agenda.isTime(v)) fail(400, 'Horário inválido.'); return v; }],
   lunchEnd: ['lunch_end', (v) => { if (!Agenda.isTime(v)) fail(400, 'Horário inválido.'); return v; }],
   closed: ['closed_days', (v) => { if (!Array.isArray(v) || v.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) fail(400, 'Dias inválidos.'); if (v.length >= 7) fail(400, 'A barbearia precisa abrir pelo menos um dia na semana.'); return [...new Set(v)]; }],
+  phone: ['phone', (v) => { const d = Agenda.phoneDigits(v); if (!d) return ''; if (d.length < 10 || d.length > 11) fail(400, 'Digite o WhatsApp da barbearia com DDD.'); return d; }],
+  hours: ['day_hours', (v) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) fail(400, 'Horários inválidos.');
+    const out = {};
+    for (const [k, h] of Object.entries(v)) {
+      const d = Number(k);
+      if (!Number.isInteger(d) || d < 0 || d > 6 || !h || !Agenda.isTime(h.open) || !Agenda.isTime(h.close)) fail(400, 'Horário inválido.');
+      if (Agenda.toMin(h.open) >= Agenda.toMin(h.close)) fail(400, 'O horário de abrir precisa ser antes do de fechar.');
+      out[d] = { open: h.open, close: h.close };
+    }
+    return JSON.stringify(out);
+  }],
   bookFrom: ['book_from', (v) => { if (!Agenda.isDate(v)) fail(400, 'Data inválida.'); return v; }],
   bookTo: ['book_to', (v) => { if (!Agenda.isDate(v)) fail(400, 'Data inválida.'); return v; }],
   // Proteção contra trote (0 = sem limite)

@@ -1,7 +1,7 @@
-// Painel do barbeiro (computador).
+// Painel do barbeiro (computador e celular), no visual do protótipo aprovado.
 (function () {
   const A = window.Agenda;
-  const { alerta, marcar, esc, money, money0, digits, maskPhone, MESES, DOW, longDate, shortDate, cap, initials, STATUS, PRESETS, IC, svcIcon, applyTheme, toast, api } = window.U;
+  const { alerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, PRESETS, svcIcon, applyTheme, toast, api } = window.U;
   const $ = (s) => document.querySelector(s);
 
   let S = null; // tudo que veio de /api/admin/dados
@@ -9,62 +9,73 @@
   const nowMin = () => A.nowMinIn();
 
   const V = {
-    logged: false, sec: 'inicio', agView: 'lista', agTab: 'hoje', weekStart: null, calMonth: null, calDay: TODAY, drawer: null,
-    fin: 'mes', from: null, to: null, cliFilter: 'todos', cliSearch: '', expErr: '', pwMsg: '', loginErr: '', dConfirm: null,
-    nv: null, bellOpen: false, live: false, saving: false, more: false, pg: {},
+    logged: false, sec: 'inicio', menu: false, sino: false, nClearAsk: false, live: false, saving: false, pg: {},
+    ab: 'hoje', agDia: null, vista: 'lista', calMonth: null, cancel: null,
+    cliF: 'todos', cliQ: '',
+    per: 'mes', de: null, ate: null, despForm: false, despAsk: null,
+    nv: null, lado: null, ladoAsk: null, draft: null, loginUser: '',
   };
+  const TITULOS = { inicio: 'Início', agenda: 'Agenda', cli: 'Clientes', fin: 'Financeiro', cfg: 'Configurações', perfil: 'Meu perfil' };
 
   // ----- regras da agenda -----
   const daySlots = (ds) => A.daySlots(S.settings, S.blocked, ds);
   const busy = (ds, ignore) => A.busySet(S.appts, ds, ignore);
   const isPast = (ds, t) => A.isPast(ds, t, TODAY, nowMin());
-  const freeCount = (ds) => { const b = busy(ds); return daySlots(ds).filter((t) => !b.has(t) && !isPast(ds, t)).length; };
   const fits = (ds, t, dur) => A.fits(S.settings, S.blocked, S.appts, ds, t, dur);
+  const freeCount = (ds) => { const b = busy(ds); return daySlots(ds).filter((t) => !b.has(t) && !isPast(ds, t)).length; };
   const blockedOf = (ds) => S.blocked.find((b) => b.date === ds);
   const cById = (id) => S.clients.find((c) => c.id === id) || { id: '0', name: 'Cliente removido', phone: '' };
   const sortAp = (l) => l.sort((p, q) => (p.date + p.time).localeCompare(q.date + q.time));
   const live = () => S.appts.filter((x) => x.status !== 'cancelado');
-  const logo = (size) => window.U.logo(S.settings, size);
-  const avatar = (c, size) => window.U.avatar(c, size);
+  const endOf = (t, dur) => A.fromMin(A.toMin(t) + dur);
+  const first = (n) => String(n || '').split(' ')[0];
+  const hasLunch = () => A.toMin(S.settings.lunchEnd) > A.toMin(S.settings.lunchStart);
+  const tempo = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}`);
+  const logo = (size, st) => window.U.logo(st || S.settings, size);
+  const avk = (c, size) => `<span class="av-k"${size ? ` style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.34)}px"` : ''}>${esc(initials(c.name))}</span>`;
+  const diaTxt = (ds) => (ds === TODAY ? 'hoje' : ds === TOMORROW ? 'amanhã' : `${DOW[A.parse(ds).getDay()].toLowerCase()}, ${shortDate(ds)}`);
+  const waLink = (phone, txt) => `https://wa.me/55${digits(phone)}${txt ? `?text=${encodeURIComponent(txt)}` : ''}`;
+  const waMsg = (x) => `Olá, ${first(cById(x.clientId).name)}! Aqui é da ${S.settings.shopName}. Passando para lembrar do seu horário ${diaTxt(x.date)} às ${x.time} (${x.service}).`;
+  /** Por que um serviço de "dur" minutos não cabe começando em "t". */
+  function whyNot(ds, t, dur) {
+    const st = S.settings; const slots = new Set(daySlots(ds)); const bz = busy(ds);
+    for (let i = 0; i < Math.ceil(dur / A.STEP); i++) {
+      const m = A.toMin(t) + A.STEP * i; const s = A.fromMin(m);
+      if (!slots.has(s)) return hasLunch() && m >= A.toMin(st.lunchStart) && m < A.toMin(st.lunchEnd) ? { m: 'almoco' } : { m: 'fecha' };
+      if (i > 0 && bz.has(s)) return { m: 'ocupado', t: s };
+    }
+    return null;
+  }
 
   // ----- paginação (16 por página) -----
   const PER = 16;
-  function pageOf(list, key) {
-    const pages = Math.max(1, Math.ceil(list.length / PER));
-    const p = Math.min(Math.max(1, V.pg[key] || 1), pages); V.pg[key] = p;
-    return { items: list.slice((p - 1) * PER, p * PER), p, pages, total: list.length, from: (p - 1) * PER + 1, to: Math.min(p * PER, list.length) };
-  }
-  function pager(pg, key) {
-    if (pg.pages <= 1) return '';
-    const nums = [];
-    for (let i = 1; i <= pg.pages; i++) {
-      if (i === 1 || i === pg.pages || Math.abs(i - pg.p) <= 1) nums.push(i);
-      else if (nums[nums.length - 1] !== '…') nums.push('…');
-    }
-    return `<div class="pgwrap"><nav class="pager" aria-label="Páginas"><button class="btn sm" data-a="pg" data-k="${key}" data-p="${pg.p - 1}" ${pg.p <= 1 ? 'disabled' : ''} aria-label="Página anterior">${IC.left}<span class="pg-t">Anterior</span></button>
-     <span class="pg-n">${nums.map((n) => (n === '…' ? '<span class="muted">…</span>' : `<button class="pgb ${n === pg.p ? 'on' : ''}" data-a="pg" data-k="${key}" data-p="${n}" ${n === pg.p ? 'aria-current="page"' : ''}>${n}</button>`)).join('')}</span>
-     <span class="pg-c muted">Página ${pg.p} de ${pg.pages}</span>
-     <button class="btn sm" data-a="pg" data-k="${key}" data-p="${pg.p + 1}" ${pg.p >= pg.pages ? 'disabled' : ''} aria-label="Próxima página"><span class="pg-t">Próxima</span>${IC.right}</button></nav>
-     <div class="pg-info muted">Mostrando ${pg.from} a ${pg.to} de ${pg.total}</div></div>`;
+  function pagina(list, key) {
+    const tot = Math.max(1, Math.ceil(list.length / PER));
+    const p = Math.min(Math.max(1, V.pg[key] || 1), tot); V.pg[key] = p;
+    const ini = (p - 1) * PER; const itens = list.slice(ini, ini + PER);
+    const nums = []; for (let i = 1; i <= tot; i++) if (i === 1 || i === tot || Math.abs(i - p) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
+    const html = list.length > PER ? `<div class="pag"><small>Mostrando ${ini + 1} a ${ini + itens.length} de ${list.length}</small><div class="pag-bts">
+      <button type="button" data-a="pag" data-k="${key}" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''} aria-label="Página anterior">${ic('left', 16)}</button>
+      ${nums.map((n) => (n === '…' ? '<button type="button" disabled>…</button>' : `<button type="button" class="${n === p ? 'on' : ''}" data-a="pag" data-k="${key}" data-p="${n}" ${n === p ? 'aria-current="page"' : ''}>${n}</button>`)).join('')}
+      <button type="button" data-a="pag" data-k="${key}" data-p="${p + 1}" ${p === tot ? 'disabled' : ''} aria-label="Próxima página">${ic('right', 16)}</button></div></div>` : '';
+    return { itens, html };
   }
 
   // ----- dados -----
   async function reload() {
     S = await api('GET', '/api/admin/dados');
     TODAY = S.today; NOW = A.parse(TODAY); TOMORROW = A.iso(A.addDays(NOW, 1));
-    if (!V.from) { V.from = A.iso(A.addDays(NOW, -14)); V.to = TODAY; V.calDay = TODAY; }
-    applyTheme(S.settings);
+    if (!V.de) { V.de = A.iso(A.addDays(NOW, -13)); V.ate = TODAY; }
     updateTitle();
   }
-  /** Faz a chamada, recarrega os dados e redesenha. Mostra o erro numa mensagem. */
-  async function act(fn, okMsg) {
+  /** Faz a chamada, recarrega os dados e redesenha. Mostra o erro num aviso que chama atenção. */
+  async function act(fn, onOk) {
     if (V.saving) return;
     V.saving = true;
     try {
       const r = await fn();
       await reload();
-      const msg = typeof okMsg === 'function' ? okMsg(r) : okMsg;
-      if (msg) toast(msg);
+      if (onOk) onOk(r);
     } catch (e) {
       if (e.status === 401) { V.logged = false; S = null; }
       alerta(e.status === 409 ? 'aviso' : 'erro', e.status === 409 ? 'Não deu para fazer isso' : 'Não deu certo', e.message);
@@ -94,43 +105,82 @@
       const n = JSON.parse(ev.data);
       Som.play(n.type);
       const a = n.appointment;
-      toast(n.type === 'novo'
-        ? `Novo agendamento: ${n.clientName.split(' ')[0]}, ${DOW[A.parse(a.date).getDay()].toLowerCase()} ${shortDate(a.date)} às ${a.time}`
-        : `${n.clientName.split(' ')[0]} cancelou o horário de ${shortDate(a.date)} às ${a.time}`);
       try { await reload(); } catch { /* ignora */ }
       render();
-      const b = $('.bellbtn'); if (b) { b.classList.remove('ring'); void b.offsetWidth; b.classList.add('ring'); }
+      if (n.type === 'novo') alerta('ok', 'Novo agendamento!', `${first(n.clientName)} marcou ${String(a.service || 'um horário').toLowerCase()} para ${diaTxt(a.date)} às ${a.time}.`, [{ r: 'Ver agendamento', fn: () => openLado('ap', a.id) }]);
+      else alerta('aviso', 'Horário cancelado pelo cliente', `${first(n.clientName)} cancelou ${diaTxt(a.date)} às ${a.time}. A vaga ficou livre no site.`);
+      const b = $('#sinoBtn'); if (b) { b.classList.remove('toca'); void b.offsetWidth; b.classList.add('toca'); }
     });
   }
-  function paintLive() { const el = $('#live'); if (el) { el.classList.toggle('on', V.live); el.lastChild.textContent = V.live ? 'Ao vivo' : 'Reconectando…'; } }
+  function paintLive() { const el = $('#aoVivo'); if (el) { el.classList.toggle('on', V.live); el.lastChild.textContent = V.live ? 'Ao vivo' : 'Reconectando…'; } }
 
-  // ----- tela -----
+  // ===== Tela =====
+  let lastSec = null;
   function render() {
     const root = $('#root');
-    if (!V.logged || !S) { root.innerHTML = vLogin(); $('#overlay').innerHTML = ''; return; }
-    root.innerHTML = adminApp();
-    $('#overlay').innerHTML = V.drawer ? drawer() : V.more ? moreSheet() : '';
+    if (!V.logged || !S) { root.innerHTML = vLogin(); $('#overlay').innerHTML = ''; lastSec = null; return; }
+    applyTheme(V.sec === 'cfg' && V.draft ? V.draft : S.settings);
+    root.innerHTML = adminApp(lastSec !== V.sec);
+    lastSec = V.sec;
+    let cam = '';
+    if (V.menu) cam += vGaveta();
+    if (V.sino) cam += vSino();
+    if (V.lado) cam += vLado();
+    if (V.nv) cam += vNovo();
+    $('#overlay').innerHTML = cam;
     updateTitle();
+    paintSave();
   }
 
   function vLogin() {
-    return `<div class="login"><div class="art"><div style="display:flex;gap:12px;align-items:center;position:relative;z-index:1"><span class="av logo" style="width:44px;height:44px;font-size:18px">✂</span><b class="serif" style="font-size:20px">Painel do barbeiro</b></div><h2>Sua barbearia <em>inteira</em> numa tela só.</h2><span style="color:var(--rail-muted);font-size:13px;position:relative;z-index:1">Agenda, clientes e dinheiro, tudo no mesmo lugar.</span></div>
-    <form id="loginForm" autocomplete="on"><div><span class="eyebrow">Painel do barbeiro</span><h1 class="serif" style="font-size:34px">Entrar</h1></div>
-    <div class="field"><label for="l-user">Usuário</label><input class="input" id="l-user" autocomplete="username" autocapitalize="none" required value="${esc(V.loginUser || '')}"></div>
-    <div class="field"><label for="l-pass">Senha</label><input class="input" id="l-pass" type="password" autocomplete="current-password" required></div>
-    ${V.loginErr ? `<div class="err" role="alert">${esc(V.loginErr)}</div>` : ''}
-    <button class="btn pri" type="submit" style="padding:14px">Entrar no painel</button>
-    <a class="btn ghost" href="/" style="text-decoration:none">← Voltar para o site</a></form></div>`;
+    return `<div class="login">
+      <div class="login-arte"><div class="listra" aria-hidden="true"></div>
+        <div class="p-logo"><span class="av logo" style="width:42px;height:42px;font-size:17px">${ic('scissors', 20)}</span><div><b>Painel do barbeiro</b><small>Área só do barbeiro</small></div></div>
+        <div><h2>Sua barbearia organizada num só lugar.</h2><p>Agenda do dia, clientes, financeiro e configurações. Tudo no computador ou no celular.</p></div>
+        <div class="login-cards"><span>${ic('cal', 17)}Agenda em tempo real</span><span>${ic('users', 17)}Clientes fiéis</span><span>${ic('wallet', 17)}Caixa do mês</span></div>
+      </div>
+      <div class="login-form"><form id="loginForm" novalidate autocomplete="on">
+        <h3>Entrar no painel</h3><p class="sub">Use o usuário e a senha do barbeiro.</p>
+        <div class="campo"><label for="l-user">Usuário</label><div class="entrada" id="e-luser">${ic('user', 18)}<input id="l-user" autocomplete="username" autocapitalize="none" value="${esc(V.loginUser)}"></div></div>
+        <div class="campo"><label for="l-pass">Senha</label><div class="entrada" id="e-lpass">${ic('lock', 18)}<input id="l-pass" type="password" autocomplete="current-password"><button type="button" class="olho" data-a="olho" aria-label="Mostrar senha">${ic('eye', 18)}</button></div></div>
+        <button type="submit" class="btn pri bloco">${ic('arrow', 18)}Entrar</button>
+        <a class="link" href="/">${ic('left', 16)}Voltar para o site</a>
+      </form></div></div>`;
   }
 
-  function bell() {
+  function menuItens() {
+    const aguard = S.appts.filter((x) => x.date === TODAY && x.status === 'agendado').length;
+    const it = (k, i, r) => `<button type="button" class="p-item ${V.sec === k ? 'on' : ''}" data-a="sec" data-s="${k}" ${V.sec === k ? 'aria-current="page"' : ''}>${ic(i, 20)}<span>${r}</span>${k === 'agenda' && aguard ? `<span class="cont">${aguard}</span>` : ''}</button>`;
+    return `<div class="listra" aria-hidden="true"></div><div class="p-logo">${logo(42)}<div><b>${esc(S.settings.shopName)}</b><small>Painel do barbeiro</small></div></div>
+      <div class="p-sec">Principal</div>${it('inicio', 'grid', 'Início')}${it('agenda', 'cal', 'Agenda')}${it('cli', 'users', 'Clientes')}
+      <div class="p-sec">Gestão</div>${it('fin', 'wallet', 'Financeiro')}${it('cfg', 'cog', 'Configurações')}
+      <div class="p-sec">Conta</div>${it('perfil', 'user', 'Meu perfil')}
+      <div class="rodape-menu"><a class="p-item" href="/" target="_blank" rel="noopener">${ic('phone', 20)}<span>Ver site do cliente</span></a><button type="button" class="p-item" data-a="logout">${ic('out', 20)}<span>Sair</span></button></div>`;
+  }
+  function adminApp(anim) {
+    const view = { inicio: vInicio, agenda: vAgenda, cli: vCli, fin: vFin, cfg: vCfg, perfil: vPerfil }[V.sec]();
     const n = unread();
-    const list = S.notifications;
-    const tr = (w) => IC.trash.replace('<svg', `<svg width="${w}" height="${w}"`);
-    return `<div class="bellwrap"><button class="bellbtn" data-a="bell" aria-label="Avisos${n ? `, ${n} novos` : ''}" aria-expanded="${V.bellOpen}">${IC.bell}${n ? `<span class="cnt">${n > 9 ? '9+' : n}</span>` : ''}</button>
-     ${V.bellOpen ? `<div class="bellpanel" role="dialog" aria-label="Avisos"><div class="bh"><b>Avisos</b><div style="display:flex;gap:2px"><button class="btn sm ghost" data-a="sound-toggle">${Som.enabled() ? IC.sound.replace('<svg', '<svg width="16" height="16"') + ' Som ligado' : IC.mute.replace('<svg', '<svg width="16" height="16"') + ' Som desligado'}</button>${list.length ? `<button class="btn sm ghost badb" data-a="n-clear-ask" title="Apagar todos os avisos">${tr(16)} Limpar</button>` : ''}</div></div>
-      ${V.nClearAsk ? `<div class="confirm-inline" style="margin:8px"><span style="flex:1">Apagar todos os avisos? Os agendamentos continuam.</span><button class="btn sm badb" data-a="n-clear">Apagar</button><button class="btn sm" data-a="n-clear-no">Não</button></div>` : ''}
-      <div class="bl">${list.length ? list.map((x) => `<div class="nrow"><button class="nitem ${x.read ? '' : 'unread'}" data-a="dr-ap" data-id="${x.appointmentId}"><span class="dot"></span><span class="ic ${x.type}">${x.type === 'novo' ? IC.cal : IC.x}</span><span class="t"><b>${esc(x.clientName)}</b> ${x.type === 'novo' ? 'agendou' : 'cancelou'} ${esc(x.service.toLowerCase())}<small>${cap(longDate(x.date))} às ${x.time} · ${timeAgo(x.at)}</small></span></button><button class="ndel" data-a="n-del" data-id="${x.id}" aria-label="Apagar este aviso" title="Apagar aviso">${tr(16)}</button></div>`).join('') : '<div class="empty" style="border:0">Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</div>'}</div></div>` : ''}</div>`;
+    const needSound = Som.enabled() && !Som.ready();
+    return `<div class="p-app">
+      <nav class="p-menu" aria-label="Menu do painel"><div class="p-menu-in">${menuItens()}</div></nav>
+      <div class="p-cont">
+        <header class="p-topo">
+          <button type="button" class="btn-icone menu-btn" data-a="menu" aria-label="Abrir menu">${ic('menu', 20)}</button>
+          <h1>${TITULOS[V.sec]}</h1>
+          <div class="direita">
+            <span class="ao-vivo ${V.live ? 'on' : ''}" id="aoVivo" title="Avisos em tempo real"><i></i>${V.live ? 'Ao vivo' : 'Conectando…'}</span>
+            <button type="button" class="btn-icone" id="sinoBtn" data-a="sino" aria-label="Avisos${n ? `, ${n} novos` : ''}" aria-expanded="${V.sino}">${ic('bell', 20)}${n ? `<span class="bolinha">${n > 9 ? '9+' : n}</span>` : ''}</button>
+            <button type="button" class="p-user" data-a="sec" data-s="perfil"><div><b>${esc(S.barber.name)}</b><small>Barbeiro</small></div><span class="av" style="width:34px;height:34px;font-size:13px">${esc(initials(S.barber.name))}</span></button>
+          </div>
+        </header>
+        <main class="p-main ${anim ? 'vista' : ''}">
+          ${needSound ? `<div class="faixa" data-t="info"><span class="f-ico">${ic('sound', 18)}</span><div><strong>Ligue o som dos avisos</strong><p>Toque em "Ativar som" para ouvir a campainha quando um cliente marcar pelo site.</p></div><button type="button" class="btn p" data-a="som-on">Ativar som</button></div>` : ''}
+          ${view}
+        </main>
+      </div></div>`;
+  }
+  function vGaveta() {
+    return `<div class="overlay" data-a="menu"></div><nav class="gaveta" aria-label="Menu do painel"><div class="p-menu-in">${menuItens()}</div></nav>`;
   }
   function timeAgo(at) {
     const m = Math.round((Date.now() - new Date(at).getTime()) / 60000);
@@ -138,564 +188,723 @@
     const h = Math.round(m / 60); if (h < 24) return `há ${h} h`;
     const d = Math.round(h / 24); return `há ${d} dia${d > 1 ? 's' : ''}`;
   }
-
-  function adminApp() {
-    const todayN = S.appts.filter((x) => x.date === TODAY && x.status === 'agendado').length;
-    const secs = [['inicio', 'Início', IC.home], ['agenda', 'Agenda', IC.cal], ['fin', 'Financeiro', IC.chart], ['cli', 'Clientes', IC.users], ['cfg', 'Configurações', IC.cog], ['perfil', 'Meu perfil', IC.user]];
-    const view = { inicio: vInicio, agenda: vAgenda, fin: vFin, cli: vCli, cfg: vCfg, perfil: vAPerfil }[V.sec]();
-    const needSound = Som.enabled() && !Som.ready();
-    return `<div class="app"><aside class="rail"><div class="brand">${logo(42)}<div><b>${esc(S.settings.shopName)}</b><small>Painel do barbeiro</small></div></div>
-    ${secs.map(([k, l, i]) => `<button class="nv ${V.sec === k ? 'on' : ''}" data-a="sec" data-s="${k}" ${V.sec === k ? 'aria-current="page"' : ''}>${i}${l}${k === 'agenda' && todayN ? `<span class="badge">${todayN}</span>` : ''}</button>`).join('')}
-    <div class="foot"><a class="sitebtn" href="/" target="_blank" rel="noopener" style="text-decoration:none">${IC.phone.replace('<svg', '<svg width="17" height="17"')} Ver site do cliente</a>
-    <div class="who"><span class="av" style="width:34px;height:34px;font-size:13px;background:var(--acc-d);color:var(--on-acc-d)">${esc(initials(S.barber.name))}</span><div style="flex:1;min-width:0"><b style="font-size:13.5px">${esc(S.barber.name)}</b><small>${esc(S.barber.user)}</small></div><button class="nv" style="padding:6px" data-a="logout" aria-label="Sair">${IC.out}</button></div></div></aside>
-    <section class="main"><div class="topline"><div class="tbrand">${logo(34)}<b>${esc(S.settings.shopName)}</b></div><span class="live ${V.live ? 'on' : ''}" id="live"><i></i>${V.live ? 'Ao vivo' : 'Conectando…'}</span>${bell()}</div>
-    ${needSound ? `<div class="soundbar"><span>${IC.sound.replace('<svg', '<svg width="18" height="18" style="vertical-align:-4px;margin-right:6px"')}Clique em "Ativar som" para ouvir a campainha quando chegar agendamento novo.</span><button class="btn sm" data-a="sound-on">Ativar som</button></div>` : ''}
-    ${view}</section></div>
-    ${['inicio', 'agenda'].includes(V.sec) && !V.bellOpen ? `<button class="fab" data-a="dr-novo" aria-label="Novo agendamento">${IC.plus}</button>` : ''}
-    <nav class="mnav" aria-label="Menu">${[['inicio', 'Início', IC.home], ['agenda', 'Agenda', IC.cal], ['fin', 'Financeiro', IC.chart], ['cli', 'Clientes', IC.users]].map(([k, l, i]) => `<button class="${V.sec === k ? 'on' : ''}" data-a="sec" data-s="${k}" ${V.sec === k ? 'aria-current="page"' : ''}>${i}${l}${k === 'agenda' && todayN ? `<span class="dotn">${todayN}</span>` : ''}</button>`).join('')}
-     <button class="${['cfg', 'perfil'].includes(V.sec) ? 'on' : ''}" data-a="more">${IC.menu}Mais</button></nav>`;
+  function rAviso(n, del) {
+    const novo = n.type === 'novo';
+    const item = `<button type="button" class="aviso-i ${n.read ? '' : 'novo'}" data-k="${novo ? 'verde' : 'vermelho'}" data-a="ap" data-id="${n.appointmentId}"><span class="ico-k p">${ic(novo ? 'cal' : 'x', 17)}</span><div style="min-width:0"><b>${novo ? 'Novo agendamento' : 'Horário cancelado'}</b><small>${esc(n.clientName)} · ${diaTxt(n.date)} às ${n.time}</small></div><time>${timeAgo(n.at)}</time></button>`;
+    return del ? `<div class="aviso-l">${item}<button type="button" class="aviso-del" data-a="n-del" data-id="${n.id}" aria-label="Apagar este aviso" title="Apagar aviso">${ic('trash', 16)}</button></div>` : item;
   }
-  function moreSheet() {
-    const it = (a, s, ic, l, sub) => `<button class="mitem" data-a="${a}" ${s ? `data-s="${s}"` : ''}><span class="ic">${ic}</span><span class="t"><b>${l}</b><small>${sub}</small></span></button>`;
-    return `<div class="dr-bg" data-a="more-close"></div><div class="msheet" role="dialog" aria-modal="true" aria-label="Mais opções"><span class="grab"></span>
-     <div class="mwho"><span class="av" style="width:40px;height:40px;font-size:14px;background:var(--acc);color:var(--on-acc)">${esc(initials(S.barber.name))}</span><div><b>${esc(S.barber.name)}</b><small class="muted" style="display:block">${esc(S.barber.user)}</small></div></div>
-     ${it('sec', 'cfg', IC.cog, 'Configurações', 'Nome, cores, horários, serviços e preços')}
-     ${it('sec', 'perfil', IC.user, 'Meu perfil', 'Seus dados e senha')}
-     <a class="mitem" href="/" target="_blank" rel="noopener"><span class="ic">${IC.phone}</span><span class="t"><b>Ver site do cliente</b><small>Abre o site como o cliente vê</small></span></a>
-     ${it('logout', '', IC.out, 'Sair do painel', 'Pede usuário e senha de novo')}</div>`;
-  }
-
-  function greet() { const h = Math.floor(nowMin() / 60); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; }
-  function apc(x) {
-    const c = cById(x.clientId);
-    return `<div class="apc" role="button" tabindex="0" data-a="dr-ap" data-id="${x.id}"><span class="apc-av">${avatar(c, 38)}</span><div class="t"><b>${esc(c.name)}</b><small>${esc(x.service)}</small></div>${x.status === 'agendado' ? `<div class="q"><button class="y" data-a="st" data-id="${x.id}" data-s="realizado" aria-label="Marcar como atendido" title="Atendido">${IC.check}</button><button class="n" data-a="st" data-id="${x.id}" data-s="faltou" aria-label="Marcar que não veio" title="Não veio">${IC.x}</button></div>` : `<span class="st st-${x.status}">${STATUS[x.status]}</span>`}</div>`;
+  function vSino() {
+    const l = S.notifications;
+    return `<div class="overlay limpo" data-a="sino"></div><div class="sino-p" role="dialog" aria-label="Avisos">
+      <div class="cartao-topo"><h3>Avisos</h3><div class="bts"><button type="button" class="link" data-a="som-toggle">${ic(Som.enabled() ? 'sound' : 'mute', 16)}${Som.enabled() ? 'Som ligado' : 'Som desligado'}</button>${l.length ? `<button type="button" class="link" data-a="n-clear-ask">${ic('trash', 15)}Limpar</button>` : ''}</div></div>
+      ${V.nClearAsk ? `<div class="faixa" data-t="erro"><span class="f-ico">${ic('trash', 16)}</span><div><strong>Apagar todos os avisos?</strong><p>Os agendamentos continuam na agenda.</p><div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn p verm" data-a="n-clear">Apagar</button><button type="button" class="btn p" data-a="n-clear-no">Voltar</button></div></div></div>` : ''}
+      <div class="avisos-l">${l.length ? l.map((x) => rAviso(x, true)).join('') : '<div class="vazio" style="padding:18px 8px"><p>Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</p></div>'}</div></div>`;
   }
 
   // ===== Início (sem valores em dinheiro: a tela pode ficar à vista dos clientes) =====
+  function greet() { const h = Math.floor(nowMin() / 60); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; }
   function vInicio() {
-    const today = sortAp(live().filter((x) => x.date === TODAY)); const done = today.filter((x) => x.status === 'realizado'); const pend = today.filter((x) => x.status === 'agendado');
-    const ms = TODAY.slice(0, 8) + '01'; const novos = S.clients.filter((c) => c.since >= ms).length;
-    const free = freeCount(TODAY); const nx = pend.find((x) => A.toMin(x.time) + x.dur > nowMin()) || pend[0];
-    const dw = (NOW.getDay() + 6) % 7; const ws = A.addDays(NOW, -dw); const wk = [];
-    for (let i = 0; i < 7; i++) { const ds = A.iso(A.addDays(ws, i)); wk.push([ds, live().filter((x) => x.date === ds && x.status !== 'faltou').length]); }
-    const wmax = Math.max(...wk.map((w) => w[1]), 1);
-    const cs = clientStats();
-    const gone = cs.filter((x) => x.last && !x.next).map((x) => ({ ...x, days: Math.round((NOW - A.parse(x.last)) / 864e5) })).filter((x) => x.days >= 25).sort((p, q) => q.days - p.days).slice(0, 4);
-    const tom = sortAp(S.appts.filter((x) => x.date === TOMORROW && x.status === 'agendado'));
-    const st = S.settings; const daysLeft = Math.round((A.parse(st.bookTo) - NOW) / 864e5);
-    let nowMarked = false;
-    return `<div class="ph"><div><span class="eyebrow">${cap(longDate(TODAY))}</span><h1>${greet()}, ${esc(S.barber.name.split(' ')[0])}.</h1><p>${pend.length ? `Você ainda tem ${pend.length} cliente${pend.length > 1 ? 's' : ''} para atender hoje.` : 'Nenhum cliente pendente hoje.'}</p></div><button class="btn pri" data-a="dr-novo">${IC.plus} Novo agendamento</button></div>
-    ${daysLeft <= 10 ? `<div class="card" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;border-color:var(--warn);background:var(--warn-bg);color:var(--warn)"><b style="flex:1;min-width:200px">${daysLeft < 0 ? 'A agenda online está fechada. Nenhum cliente consegue marcar horário.' : `A agenda online fecha em ${shortDate(st.bookTo)}. Depois disso ninguém consegue marcar.`}</b><button class="btn sm" data-a="sec" data-s="cfg">Abrir mais datas</button></div>` : ''}
-    <div class="stats">
-     <div class="stat dark"><span class="ic">${IC.cal}</span><span class="eyebrow">Na agenda hoje</span><span class="v">${today.length}</span><span class="s">${pend.length} ainda vão chegar</span></div>
-     <div class="stat"><span class="ic">${IC.check}</span><span class="eyebrow">Atendidos hoje</span><span class="v">${done.length}<span class="muted" style="font-size:16px"> / ${today.length}</span></span><span class="s">${today.filter((x) => x.status === 'faltou').length} não vieram</span></div>
-     <div class="stat"><span class="ic">${IC.clock}</span><span class="eyebrow">Horários livres hoje</span><span class="v">${free}</span><span class="s">blocos de 30 min</span></div>
-     <div class="stat"><span class="ic">${IC.users}</span><span class="eyebrow">Clientes novos no mês</span><span class="v">${novos}</span><span class="s">primeira vez na barbearia</span></div>
+    const st = S.settings; const nm = nowMin();
+    const hoje = sortAp(live().filter((x) => x.date === TODAY));
+    const aguard = hoje.filter((x) => x.status === 'agendado');
+    const at = hoje.filter((x) => x.status === 'realizado').length;
+    const prox = aguard.find((x) => A.toMin(x.time) + x.dur > nm);
+    const depois = !prox && sortAp(S.appts.filter((x) => x.date > TODAY && x.status === 'agendado'))[0];
+    const ms = TODAY.slice(0, 8) + '01';
+    const faltasMes = S.appts.filter((x) => x.status === 'faltou' && x.date >= ms && x.date <= TODAY).length;
+    const aberto = daySlots(TODAY).length > 0; const hh = A.dayHours(st, NOW.getDay());
+    const daysLeft = Math.round((A.parse(st.bookTo) - NOW) / 864e5);
+    const kpi = (k, i, n, t, sub, alvo) => `<button type="button" class="kpi" data-k="${k}" data-a="ir-ag" data-v="${alvo}"><div class="kpi-topo"><span class="ico-k">${ic(i, 22)}</span>${ic('right', 18)}</div><b>${n}</b><p>${t}</p><span class="sub">${sub}</span></button>`;
+    let proxCard = '';
+    if (prox) {
+      const c = cById(prox.clientId); const em = A.toMin(prox.time) - nm;
+      proxCard = `<button type="button" class="prox" data-a="ap" data-id="${prox.id}"><small>Próximo cliente</small><div class="linha"><span class="av">${esc(initials(c.name))}</span><div><b>${esc(c.name)}</b><span>${prox.time} · ${esc(prox.service)}</span></div></div><span class="em">${ic('clock', 14)}${em > 0 ? `Começa em ${em >= 60 ? `${Math.floor(em / 60)}h${em % 60 ? String(em % 60).padStart(2, '0') : ''}` : `${em} min`}` : 'Em atendimento'}</span></button>`;
+    } else if (depois) {
+      const c = cById(depois.clientId); const dd = Math.round((A.parse(depois.date) - NOW) / 864e5);
+      proxCard = `<button type="button" class="prox livre" data-a="ap" data-id="${depois.id}"><small>Próximo cliente</small><div class="linha"><span class="av">${esc(initials(c.name))}</span><div><b>${esc(c.name)}</b><span>${cap(diaTxt(depois.date))} às ${depois.time}</span></div></div><span class="em">${ic('cal', 14)}${dd === 1 ? 'Amanhã' : `Daqui a ${dd} dias`}</span></button>`;
+    }
+    let agoraFeito = false;
+    const tl = hoje.map((x) => {
+      const c = cById(x.clientId); const k = x.status === 'realizado' ? 'verde' : x.status === 'faltou' ? 'vermelho' : x === prox ? 'accent' : 'laranja';
+      let pre = '';
+      if (!agoraFeito && A.toMin(x.time) >= nm) { agoraFeito = true; pre = '<div class="agora-linha"><span>Agora</span><i></i><hr></div>'; }
+      const pil = x.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : x.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>' : '';
+      return `${pre}<div class="tl-item ${x === prox ? 'agora' : ''} ${x.status !== 'agendado' ? 'feito' : ''}" data-k="${k}"><div class="tl-h">${x.time}<small>${endOf(x.time, x.dur)}</small></div><div class="tl-linha"><i></i></div>
+        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b><small>${esc(x.service)}</small></div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
+    }).join('') + (hoje.length && !agoraFeito && aberto && nm < A.toMin(hh.close) ? '<div class="agora-linha"><span>Agora</span><i></i><hr></div>' : '');
+    const resumo = hoje.length ? `Hoje você tem <b>${hoje.length} atendimento${hoje.length > 1 ? 's' : ''}</b>. ${aguard.length ? `Ainda falta${aguard.length > 1 ? 'm' : ''} <b>${aguard.length}</b>.` : 'Todos já foram atendidos.'}`
+      : aberto ? 'Ninguém marcado para hoje ainda. Os horários livres já aparecem no site.' : `Hoje a barbearia está fechada${blockedOf(TODAY) ? ` (${esc(blockedOf(TODAY).why || 'folga')})` : ''}. Bom descanso!`;
+    return `${daysLeft <= 10 ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${daysLeft < 0 ? 'A agenda online está fechada' : `A agenda online fecha em ${shortDate(st.bookTo)}`}</strong><p>${daysLeft < 0 ? 'Nenhum cliente consegue marcar pelo site agora.' : 'Depois dessa data ninguém consegue marcar pelo site.'}</p></div><button type="button" class="btn p" data-a="ir-cfg">Abrir mais datas</button></div>` : ''}
+    <section class="hero"><div><small>${cap(longDate(TODAY))}</small><h2>${greet()}, ${esc(first(S.barber.name))}.</h2><p>${resumo}</p>
+      <div class="acoes-hero"><button type="button" class="btn-claro" data-a="novo">${ic('plus', 18)}Novo agendamento</button><button type="button" class="btn-vidro" data-a="ir-ag" data-v="hoje">${ic('cal', 18)}Ver agenda</button></div></div>${proxCard}</section>
+    <div class="kpis">
+      ${kpi('neutro', 'cal', hoje.length, 'Agendados hoje', aberto ? `Entre ${hh.open} e ${hh.close}` : 'Hoje está fechado', 'hoje')}
+      ${kpi('neutro', 'clock', aguard.length, 'Aguardando', prox ? `Próximo às ${prox.time}` : 'Ninguém na fila', 'hoje')}
+      ${kpi('neutro', 'userok', at, 'Atendidos hoje', 'Marcados como atendido', 'realizados')}
+      ${kpi('vermelho', 'userx', faltasMes, 'Faltas no mês', 'Clientes que não vieram', 'faltas')}
     </div>
-    <div class="home-grid"><div style="display:flex;flex-direction:column;gap:18px;min-width:0">
-     ${nx ? (() => { const c = cById(nx.clientId); return `<div class="spot"><div class="sptm">${nx.time}</div><div><span class="eyebrow">Próximo cliente</span><h3>${esc(c.name)}</h3><div style="opacity:.85">${esc(nx.service)} · ${nx.dur} min · ${maskPhone(c.phone)}</div></div><div class="acts"><button class="btn solid" data-a="st" data-id="${nx.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn" data-a="st" data-id="${nx.id}" data-s="faltou">Não veio</button></div></div>`; })() : '<div class="card"><b>Tudo em dia.</b><div class="muted">Sem clientes pendentes. Bom momento para um café.</div></div>'}
-     <div class="card"><div class="card-h"><h3>Agenda de hoje</h3><button class="btn sm ghost" data-a="go-agenda">Ver agenda completa →</button></div>
-      ${today.length ? `<div class="timeline">${today.map((x) => { let cls = x.status; if (!nowMarked && x === nx) { cls += ' now'; nowMarked = true; } return `<div class="tl ${cls}"><div class="h">${x.time}<small>${x.dur} min</small></div><div class="rail-l"><i></i></div>${apc(x)}</div>`; }).join('')}</div>` : '<div class="empty">Nenhum agendamento hoje.</div>'}</div>
-    </div><div class="side-stack">
-     <div class="card"><div class="card-h"><h3>Movimento da semana</h3><span class="muted num" style="font-weight:700">${wk.reduce((s, w) => s + w[1], 0)} clientes</span></div><div class="mini-bars">${wk.map(([ds, v]) => `<div class="${ds === TODAY ? 'today' : ''}" title="${shortDate(ds)}: ${v} clientes"><i style="height:${Math.max(3, (v / wmax) * 100)}%"></i><small>${DOW[A.parse(ds).getDay()][0]}</small></div>`).join('')}</div></div>
-     <div class="card"><div class="card-h"><h3>Amanhã</h3><span class="muted" style="font-weight:700">${tom.length} agend.</span></div>${tom.length ? `<div class="plist">${tom.slice(0, 4).map((x) => { const c = cById(x.clientId); return `<button class="pitem" data-a="dr-ap" data-id="${x.id}"><b class="num" style="width:44px">${x.time}</b><span class="t"><b>${esc(c.name)}</b><small>${esc(x.service)}</small></span></button>`; }).join('')}</div>${tom.length > 4 ? `<div class="muted" style="font-size:12.5px;padding:6px 9px">e mais ${tom.length - 4}</div>` : ''}` : `<div class="muted">${!daySlots(TOMORROW).length ? 'Amanhã a barbearia está fechada.' : 'Nenhum agendamento ainda.'}</div>`}</div>
-     <div class="card"><div class="card-h"><h3>Sumidos</h3><button class="btn sm ghost" data-a="go-sumidos">Ver todos →</button></div><div class="muted" style="font-size:12.5px;margin:-8px 0 8px">Clientes sem voltar há mais de 25 dias. Bom para mandar um oi no WhatsApp.</div>
-      <div class="plist">${gone.map((x) => `<button class="pitem" data-a="dr-cli" data-id="${x.c.id}">${avatar(x.c, 34)}<span class="t"><b>${esc(x.c.name)}</b><small>${x.visits} visitas · última em ${shortDate(x.last)}</small></span><span class="tag red">${x.days} dias</span></button>`).join('') || '<div class="muted">Ninguém sumido. Ótimo sinal.</div>'}</div></div>
-    </div></div>`;
+    <div class="duas-col">
+      <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('list', 17)}</span>Agenda de hoje</h3><button type="button" class="link" data-a="ir-ag" data-v="hoje">Ver tudo${ic('right', 16)}</button></div>
+        <div class="tl">${tl || `<div class="vazio"><span class="ico-k" data-k="${aberto ? 'verde' : 'cinza'}">${ic(aberto ? 'cal' : 'coffee', 26)}</span><h4>${aberto ? 'Nenhum atendimento hoje' : 'Hoje é dia de folga'}</h4><p>${aberto ? 'Quando alguém marcar, aparece aqui na hora.' : depois ? `O próximo cliente é ${esc(first(cById(depois.clientId).name))}, ${diaTxt(depois.date)} às ${depois.time}.` : 'Nenhum cliente marcado nos próximos dias.'}</p></div>`}</div></section>
+      <div class="col">
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('spark', 17)}</span>Ações rápidas</h3></div>
+          <div class="acoes-rapidas">
+            <button type="button" class="acao-rapida" data-a="novo"><span class="ico-k">${ic('plus')}</span><span>Novo agendamento<small>Encaixe ou cliente de balcão</small></span></button>
+            <button type="button" class="acao-rapida" data-a="ir-folga"><span class="ico-k">${ic('ban')}</span><span>Bloquear um dia<small>Folga ou feriado</small></span></button>
+            <button type="button" class="acao-rapida" data-a="ir-desp"><span class="ico-k">${ic('receipt')}</span><span>Lançar despesa<small>Produtos, contas</small></span></button>
+            <button type="button" class="acao-rapida" data-a="ir-sumidos"><span class="ico-k">${ic('users')}</span><span>Clientes sumidos<small>Chame de volta</small></span></button>
+          </div></section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('bell', 17)}</span>Avisos recentes</h3>${S.notifications.length > 4 ? '<button type="button" class="link" data-a="sino">Ver todos</button>' : ''}</div>
+          <div class="avisos-l">${S.notifications.slice(0, 4).map((x) => rAviso(x)).join('') || '<div class="muted" style="font-size:13.5px">Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</div>'}</div></section>
+      </div>
+    </div>`;
   }
 
   // ===== Agenda =====
-  function acard(x) {
-    const c = cById(x.clientId);
-    return `<div class="acard ${x.status}" role="button" tabindex="0" data-a="dr-ap" data-id="${x.id}"><div class="top1"><div class="hh">${x.time}<small>até ${A.fromMin(A.toMin(x.time) + x.dur)}</small></div><span class="st st-${x.status}">${STATUS[x.status]}</span></div><div class="cl">${avatar(c, 36)}<div style="min-width:0"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></div></div><div class="ft"><span>${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${x.status === 'agendado' ? `<div class="acts2"><button class="btn sm okb" data-a="st" data-id="${x.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn sm badb" data-a="st" data-id="${x.id}" data-s="faltou">${IC.x} Não veio</button></div>` : ''}</div>`;
+  function listaAgenda(ab) {
+    if (ab === 'hoje') return sortAp(S.appts.filter((x) => x.date === TODAY && x.status === 'agendado'));
+    if (ab === 'amanha') return sortAp(S.appts.filter((x) => x.date === TOMORROW && x.status === 'agendado'));
+    if (ab === 'proximos') return sortAp(S.appts.filter((x) => x.date > TOMORROW && x.status === 'agendado'));
+    if (ab === 'realizados') return sortAp(S.appts.filter((x) => x.status === 'realizado')).reverse();
+    if (ab === 'faltas') return sortAp(S.appts.filter((x) => x.status === 'faltou')).reverse();
+    return sortAp(live().filter((x) => x.date === V.agDia));
   }
   function vAgenda() {
-    const lists = {
-      hoje: ['Hoje', () => sortAp(S.appts.filter((x) => x.date === TODAY && x.status === 'agendado'))],
-      amanha: ['Amanhã', () => sortAp(S.appts.filter((x) => x.date === TOMORROW && x.status === 'agendado'))],
-      proximos: ['Próximos dias', () => sortAp(S.appts.filter((x) => x.date > TOMORROW && x.status === 'agendado'))],
-      realizados: ['Realizados', () => sortAp(S.appts.filter((x) => x.status === 'realizado')).reverse()],
-      faltou: ['Não compareceu', () => sortAp(S.appts.filter((x) => x.status === 'faltou')).reverse()],
-    };
-    let body = '';
-    if (V.agView === 'lista') {
-      const l = lists[V.agTab][1](); const pg = pageOf(l, 'ag'); const groups = {};
-      pg.items.forEach((x) => { (groups[x.date] = groups[x.date] || []).push(x); });
-      body = `<div class="chips">${Object.entries(lists).map(([k, [n, f]]) => `<button class="chipb ${V.agTab === k ? 'on' : ''}" data-a="ag-tab" data-t="${k}">${n}<span class="n">${f().length}</span></button>`).join('')}</div>
-      ${l.length ? Object.entries(groups).map(([ds, xs]) => `<div class="daygroup"><h4>${ds === TODAY ? 'Hoje · ' : ds === TOMORROW ? 'Amanhã · ' : ''}${cap(longDate(ds))}</h4><div class="agrid">${xs.map(acard).join('')}</div></div>`).join('') : `<div class="empty">${V.agTab === 'amanha' && !daySlots(TOMORROW).length ? 'Amanhã a barbearia está fechada.' : V.agTab === 'hoje' ? 'Ninguém esperando atendimento hoje.' : 'Nenhum agendamento aqui.'}</div>`}${pager(pg, 'ag')}`;
-    } else if (V.agView === 'semana') {
-      if (!V.weekStart) V.weekStart = A.iso(A.addDays(NOW, -NOW.getDay()));
-      const ws = A.parse(V.weekStart);
-      body = `<div style="display:flex;gap:10px;align-items:center"><button class="btn sm" data-a="wk" data-n="-7" aria-label="Semana anterior">‹</button><b>${shortDate(V.weekStart)} a ${shortDate(A.iso(A.addDays(ws, 6)))}</b><button class="btn sm" data-a="wk" data-n="7" aria-label="Próxima semana">›</button><button class="btn sm ghost" data-a="wk" data-n="0">Esta semana</button></div>
-      <div class="weekv">${[0, 1, 2, 3, 4, 5, 6].map((i) => {
-        const ds = A.iso(A.addDays(ws, i)); const d = A.parse(ds); const l = sortAp(live().filter((x) => x.date === ds)); const closed = !daySlots(ds).length;
-        return `<div class="wcol ${ds === TODAY ? 'today' : ''} ${closed ? 'closed' : ''}"><div class="wh"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b></div>${l.map((x) => { const c = cById(x.clientId); return `<button class="wap ${x.status}" data-a="dr-ap" data-id="${x.id}"><b>${x.time} · ${esc(c.name.split(' ')[0])}</b><span>${esc(x.service)}</span></button>`; }).join('') || `<div class="muted" style="font-size:12.5px;padding:0 4px">${closed ? (blockedOf(ds) ? esc(blockedOf(ds).why || 'Bloqueado') : 'Fechado') : 'Livre'}</div>`}</div>`;
-      }).join('')}</div>`;
-    } else {
-      if (!V.calMonth) V.calMonth = A.iso(new Date(NOW.getFullYear(), NOW.getMonth(), 1));
-      const m = A.parse(V.calMonth); const first = new Date(m.getFullYear(), m.getMonth(), 1); const start = A.addDays(first, -first.getDay());
-      let cells = DOW.map((d) => `<div class="dow">${d}</div>`).join('');
-      for (let i = 0; i < 42; i++) {
-        const d = A.addDays(start, i); if (i >= 35 && d.getMonth() !== m.getMonth()) break;
-        const ds = A.iso(d); const l = live().filter((x) => x.date === ds); const tot = daySlots(ds).length; const used = busy(ds).size;
-        cells += `<button class="mc ${d.getMonth() !== m.getMonth() ? 'out' : ''} ${ds === TODAY ? 'today' : ''} ${ds === V.calDay ? 'sel' : ''}" data-a="cal-day" data-d="${ds}"><span class="d">${d.getDate()}</span><span class="cnt">${tot ? (l.length ? `${l.length} agend.` : 'livre') : blockedOf(ds) ? 'bloqueado' : 'fechado'}</span>${tot ? `<span class="load"><i style="width:${Math.min(100, (used / tot) * 100)}%"></i></span>` : ''}</button>`;
-      }
-      const dl = sortAp(live().filter((x) => x.date === V.calDay));
-      body = `<div class="card"><div class="card-h"><button class="btn sm" data-a="cal-m" data-n="-1" aria-label="Mês anterior">‹</button><h3 style="text-transform:capitalize" class="serif">${MESES[m.getMonth()]} ${m.getFullYear()}</h3><button class="btn sm" data-a="cal-m" data-n="1" aria-label="Próximo mês">›</button></div><div class="monthv">${cells}</div><div class="muted" style="font-size:12px;margin-top:10px">A barrinha mostra quanto do dia já está ocupado.</div></div>
-      <div class="daygroup"><h4>${cap(longDate(V.calDay))}</h4>${dl.length ? `<div class="agrid">${dl.map(acard).join('')}</div>` : '<div class="empty">Nenhum agendamento neste dia.</div>'}</div>`;
+    const abas = [['hoje', 'Hoje', 'azul'], ['amanha', 'Amanhã', 'roxo'], ['proximos', 'Próximos', 'ciano']];
+    const filtros = [['realizados', 'Realizados', 'verde'], ['faltas', 'Não compareceu', 'vermelho']];
+    const chip = ([k, r, c]) => `<button type="button" class="chip ${V.vista === 'lista' && V.ab === k ? 'on' : ''}" data-k="${c}" data-a="ag-ab" data-v="${k}">${r}<b>${listaAgenda(k).length}</b></button>`;
+    let corpo;
+    if (V.vista === 'mes') corpo = vMes();
+    else {
+      const lista = listaAgenda(V.ab); const { itens, html } = pagina(lista, 'ag');
+      const titulo = V.ab === 'dia' ? `<div class="faixa" data-t="info"><span class="f-ico">${ic('cal', 18)}</span><div><strong>${cap(longDate(V.agDia))}</strong><p>${lista.length ? `${lista.length} atendimento${lista.length > 1 ? 's' : ''} neste dia.` : !daySlots(V.agDia).length ? 'A barbearia está fechada neste dia.' : 'Nenhum agendamento neste dia ainda.'}</p></div><button type="button" class="btn p" data-a="vista" data-v="mes">${ic('left', 15)}Voltar ao mês</button></div>` : '';
+      let ultimo = null;
+      const cards = itens.map((x) => { let lab = ''; if (!['hoje', 'amanha', 'dia'].includes(V.ab) && x.date !== ultimo) { ultimo = x.date; lab = `<div class="ag dia-label">${ic('cal', 16)}${cap(longDate(x.date))}</div>`; } return lab + agCard(x); }).join('');
+      const vazioTxt = V.ab === 'hoje' ? (daySlots(TODAY).length ? (S.appts.some((x) => x.date === TODAY && x.status === 'realizado') ? 'Todos os clientes de hoje já foram atendidos.' : 'Ninguém marcado para hoje ainda.') : 'Hoje a barbearia está fechada.')
+        : V.ab === 'amanha' && !daySlots(TOMORROW).length ? 'Amanhã a barbearia está fechada.' : 'Nenhum agendamento nesta lista.';
+      corpo = titulo + (itens.length ? `<div class="ag-grid">${cards}</div>${html}` : V.ab === 'dia' ? '' : `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="verde">${ic('check', 26)}</span><h4>Nada por aqui</h4><p>${vazioTxt}</p></div></div>`);
     }
-    return `<div class="ph"><div><span class="eyebrow">${cap(longDate(TODAY))}</span><h1>Agenda</h1></div><div style="display:flex;gap:10px;flex-wrap:wrap"><div class="segm">${[['lista', 'Lista'], ['semana', 'Semana'], ['mes', 'Mês']].map(([k, l]) => `<button class="${V.agView === k ? 'on' : ''}" data-a="ag-view" data-v="${k}">${l}</button>`).join('')}</div><button class="btn pri" data-a="dr-novo">${IC.plus} Novo agendamento</button></div></div>${body}`;
+    return `<div class="barra-filtros">
+        <div class="esq"><div class="chips">${abas.map(chip).join('')}<span class="divisor-v"></span>${filtros.map(chip).join('')}</div></div>
+        <div class="dir"><div class="seg"><button type="button" class="${V.vista === 'lista' ? 'on' : ''}" data-a="vista" data-v="lista">${ic('list', 16)}Lista</button><button type="button" class="${V.vista === 'mes' ? 'on' : ''}" data-a="vista" data-v="mes">${ic('cal', 16)}Mês</button></div>
+        <button type="button" class="btn pri" data-a="novo">${ic('plus', 18)}Novo</button></div>
+      </div>${corpo}`;
   }
-
-  // ===== Financeiro =====
-  function finRange() {
-    if (V.fin === 'hoje') return [TODAY, TODAY];
-    if (V.fin === 'semana') { const dw = (NOW.getDay() + 6) % 7; const s = A.addDays(NOW, -dw); return [A.iso(s), A.iso(A.addDays(s, 6))]; }
-    if (V.fin === 'mes') return [A.iso(new Date(NOW.getFullYear(), NOW.getMonth(), 1)), A.iso(new Date(NOW.getFullYear(), NOW.getMonth() + 1, 0))];
-    return V.from <= V.to ? [V.from, V.to] : [V.to, V.from];
+  function agCard(x) {
+    const c = cById(x.clientId);
+    const pil = x.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : x.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>'
+      : x.status === 'cancelado' ? '<span class="pilula" data-k="cinza">Cancelado</span>' : x.date <= TODAY ? '<span class="pilula viva" data-k="laranja">Aguardando</span>' : '<span class="pilula" data-k="azul">Confirmado</span>';
+    let acoes = '';
+    if (x.status === 'agendado') {
+      if (V.cancel === x.id) acoes = `<div class="confirma"><span>${ic('alert', 18)}Cancelar o horário de ${esc(first(c.name))}? A vaga fica livre no site.</span><div><button type="button" class="btn p sim" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button type="button" class="btn p" data-a="cancel-no">Voltar</button></div></div>`;
+      else if (x.date <= TODAY) acoes = `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`;
+      else acoes = `<div class="acoes">${c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}WhatsApp</a>` : ''}<button type="button" class="btn verm p" data-a="cancel-ask" data-id="${x.id}">${ic('x', 15)}Cancelar</button></div>`;
+    }
+    return `<div class="ag"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
+      <button type="button" class="quem" data-a="ap" data-id="${x.id}">${avk(c)}<div><b>${esc(c.name)}</b><small>${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}</small></div></button>
+      <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${acoes}</div>`;
   }
-  function stats(from, to) {
-    const done = S.appts.filter((x) => x.status === 'realizado' && x.date >= from && x.date <= to);
-    const rev = done.reduce((s, x) => s + x.price, 0);
-    const exp = S.expenses.filter((e) => e.date >= from && e.date <= to).reduce((s, e) => s + e.val, 0);
-    return { done, rev, exp, faltas: S.appts.filter((x) => x.status === 'faltou' && x.date >= from && x.date <= to).length, profit: rev - exp, ticket: done.length ? rev / done.length : 0 };
-  }
-  function vFin() {
-    const [from, to] = finRange(); const st = stats(from, to);
-    const len = Math.round((A.parse(to) - A.parse(from)) / 864e5) + 1;
-    const effTo = to > TODAY ? TODAY : to; const effLen = Math.max(1, Math.round((A.parse(effTo) - A.parse(from)) / 864e5) + 1);
-    const cur = stats(from, effTo); const prev = stats(A.iso(A.addDays(A.parse(from), -len)), A.iso(A.addDays(A.parse(from), -len + effLen - 1)));
-    const delta = prev.rev ? ((cur.rev - prev.rev) / prev.rev) * 100 : null;
-    const periodTxt = from === to ? cap(longDate(from)) : `${shortDate(from)} a ${shortDate(to)}`;
-    let chart = '';
-    if (len > 1 && len <= 62) {
-      const days = [];
-      for (let i = 0; i < len; i++) { const ds = A.iso(A.addDays(A.parse(from), i)); days.push([ds, st.done.filter((x) => x.date === ds).reduce((s, x) => s + x.price, 0)]); }
-      const max = Math.max(...days.map((d) => d[1]), 1); const step = max > 800 ? 200 : max > 400 ? 100 : 50; const top = Math.ceil(max / step) * step; const W = 1000, H = 200;
-      const lastIdx = days.reduce((li, [ds], i) => (ds <= TODAY ? i : li), -1);
-      const pts = days.slice(0, lastIdx + 1).map(([, v], i) => [((i + 0.5) / len) * W, H - (v / top) * H]);
-      const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-      const area = pts.length ? `${line} L${pts[pts.length - 1][0].toFixed(1)} ${H} L${pts[0][0].toFixed(1)} ${H} Z` : '';
-      const lines = []; for (let v = step; v <= top; v += step) lines.push(v);
-      const every = len > 16 ? Math.ceil(len / 10) : 1;
-      chart = `<div class="chartbox">${lines.map((v) => `<div class="gl" style="bottom:${(v / top) * 100}%"><span class="num">${money0(v)}</span></div>`).join('')}
-       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="ga" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--acc-d)" stop-opacity=".45"/><stop offset="1" stop-color="var(--acc-d)" stop-opacity="0"/></linearGradient></defs>${pts.length ? `<path d="${area}" fill="url(#ga)"/><path d="${line}" fill="none" stroke="var(--acc-d)" stroke-width="2.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>` : ''}</svg>
-       <div class="cols">${days.map(([ds, v]) => `<div><span class="tip">${shortDate(ds)} · ${money(v)}</span></div>`).join('')}</div></div>
-       <div class="xl">${days.map(([ds], i) => `<span>${i % every === 0 ? A.parse(ds).getDate() : ''}</span>`).join('')}</div>`;
-    } else if (len === 1) chart = `<div style="color:var(--rail-muted);font-size:13px">${st.done.length} atendimento${st.done.length === 1 ? '' : 's'} realizado${st.done.length === 1 ? '' : 's'} neste dia.</div>`;
-    else chart = '<div style="color:var(--rail-muted);font-size:13px">Para períodos acima de 2 meses mostramos só os totais.</div>';
-    const bySvc = {}; st.done.forEach((x) => { bySvc[x.service] = bySvc[x.service] || { q: 0, v: 0 }; bySvc[x.service].q++; bySvc[x.service].v += x.price; });
-    const svcs = Object.entries(bySvc).sort((x, y) => y[1].v - x[1].v); const smax = svcs.length ? svcs[0][1].v : 1;
-    const exps = S.expenses.filter((e) => e.date >= from && e.date <= to).sort((x, y) => y.date.localeCompare(x.date));
-    const epg = pageOf(exps, 'exp');
-    return `<div class="ph"><div><span class="eyebrow">${periodTxt}</span><h1>Financeiro</h1></div><div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end"><div class="segm">${[['hoje', 'Hoje'], ['semana', 'Semana'], ['mes', 'Mês'], ['custom', 'Personalizado']].map(([k, l]) => `<button class="${V.fin === k ? 'on' : ''}" data-a="f-range" data-r="${k}">${l}</button>`).join('')}</div>
-     ${V.fin === 'custom' ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><label class="muted" for="f-from" style="font-size:13px">De</label><input type="date" class="input" style="width:auto" id="f-from" value="${V.from}" data-ch="f-from"><label class="muted" for="f-to" style="font-size:13px">até</label><input type="date" class="input" style="width:auto" id="f-to" value="${V.to}" data-ch="f-to"></div>` : ''}</div></div>
-    <div class="fin-grid"><div class="hero-fin"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:8px"><span class="eyebrow">Faturamento</span><span class="big">${money(st.rev)}</span></div><span class="delta ${delta == null ? 'na' : delta >= 0 ? 'up' : 'down'}">${delta == null ? 'Sem comparação' : `${delta >= 0 ? '▲' : '▼'} ${Math.abs(delta).toFixed(0)}% vs. mesmo período anterior`}</span></div>${chart}</div>
-     <div class="kgrid">
-      <div class="stat"><span class="ic">${IC.check}</span><span class="eyebrow">Atendimentos</span><span class="v">${st.done.length}</span><span class="s">${st.faltas} não compareceram</span></div>
-      <div class="stat"><span class="ic">${IC.receipt}</span><span class="eyebrow">Despesas</span><span class="v">${money0(st.exp)}</span><span class="s">${exps.length} lançamento${exps.length === 1 ? '' : 's'}</span></div>
-      <div class="stat"><span class="ic">${IC.money}</span><span class="eyebrow">Lucro</span><span class="v" style="${st.profit < 0 ? 'color:var(--bad)' : ''}">${money0(st.profit)}</span><span class="s">faturamento menos despesas</span></div>
-      <div class="stat"><span class="ic">${IC.user}</span><span class="eyebrow">Ticket médio</span><span class="v">${money(st.ticket)}</span><span class="s">por atendimento</span></div>
-     </div></div>
-    <div class="fin-grid"><div class="card"><div class="card-h"><h3>Despesas</h3><span class="muted num" style="font-weight:700">${money(st.exp)}</span></div>
-      <form class="expform" id="expForm"><input class="input" id="e-desc" placeholder="O que foi pago? Ex.: lâminas" maxlength="120"><input class="input" id="e-val" inputmode="decimal" placeholder="R$ 0,00"><input class="input" id="e-date" type="date" value="${TODAY}" aria-label="Data"><button class="btn acc" type="submit">${IC.plus} Lançar</button></form>
-      ${V.expErr ? `<div class="err" style="margin:-6px 0 10px">${esc(V.expErr)}</div>` : ''}
-      <div style="display:flex;flex-direction:column;gap:8px">${exps.length ? epg.items.map((e) => `<div class="exp"><span class="ic">${IC.receipt}</span><span class="t"><b>${esc(e.desc)}</b><small>${cap(longDate(e.date))}</small></span><b class="num">${money(e.val)}</b>${V.dConfirm === 'e' + e.id ? `<button class="btn sm badb" data-a="e-del" data-id="${e.id}">Excluir</button><button class="btn sm ghost" data-a="confirm-no">Não</button>` : `<button class="btn sm ghost" data-a="e-ask" data-id="${e.id}" aria-label="Excluir despesa">${IC.x.replace('<svg', '<svg width="15" height="15"')}</button>`}</div>`).join('') : '<div class="empty">Nenhuma despesa neste período.</div>'}</div>${pager(epg, 'exp')}</div>
-     <div class="card"><div class="card-h"><h3>Serviços que mais renderam</h3></div><div class="rank">${svcs.length ? svcs.map(([n, o], i) => `<div class="r"><span class="pos">${i + 1}</span><span>${esc(n)} <span class="muted" style="font-size:12.5px">· ${o.q}x</span></span><b class="num">${money0(o.v)}</b><span class="bar"><i style="width:${(o.v / smax) * 100}%"></i></span></div>`).join('') : '<div class="empty">Nenhum atendimento realizado neste período.</div>'}</div></div></div>`;
+  function vMes() {
+    if (!V.calMonth) V.calMonth = TODAY.slice(0, 8) + '01';
+    const m = A.parse(V.calMonth); const prim = new Date(m.getFullYear(), m.getMonth(), 1); const nd = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+    let cells = ''; for (let i = 0; i < prim.getDay(); i++) cells += '<div class="d vazio" aria-hidden="true"></div>';
+    for (let d = 1; d <= nd; d++) {
+      const ds = A.iso(new Date(m.getFullYear(), m.getMonth(), d)); const tot = daySlots(ds).length; const n = live().filter((x) => x.date === ds).length;
+      if (!tot) { const b = blockedOf(ds); cells += `<button type="button" class="d fech ${ds === TODAY ? 'hoje' : ''}" data-a="ver-dia" data-v="${ds}"><span class="n">${d}</span><span class="q">${b ? esc(b.why || 'Folga') : 'Fechado'}</span>${n ? `<span class="q" style="color:var(--laranja)">${n} marcado${n > 1 ? 's' : ''}</span>` : ''}</button>`; continue; }
+      const oc = Math.min(1, busy(ds).size / tot); const k = oc >= 0.85 ? 'vermelho' : oc >= 0.5 ? 'laranja' : 'verde';
+      cells += `<button type="button" class="d ${ds === TODAY ? 'hoje' : ''} ${ds < TODAY ? 'passou' : ''}" data-k="${k}" data-a="ver-dia" data-v="${ds}"><span class="n">${d}</span><span class="q">${n} ${n === 1 ? 'cliente' : 'clientes'}</span><span class="barra"><i style="width:${Math.round(oc * 100)}%"></i></span></button>`;
+    }
+    return `<section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('cal', 17)}</span>${cap(MESES[m.getMonth()])} de ${m.getFullYear()}</h3>
+      <div class="legenda"><span data-k="verde"><i></i>Tranquilo</span><span data-k="laranja"><i></i>Movimentado</span><span data-k="vermelho"><i></i>Quase cheio</span></div>
+      <div class="mes-nav"><button type="button" class="btn-icone" data-a="mes-n" data-n="-1" aria-label="Mês anterior">${ic('left', 16)}</button><button type="button" class="btn p" data-a="mes-n" data-n="0">Hoje</button><button type="button" class="btn-icone" data-a="mes-n" data-n="1" aria-label="Próximo mês">${ic('right', 16)}</button></div></div>
+      <div class="mes">${DOW.map((d) => `<div class="dw">${d}</div>`).join('')}${cells}</div></section>`;
   }
 
   // ===== Clientes =====
   function clientStats() {
     const ms = TODAY.slice(0, 8) + '01';
     const by = {}; for (const x of S.appts) (by[x.clientId] = by[x.clientId] || []).push(x);
-    return S.clients.map((c) => {
+    const arr = S.clients.map((c) => {
       const ap = by[c.id] || []; const done = ap.filter((x) => x.status === 'realizado');
       return { c, visits: done.length, spent: done.reduce((s, x) => s + x.price, 0), last: done.map((x) => x.date).sort().pop() || null, next: ap.filter((x) => x.status === 'agendado' && x.date >= TODAY).map((x) => x.date).sort()[0] || null, faltas: ap.filter((x) => x.status === 'faltou').length, thisMonth: done.some((x) => x.date >= ms) };
     });
+    const top = arr.filter((x) => x.spent > 0).sort((p, q) => q.spent - p.spent).slice(0, 5);
+    arr.forEach((x) => {
+      const t = [];
+      if (x.c.blocked) t.push(['vermelho', 'Bloqueado']);
+      if (top.includes(x)) t.push(['roxo', 'Top gasto']);
+      if (x.visits >= 4) t.push(['verde', 'Fiel']);
+      if (!x.thisMonth && x.visits && !x.next) t.push(['laranja', 'Sumido no mês']);
+      if (x.visits <= 1 && !x.c.blocked) t.push(['azul', 'Novo']);
+      if (x.faltas >= 2) t.push(['vermelho', `${x.faltas} faltas`]);
+      if (x.next) t.push(['cinza', `Volta ${shortDate(x.next)}`]);
+      x.tags = t;
+    });
+    return { arr, top };
   }
-  function tagsFor(x, all) {
-    const t = []; const topSpend = all.filter((y) => y.spent > 0).sort((p, q) => q.spent - p.spent).slice(0, 3).map((y) => y.c.id);
-    if (topSpend.includes(x.c.id)) t.push('<span class="tag gold">Top gasto</span>');
-    if (x.visits >= 10) t.push('<span class="tag grn">Fiel</span>');
-    if (x.c.since >= A.iso(A.addDays(NOW, -30))) t.push('<span class="tag">Novo</span>');
-    if (x.last) { const d = Math.round((NOW - A.parse(x.last)) / 864e5); if (d >= 25 && !x.next) t.push(`<span class="tag red">Sumido há ${d} dias</span>`); }
-    if (x.next) t.push(`<span class="tag">Volta ${shortDate(x.next)}</span>`);
-    if (x.faltas >= 2) t.push(`<span class="tag red">${x.faltas} faltas</span>`);
-    if (x.c.blocked) t.unshift('<span class="tag red">Bloqueado</span>');
-    return t.join('');
-  }
-  function cliCards() {
-    const all = clientStats(); let l = all.slice(); const q = V.cliSearch.trim().toLowerCase();
-    if (q) l = l.filter((x) => x.c.name.toLowerCase().includes(q) || (digits(q) && x.c.phone.includes(digits(q))));
-    if (V.cliFilter === 'frequentes') l.sort((p, q2) => q2.visits - p.visits);
-    else if (V.cliFilter === 'gastam') l.sort((p, q2) => q2.spent - p.spent);
-    else if (V.cliFilter === 'sumidos') l = l.filter((x) => !x.thisMonth).sort((p, q2) => (p.last || '').localeCompare(q2.last || ''));
-    else if (V.cliFilter === 'bloqueados') l = l.filter((x) => x.c.blocked).sort((p, q2) => p.c.name.localeCompare(q2.c.name));
-    else l.sort((p, q2) => p.c.name.localeCompare(q2.c.name));
-    if (!l.length) return `<div class="empty">${V.cliFilter === 'bloqueados' && !q ? 'Nenhum cliente bloqueado.' : S.clients.length ? 'Nenhum cliente encontrado.' : 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'}</div>`;
-    const pg = pageOf(l, 'cli');
-    return `<div class="cgrid">${pg.items.map((x) => `<button class="ccard" data-a="dr-cli" data-id="${x.c.id}"><div class="hd">${avatar(x.c, 46)}<div style="min-width:0"><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div></div><div class="tags">${tagsFor(x, all)}</div><div class="nums"><div><b>${x.visits}</b><small>visitas</small></div><div><b>${money0(x.spent)}</b><small>gastou</small></div><div><b>${x.last ? shortDate(x.last) : '—'}</b><small>última</small></div></div></button>`).join('')}</div>${pager(pg, 'cli')}`;
+  const sumido = (x) => !x.thisMonth && x.visits > 0 && !x.next;
+  function listaClientes() {
+    const { arr, top } = clientStats(); let l = arr;
+    if (V.cliF === 'top') l = top;
+    else if (V.cliF === 'fieis') l = arr.filter((x) => x.visits >= 4);
+    else if (V.cliF === 'sumidos') l = arr.filter(sumido).sort((p, q) => (p.last || '').localeCompare(q.last || ''));
+    else if (V.cliF === 'bloq') l = arr.filter((x) => x.c.blocked);
+    if (!['top', 'sumidos'].includes(V.cliF)) l = l.slice().sort((p, q) => p.c.name.localeCompare(q.c.name));
+    const q = V.cliQ.trim().toLowerCase(); const qd = digits(q);
+    if (q) l = l.filter((x) => x.c.name.toLowerCase().includes(q) || (qd && x.c.phone.includes(qd)));
+    return { l, arr, top };
   }
   function vCli() {
-    const all = clientStats();
-    const f = [['todos', 'Todos', all.length], ['frequentes', 'Mais frequentes', null], ['gastam', 'Quem mais gasta', null], ['sumidos', 'Não vieram este mês', all.filter((x) => !x.thisMonth).length]];
-    const nb = all.filter((x) => x.c.blocked).length; if (nb || V.cliFilter === 'bloqueados') f.push(['bloqueados', 'Bloqueados', nb]);
-    return `<div class="ph"><div><span class="eyebrow">${all.length} clientes cadastrados</span><h1>Clientes</h1></div><label class="search">${IC.search}<input class="input" id="cli-search" placeholder="Buscar por nome ou WhatsApp" value="${esc(V.cliSearch)}" data-in="cli-search" aria-label="Buscar cliente"></label></div>
-    <div class="chips">${f.map(([k, l, n]) => `<button class="chipb ${V.cliFilter === k ? 'on' : ''}" data-a="cli-f" data-f="${k}">${l}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</div><div id="cli-list">${cliCards()}</div>`;
+    const { arr, top } = listaClientes();
+    const fs = [['todos', 'Todos', 'azul', arr.length], ['top', 'Quem mais gasta', 'roxo', top.length], ['fieis', 'Fiéis', 'verde', arr.filter((x) => x.visits >= 4).length], ['sumidos', 'Sumidos no mês', 'laranja', arr.filter(sumido).length], ['bloq', 'Bloqueados', 'vermelho', arr.filter((x) => x.c.blocked).length]];
+    return `<div class="barra-filtros"><div class="entrada busca">${ic('search', 18)}<input id="cli-q" data-in="cli-q" placeholder="Buscar por nome ou WhatsApp" value="${esc(V.cliQ)}" aria-label="Buscar cliente"></div>
+      <div class="chips">${fs.map(([k, r, c, n]) => `<button type="button" class="chip ${V.cliF === k ? 'on' : ''}" data-k="${c}" data-a="cli-f" data-v="${k}">${r}<b>${n}</b></button>`).join('')}</div></div>
+      <div id="cliLista">${cliLista()}</div>`;
+  }
+  function cliLista() {
+    const { l } = listaClientes(); const { itens, html } = pagina(l, 'cli');
+    if (!itens.length) {
+      const msg = !S.clients.length ? ['Nenhum cliente ainda', 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'] : V.cliQ ? ['Nenhum cliente encontrado', 'Confira o nome ou tente buscar pelo WhatsApp.'] : V.cliF === 'sumidos' ? ['Ninguém sumido', 'Todo mundo que costuma vir já voltou este mês ou tem horário marcado.'] : V.cliF === 'bloq' ? ['Ninguém bloqueado', 'Para bloquear alguém, abra a ficha do cliente.'] : ['Ninguém nesta lista', 'Assim que tiver atendimentos, a lista enche.'];
+      return `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="laranja">${ic('search', 26)}</span><h4>${msg[0]}</h4><p>${msg[1]}</p></div></div>`;
+    }
+    return `<div class="cli-grid">${itens.map((x) => `<div class="cli ${x.c.blocked ? 'bloq' : ''}" role="button" tabindex="0" data-a="cli" data-id="${x.c.id}"><div class="topo">${avk(x.c)}<div><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div></div>
+      <div class="tags">${x.tags.map(([k, t]) => `<span class="tag" data-k="${k}">${t}</span>`).join('')}</div>
+      <div class="nums"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Última</small><b>${x.last ? shortDate(x.last) : '—'}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div></div>
+      ${x.c.blocked ? `<button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${x.c.id}">${ic('check', 15)}Desbloquear</button>` : ''}</div>`).join('')}</div>${html}`;
   }
 
-  // ===== Configurações =====
-  // Prévia do site do cliente (versão clara, como o cliente vê no celular)
-  function previewPhone() {
+  // ===== Financeiro =====
+  const CAT = { Produtos: ['roxo', 'spark'], Contas: ['laranja', 'zap'], Aluguel: ['azul', 'door'], 'Manutenção': ['verde', 'cog'], Outros: ['cinza', 'receipt'] };
+  function faixaPer() {
+    if (V.per === 'hoje') return [TODAY, TODAY];
+    if (V.per === '7') return [A.iso(A.addDays(NOW, -6)), TODAY];
+    if (V.per === 'mes') return [TODAY.slice(0, 8) + '01', TODAY];
+    if (V.per === '30') return [A.iso(A.addDays(NOW, -29)), TODAY];
+    return V.de <= V.ate ? [V.de, V.ate] : [V.ate, V.de];
+  }
+  function vFin() {
+    const [de, ate] = faixaPer(); const n = Math.round((A.parse(ate) - A.parse(de)) / 864e5) + 1;
+    const done = S.appts.filter((x) => x.status === 'realizado' && x.date >= de && x.date <= ate);
+    const fat = done.reduce((s, x) => s + x.price, 0); const atend = done.length;
+    const desp = S.expenses.filter((e) => e.date >= de && e.date <= ate).sort((p, q) => q.date.localeCompare(p.date) || Number(q.id) - Number(p.id));
+    const totD = desp.reduce((s, e) => s + e.val, 0); const lucro = fat - totD;
+    // barras: por dia até 2 meses; acima disso, por mês
+    const barras = [];
+    if (n <= 62) for (let i = 0; i < n; i++) { const ds = A.iso(A.addDays(A.parse(de), i)); barras.push([ds, done.filter((x) => x.date === ds).reduce((s, x) => s + x.price, 0), shortDate(ds), String(A.parse(ds).getDate())]); }
+    else {
+      const a = A.parse(de); const z = A.parse(ate);
+      for (let d = new Date(a.getFullYear(), a.getMonth(), 1); d <= z; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+        const k = A.iso(d).slice(0, 7);
+        barras.push([k, done.filter((x) => x.date.startsWith(k)).reduce((s, x) => s + x.price, 0), `${cap(MESES[d.getMonth()])}/${String(d.getFullYear()).slice(2)}`, MESES[d.getMonth()].slice(0, 3)]);
+      }
+    }
+    const maxV = Math.max(100, Math.ceil(Math.max(0, ...barras.map((b) => b[1])) / 100) * 100);
+    const rotEvery = barras.length > 16 ? Math.ceil(barras.length / 8) : 1;
+    const pers = [['hoje', 'Hoje'], ['7', '7 dias'], ['mes', 'Este mês'], ['30', '30 dias'], ['per', 'Personalizado']];
+    const kpi = (k, i, v, t, sub) => `<div class="kpi" data-k="${k}"><div class="kpi-topo"><span class="ico-k">${ic(i, 22)}</span></div><b class="num">${v}</b><p>${t}</p><span class="sub">${sub}</span></div>`;
+    const porSvc = {}; done.forEach((x) => { porSvc[x.service] = (porSvc[x.service] || 0) + 1; });
+    const ranking = Object.entries(porSvc).sort((p, q) => q[1] - p[1]); const rmax = ranking.length ? ranking[0][1] : 1;
+    const { itens, html } = pagina(desp, 'desp');
+    const periodoTxt = de === ate ? cap(longDate(de)) : `${DOW[A.parse(de).getDay()]}, ${shortDate(de)} a ${DOW[A.parse(ate).getDay()]}, ${shortDate(ate)}`;
+    const grafico = n === 1
+      ? `<div class="vazio" style="padding:24px 10px"><span class="ico-k" data-k="verde">${ic('trend', 26)}</span><h4>${money(fat)} hoje</h4><p>${atend ? `${atend} atendimento${atend > 1 ? 's' : ''} até agora. Para ver o gráfico, escolha 7 dias ou o mês.` : 'Nenhum atendimento marcado como atendido hoje ainda.'}</p></div>`
+      : `<div class="grafico"><div class="g-eixo"><span>${money0(maxV)}</span><span>${money0(maxV / 2)}</span><span>R$ 0</span></div>
+        <div class="g-area">${barras.map(([k, v, tip], i) => `<div class="g-bar ${i === barras.length - 1 ? 'ultimo' : ''}" tabindex="0"><i style="height:${(v / maxV) * 100}%"></i><span class="tip">${tip} · ${money(v)}</span></div>`).join('')}</div></div>
+        <div class="g-rot">${barras.map(([, , , r], i) => `<span>${i % rotEvery === 0 || i === barras.length - 1 ? r : ''}</span>`).join('')}</div>`;
+    const cats = Object.keys(CAT);
+    return `<div class="barra-filtros"><div class="chips">${pers.map(([k, r]) => `<button type="button" class="chip ${V.per === k ? 'on' : ''}" data-a="per" data-v="${k}">${r}</button>`).join('')}</div>
+        ${V.per === 'per' ? `<div class="periodo-custom"><div class="entrada"><input type="date" id="per-de" data-ch="per-de" value="${V.de}" max="${TODAY}" aria-label="De"></div><span class="muted">até</span><div class="entrada"><input type="date" id="per-ate" data-ch="per-ate" value="${V.ate}" aria-label="Até"></div></div>` : ''}</div>
+      <div class="kpis fin">
+        ${kpi('verde', 'trend', money(fat), 'Faturamento', periodoTxt)}
+        ${kpi('vermelho', 'down', money(totD), 'Despesas', `${desp.length} lançamento${desp.length === 1 ? '' : 's'}`)}
+        ${kpi(lucro >= 0 ? 'neutro' : 'vermelho', 'wallet', money(lucro), lucro >= 0 ? 'Lucro' : 'Prejuízo', 'Faturamento menos despesas')}
+        ${kpi('neutro', 'userok', atend, 'Atendimentos', `Ticket médio ${money(atend ? fat / atend : 0)}`)}
+      </div>
+      <div class="duas-col">
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('trend', 17)}</span>Faturamento por ${n <= 62 ? 'dia' : 'mês'}</h3>${n > 1 ? '<small>Passe o mouse ou toque nas barras</small>' : ''}</div>${grafico}</section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('star', 17)}</span>Serviços mais feitos</h3></div>
+          <div class="rank">${ranking.length ? ranking.map(([nome, q]) => `<div class="rank-i"><span class="ico-k p">${svcIcon(nome).replace('<svg', '<svg width="16" height="16"')}</span><b>${esc(nome)}</b><span>${q}×</span><div class="barra"><i style="width:${(q / rmax) * 100}%"></i></div></div>`).join('') : '<div class="muted" style="font-size:13.5px">Nenhum atendimento no período.</div>'}</div></section>
+      </div>
+      <section class="cartao" id="cartaoDesp"><div class="cartao-topo"><h3><span class="ico-k p">${ic('receipt', 17)}</span>Despesas do período</h3><button type="button" class="btn ${V.despForm ? '' : 'pri'} p" data-a="desp-form">${ic(V.despForm ? 'x' : 'plus', 16)}${V.despForm ? 'Fechar' : 'Adicionar despesa'}</button></div>
+        ${V.despForm ? `<form class="form-desp" id="despForm" novalidate>
+          <div class="campo"><label for="d-t">Descrição</label><div class="entrada" id="e-dt"><input id="d-t" placeholder="Ex.: Cera modeladora" maxlength="120"></div></div>
+          <div class="campo"><label for="d-v">Valor</label><div class="entrada" id="e-dv"><span class="muted">R$</span><input id="d-v" inputmode="decimal" placeholder="0,00"></div></div>
+          <div class="campo"><label for="d-c">Categoria</label><div class="entrada"><select id="d-c">${cats.map((c) => `<option>${c}</option>`).join('')}</select></div></div>
+          <div class="campo"><label for="d-d">Data</label><div class="entrada" id="e-dd"><input id="d-d" type="date" value="${TODAY}" max="${TODAY}"></div></div>
+          <button type="submit" class="btn verde" style="height:50px">${ic('check', 17)}Salvar</button></form>` : ''}
+        ${itens.length ? `<div class="desp-grid">${itens.map((e) => {
+          const [k, i] = CAT[e.cat] || CAT.Outros;
+          if (V.despAsk === e.id) return `<div class="desp conf"><span>Excluir "${esc(e.desc)}" (${money(e.val)})?</span><div><button type="button" class="btn p verm" data-a="desp-del" data-id="${e.id}">Sim, excluir</button><button type="button" class="btn p" data-a="desp-no">Voltar</button></div></div>`;
+          return `<div class="desp" data-k="${k}"><span class="ico-k p">${ic(i, 17)}</span><div style="min-width:0"><b>${esc(e.desc)}</b><small>${esc(e.cat)} · ${shortDate(e.date)}</small></div><span class="v">− ${money(e.val)}<button type="button" data-a="desp-ask" data-id="${e.id}">Excluir</button></span></div>`;
+        }).join('')}</div>${html}` : `<div class="vazio"><p>Nenhuma despesa neste período.${V.despForm ? '' : ' Toque em "Adicionar despesa" para lançar uma.'}</p></div>`}
+      </section>`;
+  }
+
+  // ===== Configurações (as mudanças ficam num rascunho até tocar em "Salvar alterações") =====
+  const CORES = ['latao', 'azul', 'roxo', 'verde', 'laranja', 'rosa', 'ciano', 'bordo', 'prata'];
+  function mkDraft() {
     const st = S.settings;
-    return `<div class="pv"><div class="pv-topo">${logo(34)}<div style="min-width:0"><b>${esc(st.shopName)}</b><small>Aberto agora</small></div></div><div class="pv-listra"></div>
-    <div class="pv-corpo"><div class="pv-hero"><small>Agendamento online</small><h1>${esc(st.tagline || st.shopName)}</h1><span class="pv-btn">${IC.cal.replace('<svg', '<svg width="16" height="16"')} Agendar meu horário</span></div>
-    <div class="pv-card"><b class="pv-t">Serviços e valores</b><div class="pv-car">${S.services.slice(0, 4).map((x) => `<div class="pv-svc"><span class="pv-ic">${svcIcon(x.name).replace('<svg', '<svg width="18" height="18"')}</span><b>${esc(x.name)}</b><span class="pv-pr">${money0(x.price)}</span></div>`).join('')}</div><div class="pv-pontos"><i class="on"></i><i></i><i></i></div></div>
-    <div class="pv-card"><b class="pv-t">Horário de funcionamento</b><div class="pv-h"><span>Segunda a sábado</span><b>${st.open} às ${st.close}</b></div></div></div>
-    <nav class="pv-tab">${[['Início', IC.home], ['Agendar', IC.cal], ['Meus horários', IC.clock], ['Perfil', IC.user]].map(([l, i], k) => `<span class="${k === 0 ? 'on' : ''}">${i.replace('<svg', '<svg width="20" height="20"')}${l}</span>`).join('')}</nav></div>`;
+    return {
+      shopName: st.shopName, tagline: st.tagline, address: st.address, phone: maskPhone(st.phone), color: st.color, custom: st.custom, logo: st.logo,
+      days: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ on: !st.closed.includes(i), ...A.dayHours(st, i) })),
+      lunchStart: st.lunchStart, lunchEnd: st.lunchEnd, bookFrom: st.bookFrom, bookTo: st.bookTo,
+      maxActive: st.maxActive, maxPerDay: st.maxPerDay, maxDevice: st.maxDevice, autoBlock: st.autoBlock,
+      svcs: S.services.map((s) => ({ id: s.id, name: s.name, price: String(s.price).replace('.', ','), dur: s.dur })),
+    };
+  }
+  const dirty = () => !!V.draft && JSON.stringify(V.draft) !== JSON.stringify(mkDraft());
+  function paintSave() {
+    const b = $('#salvarBarra'); if (!b) return;
+    const d = dirty(); b.classList.toggle('sujo', d);
+    b.querySelector('span').innerHTML = d ? `${ic('alert', 16)} Você tem mudanças que ainda não foram salvas.` : `${ic('info', 16)} As mudanças aparecem no site do cliente assim que você salvar.`;
+    b.querySelector('button').disabled = !d;
+  }
+  function previa(d) {
+    const fake = { ...S.settings, shopName: d.shopName || 'Sua barbearia', logo: d.logo };
+    return `<div class="previa-cel" aria-hidden="true"><div><div class="pc-topo">${logo(24, fake)}<b>${esc(fake.shopName)}</b></div><div class="listra" style="height:3px"></div>
+      <div class="pc-corpo"><div class="ph"><small>Agendamento online</small><b>${esc(d.tagline || fake.shopName)}</b><span>Agendar meu horário</span></div>
+      <div class="pc-svc">${d.svcs.slice(0, 2).map((s) => `<div><i></i>${esc(s.name)}<em>R$ ${esc(s.price)}</em></div>`).join('')}</div><div class="pb">Confirmar agendamento</div></div></div></div>`;
   }
   function vCfg() {
-    const st = S.settings;
-    const blocked = S.blocked.filter((b) => b.date >= TODAY);
-    return `<div class="ph"><div><span class="eyebrow">Tudo é salvo na hora</span><h1>Configurações</h1></div></div>
-    <div class="cfg"><div class="cfg-stack">
-     <div class="card" style="display:flex;flex-direction:column;gap:16px"><div class="card-h" style="margin:0"><h3>Identidade</h3></div>
-      <div class="logo-up">${logo(72)}<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><label class="btn sm" for="cfg-logo" style="cursor:pointer">Enviar logo</label><input type="file" id="cfg-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden data-ch="cfg-logo">${st.logo ? '<button class="btn sm ghost" data-a="cfg-logo-rm">Remover logo</button>' : '<span class="muted" style="font-size:12.5px">Sem logo, usamos as iniciais.</span>'}</div></div>
-      <div class="field"><label for="cfg-name">Nome da barbearia</label><input class="input" id="cfg-name" value="${esc(st.shopName)}" data-ch="cfg" data-k="shopName" maxlength="60"></div>
-      <div class="field"><label for="cfg-tag">Frase de boas-vindas</label><input class="input" id="cfg-tag" value="${esc(st.tagline)}" data-ch="cfg" data-k="tagline" maxlength="140"></div>
-      <div class="field"><label for="cfg-addr">Endereço</label><input class="input" id="cfg-addr" value="${esc(st.address)}" data-ch="cfg" data-k="address" maxlength="140"></div></div>
-     <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Cor da marca</h3></div>
-      <div class="swatches">${Object.entries(PRESETS).map(([k, [n, l, d]]) => `<button class="sw ${st.color === k ? 'on' : ''}" data-a="cfg-color" data-c="${k}"><i style="background:linear-gradient(135deg,${l} 50%,${d} 50%)"></i>${n}</button>`).join('')}
-       <label class="sw ${st.color === 'custom' ? 'on' : ''}" style="cursor:pointer"><i style="background:${st.color === 'custom' ? st.custom : 'conic-gradient(#c33,#cc3,#3c6,#3cc,#36c,#c3c,#c33)'}"><input type="color" value="${st.custom}" data-ch="cfg-custom" style="position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer" aria-label="Escolher outra cor"></i>Outra</label></div>
-      <div class="muted" style="font-size:12.5px">Cada amostra mostra a cor no fundo claro e no fundo escuro. Ela aparece nos botões, no item escolhido e nos detalhes do site do cliente. Veja ao lado.</div></div>
-     <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Horário de funcionamento</h3></div>
-      <div class="row2"><div class="field"><label for="cfg-open">Abre às</label><input type="time" step="1800" class="input" id="cfg-open" value="${st.open}" data-ch="cfg" data-k="open"></div><div class="field"><label for="cfg-close">Fecha às</label><input type="time" step="1800" class="input" id="cfg-close" value="${st.close}" data-ch="cfg" data-k="close"></div></div>
-      <div class="row2"><div class="field"><label for="cfg-ls">Almoço das</label><input type="time" step="1800" class="input" id="cfg-ls" value="${st.lunchStart}" data-ch="cfg" data-k="lunchStart"></div><div class="field"><label for="cfg-le">até</label><input type="time" step="1800" class="input" id="cfg-le" value="${st.lunchEnd}" data-ch="cfg" data-k="lunchEnd"></div></div>
-      <div class="muted" style="font-size:12.5px;margin-top:-6px">Sem pausa para almoço? Coloque o mesmo horário nos dois campos.</div>
-      <div class="field"><span class="lab">Dias em que fecha (toque para marcar)</span><div class="dchk">${[1, 2, 3, 4, 5, 6, 0].map((i) => `<label><input type="checkbox" ${st.closed.includes(i) ? 'checked' : ''} data-ch="cfg-closed" data-i="${i}">${DOW[i]}</label>`).join('')}</div></div></div>
-     <div class="card" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Período de agendamento</h3></div>
-      <div class="muted" style="font-size:13px;margin-top:-6px">Os clientes só conseguem marcar dentro deste período. Ex.: abra só até o fim de janeiro para ninguém marcar o Carnaval antes da hora.</div>
-      <div class="row2"><div class="field"><label for="cfg-bf">Clientes podem marcar de</label><input type="date" class="input" id="cfg-bf" value="${st.bookFrom}" data-ch="cfg" data-k="bookFrom"></div><div class="field"><label for="cfg-bt">até</label><input type="date" class="input" id="cfg-bt" value="${st.bookTo}" data-ch="cfg" data-k="bookTo"></div></div>
-      <div class="chips">${[['Até o fim deste mês', 0], ['Até o fim do próximo mês', 1], ['Até o fim de 3 meses', 2]].map(([l, n]) => `<button class="chipb" data-a="bk-quick" data-n="${n}">${l}</button>`).join('')}</div>
-      <div style="display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--line);padding-top:14px"><span class="lab" style="font-size:12.5px;font-weight:700;color:var(--muted)">Dias bloqueados (folgas, feriados, cursos)</span>
-       <form class="expform blkform" id="blkForm"><input type="date" class="input" id="blk-date" min="${TODAY}" aria-label="Dia"><input class="input" id="blk-why" placeholder="Motivo. Ex.: feriado" maxlength="80"><button class="btn acc" type="submit">Bloquear</button></form>
-       ${blocked.map((b) => `<div class="exp"><span class="ic">${IC.cal}</span><span class="t"><b>${cap(longDate(b.date))}</b><small>${esc(b.why || 'Bloqueado')}</small></span><button class="btn sm ghost" data-a="blk-del" data-d="${b.date}">Liberar</button></div>`).join('') || '<div class="muted" style="font-size:12.5px">Nenhum dia bloqueado.</div>'}</div></div>
-     ${protCard()}
-     <div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="card-h" style="margin:0 0 4px"><h3>Serviços e preços</h3><button class="btn sm acc" data-a="svc-add">${IC.plus} Novo serviço</button></div>
-      ${S.services.map((s) => `<div class="svrow" data-svc="${s.id}"><span class="ic">${svcIcon(s.name)}</span><input class="input" value="${esc(s.name)}" data-ch="svc" data-k="name" aria-label="Nome do serviço" maxlength="60"><input class="input" inputmode="decimal" value="${String(s.price).replace('.', ',')}" data-ch="svc" data-k="price" aria-label="Preço em reais"><select class="input" data-ch="svc" data-k="dur" aria-label="Duração">${[30, 60, 90, 120].map((m) => `<option value="${m}" ${s.dur === m ? 'selected' : ''}>${m} min</option>`).join('')}</select>${V.dConfirm === 's' + s.id ? `<span style="display:flex;gap:4px"><button class="btn sm badb" data-a="svc-del" data-id="${s.id}">Remover</button><button class="btn sm ghost" data-a="confirm-no">Não</button></span>` : `<button class="btn sm ghost badb" data-a="svc-ask" data-id="${s.id}" aria-label="Remover serviço">${IC.x.replace('<svg', '<svg width="15" height="15"')}</button>`}</div>`).join('')}
-      <div class="muted" style="font-size:12.5px">Mudar o preço não altera atendimentos antigos. O financeiro guarda o valor cobrado no dia.</div></div>
-    </div><div class="preview"><span class="eyebrow">Prévia ao vivo</span><div class="pmini"><div class="scr">${previewPhone()}</div></div></div></div>`;
-  }
-
-  // Proteção contra agendamentos de trote (vale só para o site; no painel você marca à vontade)
-  function protCard() {
-    const st = S.settings;
-    const sel = (key, id, label, opts, help) => `<div class="field"><label for="${id}">${label}</label><select class="input" id="${id}" data-ch="cfg-num" data-k="${key}">${opts.map(([v, l]) => `<option value="${v}" ${st[key] === v ? 'selected' : ''}>${l}</option>`).join('')}</select><small class="muted hlp">${help}</small></div>`;
-    const n = (a, one, many) => a.map((v) => [v, `${v} ${v === 1 ? one : many}`]);
+    if (!V.draft) V.draft = mkDraft();
+    const d = V.draft; const st = S.settings;
+    const corAtual = d.color === 'custom' ? 'Outra cor' : (PRESETS[d.color] || PRESETS.latao)[0];
+    const sel = (key, id, label, opts, help) => `<div class="campo"><label for="${id}">${label}</label><div class="entrada"><select id="${id}" data-d="${key}" data-num="1">${opts.map(([v, l]) => `<option value="${v}" ${Number(d[key]) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div><span class="ajuda">${help}</span></div>`;
+    const nOpt = (a, one, many) => a.map((v) => [v, `${v} ${v === 1 ? one : many}`]);
+    const folgas = S.blocked.filter((b) => b.date >= TODAY);
     const bl = S.clients.filter((c) => c.blocked);
-    return `<div class="card prot" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Proteção contra trote</h3><span class="ic sh">${IC.shield}</span></div>
-      <div class="muted" style="font-size:13px;margin-top:-6px">Freia quem marca vários horários pelo site só para atrapalhar. Pelo painel você continua marcando sem limite.</div>
-      <div class="row2">${sel('maxActive', 'cfg-ma', 'Horários marcados por cliente', [[0, 'Sem limite'], ...n([1, 2, 3, 4, 5], 'por vez', 'ao mesmo tempo')], 'Quando um passa, pode marcar outro.')}
-      ${sel('maxPerDay', 'cfg-md', 'Horários no mesmo dia', [[0, 'Sem limite'], ...n([1, 2, 3], 'por cliente', 'por cliente')], 'Evita a mesma pessoa pegar a tarde inteira.')}</div>
-      <div class="row2">${sel('maxDevice', 'cfg-mv', 'Agendamentos por celular em 24 h', [[0, 'Sem limite'], ...n([2, 3, 4, 5, 8, 10], 'agendamento', 'agendamentos')], 'Pega quem inventa vários nomes no mesmo celular.')}
-      ${sel('autoBlock', 'cfg-ab', 'Bloquear quem faltar sem avisar', [[0, 'Nunca bloquear sozinho'], ...[1, 2, 3, 4, 5].map((v) => [v, `Depois de ${v} falta${v > 1 ? 's' : ''}`])], 'Conta quando você toca em "Não veio".')}</div>
-      <div style="display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--line);padding-top:14px"><span class="lab" style="font-size:12.5px;font-weight:700;color:var(--muted)">Clientes bloqueados${bl.length ? ` (${bl.length})` : ''}</span>
-       ${bl.map((c) => `<div class="exp"><span class="ic">${IC.ban}</span><span class="t"><b>${esc(c.name)}</b><small>${esc(c.blockedReason || 'Bloqueado pelo barbeiro')}</small></span><button class="btn sm ghost" data-a="cli-unblock" data-id="${c.id}">Desbloquear</button></div>`).join('') || '<div class="muted" style="font-size:12.5px">Ninguém bloqueado. Para bloquear, abra a ficha do cliente.</div>'}</div></div>`;
+    const extra = !CORES.includes(d.color) && d.color !== 'custom' ? [d.color] : [];
+    return `<div class="cfg-grid">
+      <div class="col">
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('palette', 17)}</span>Aparência do site</h3><small>Veja na prévia antes de salvar</small></div>
+          <div class="form-g">
+            <div class="campo"><label for="cfg-nome">Nome da barbearia</label><div class="entrada" id="e-cnome">${ic('scissors', 18)}<input id="cfg-nome" data-d="shopName" value="${esc(d.shopName)}" maxlength="60"></div></div>
+            <div class="campo"><label>Logo</label><div class="logo-up">${logo(60)}<div style="flex:1;min-width:150px"><b style="font-size:14px">Sua logo aparece no site e no painel</b><div class="muted" style="font-size:12.5px">PNG ou JPG, quadrada, até 1,5 MB. Troca na hora.</div></div><div class="bts"><label class="btn p" for="cfg-logo" style="cursor:pointer">${ic('upload', 16)}${st.logo ? 'Trocar logo' : 'Enviar logo'}</label>${st.logo ? `<button type="button" class="btn p" data-a="logo-rm">${ic('trash', 15)}Tirar</button>` : ''}</div><input type="file" id="cfg-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden data-ch="logo"></div></div>
+            <div class="campo"><span class="lab">Cor de destaque <span class="muted" style="font-weight:500">· ${esc(corAtual)}</span></span><div class="cores">${[...CORES, ...extra].map((k) => `<button type="button" class="cor ${d.color === k ? 'on' : ''}" style="--c:${PRESETS[k][1]}" data-a="cor" data-v="${k}" aria-label="${PRESETS[k][0]}" title="${PRESETS[k][0]}"></button>`).join('')}
+              <label class="cor outra ${d.color === 'custom' ? 'on' : ''}" title="Escolher outra cor" ${d.color === 'custom' ? `style="--c:${d.custom};background:${d.custom}"` : ''}><input type="color" value="${d.custom}" data-ch="cor-custom" aria-label="Escolher outra cor"></label></div></div>
+            ${previa(d)}
+          </div></section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('pin', 17)}</span>O que o cliente vê</h3></div>
+          <div class="form-g">
+            <div class="campo"><label for="cfg-tag">Frase de boas-vindas</label><div class="entrada" id="e-ctag"><input id="cfg-tag" data-d="tagline" value="${esc(d.tagline)}" maxlength="140"></div></div>
+            <div class="campo"><label for="cfg-fone">WhatsApp da barbearia</label><div class="entrada" id="e-cfone">${ic('whats', 18)}<input id="cfg-fone" data-d="phone" data-mask="1" inputmode="tel" placeholder="(16) 99999-9999" value="${esc(d.phone)}"></div><span class="ajuda">Aparece no site para o cliente chamar no WhatsApp. Pode deixar em branco.</span></div>
+            <div class="campo"><label for="cfg-end">Endereço</label><div class="entrada">${ic('pin', 18)}<input id="cfg-end" data-d="address" value="${esc(d.address)}" maxlength="140" placeholder="Rua, número - bairro, cidade"></div><span class="ajuda">Usado no mapa do site.</span></div>
+          </div></section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('clock', 17)}</span>Horário de funcionamento</h3></div>
+          <div class="lista-v">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const x = d.days[i]; return `<div class="dia-func ${x.on ? '' : 'off'}" id="e-dia${i}"><button type="button" class="chave ${x.on ? 'on' : ''}" data-a="dia-on" data-v="${i}" aria-label="${cap(DOWL[i])}: ${x.on ? 'aberto' : 'fechado'}" aria-pressed="${x.on}"></button><b>${cap(DOWL[i])}</b><div class="hs">${x.on ? `<div class="entrada"><input type="time" step="1800" value="${x.open}" data-dia="${i}" data-k="open" aria-label="Abre"></div>às<div class="entrada"><input type="time" step="1800" value="${x.close}" data-dia="${i}" data-k="close" aria-label="Fecha"></div>` : '<span class="tag" data-k="cinza">Fechado</span>'}</div></div>`; }).join('')}
+            <div class="dia-func almoco" id="e-almoco"><span class="ico-k p" data-k="laranja">${ic('coffee', 16)}</span><b>Almoço</b><div class="hs"><div class="entrada"><input type="time" step="1800" value="${d.lunchStart}" data-d="lunchStart" aria-label="Início do almoço"></div>às<div class="entrada"><input type="time" step="1800" value="${d.lunchEnd}" data-d="lunchEnd" aria-label="Fim do almoço"></div></div></div>
+            <span class="ajuda muted" style="font-size:12px">Sem pausa para almoço? Coloque o mesmo horário nos dois campos.</span></div></section>
+      </div>
+      <div class="col">
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('scissors', 17)}</span>Serviços e preços</h3><button type="button" class="btn p" data-a="svc-add">${ic('plus', 16)}Adicionar</button></div>
+          <div class="lista-v">${d.svcs.map((s, i) => `<div class="cfg-svc" id="e-svc${i}"><span class="ico-k p">${svcIcon(s.name).replace('<svg', '<svg width="16" height="16"')}</span><div class="entrada"><input value="${esc(s.name)}" data-svc="${i}" data-k="name" maxlength="60" aria-label="Nome do serviço"></div>
+            <div class="linha2"><div class="entrada"><select data-svc="${i}" data-k="dur" aria-label="Duração">${[30, 60, 90, 120].map((m) => `<option value="${m}" ${s.dur === m ? 'selected' : ''}>${tempo(m)}</option>`).join('')}</select></div><div class="entrada"><span class="muted" style="font-size:13px">R$</span><input value="${esc(s.price)}" inputmode="decimal" data-svc="${i}" data-k="price" aria-label="Preço"></div></div>
+            <button type="button" class="btn-icone" data-a="svc-del" data-id="${s.id}" aria-label="Remover ${esc(s.name)}">${ic('trash', 16)}</button></div>`).join('')}</div>
+          <p class="muted" style="font-size:12.5px;margin:12px 0 0">Mudar o preço não muda atendimentos antigos. O financeiro guarda o valor cobrado no dia.</p></section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('cal', 17)}</span>Agenda aberta e folgas</h3></div>
+          <div class="form-g"><div class="duas"><div class="campo"><label for="cfg-de">Clientes podem agendar de</label><div class="entrada" id="e-cde"><input type="date" id="cfg-de" data-d="bookFrom" value="${d.bookFrom}"></div></div><div class="campo"><label for="cfg-ate">Até</label><div class="entrada" id="e-cate"><input type="date" id="cfg-ate" data-d="bookTo" value="${d.bookTo}"></div></div></div>
+            <div class="chips">${[['Até o fim do mês', 0], ['Até o fim do próximo mês', 1], ['Por 3 meses', 2]].map(([l, n]) => `<button type="button" class="chip" data-a="bk-quick" data-n="${n}">${l}</button>`).join('')}</div>
+            <div class="campo"><span class="lab">Dias bloqueados</span><div class="folgas">${folgas.map((f) => `<span class="folga">${ic('ban', 14)}${shortDate(f.date)} · ${esc(f.why || 'Folga')}<button type="button" data-a="folga-del" data-v="${f.date}" aria-label="Liberar ${shortDate(f.date)}">${ic('x', 13)}</button></span>`).join('') || '<span class="muted" style="font-size:13px">Nenhum dia bloqueado.</span>'}</div></div>
+            <div class="folga-add"><div class="campo"><label for="cfg-folga">Bloquear outro dia</label><div class="entrada" id="e-folga"><input type="date" id="cfg-folga" min="${TODAY}"></div></div><div class="campo"><label for="cfg-folga-r">Motivo</label><div class="entrada"><input id="cfg-folga-r" placeholder="Folga, feriado…" maxlength="80"></div></div><button type="button" class="btn" style="height:50px" data-a="folga-add">${ic('plus', 16)}Bloquear</button></div></div></section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('shield', 17)}</span>Proteção contra trote</h3></div>
+          <p class="muted" style="font-size:13px;margin:-6px 0 14px">Freia quem marca vários horários pelo site só para atrapalhar. Pelo painel você continua marcando sem limite.</p>
+          <div class="form-g"><div class="duas">${sel('maxActive', 'cfg-ma', 'Horários marcados por cliente', [[0, 'Sem limite'], ...nOpt([1, 2, 3, 4, 5], 'por vez', 'ao mesmo tempo')], 'Quando um passa, pode marcar outro.')}
+            ${sel('maxPerDay', 'cfg-md', 'Máximo por cliente no dia', [[0, 'Sem limite'], ...nOpt([1, 2, 3], 'por dia', 'por dia')], 'Evita a mesma pessoa pegar a tarde inteira.')}</div>
+            <div class="duas">${sel('maxDevice', 'cfg-mv', 'Agendamentos por celular em 24 h', [[0, 'Sem limite'], ...nOpt([2, 3, 4, 5, 8, 10], 'agendamento', 'agendamentos')], 'Pega quem inventa vários nomes no mesmo celular.')}
+            ${sel('autoBlock', 'cfg-ab', 'Bloquear depois de', [[0, 'Nunca bloquear sozinho'], ...[1, 2, 3, 4, 5].map((v) => [v, `${v} falta${v > 1 ? 's' : ''}`])], 'Conta quando você toca em "Não veio".')}</div>
+            <div class="campo"><span class="lab">Clientes bloqueados${bl.length ? ` (${bl.length})` : ''}</span><div class="bloq-l">${bl.map((c) => `<div class="bloq-i"><span class="ico-k p">${ic('ban', 16)}</span><div style="min-width:0"><b>${esc(c.name)}</b><small>${esc(c.blockedReason || 'Bloqueado pelo barbeiro')}</small></div><button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${c.id}">Desbloquear</button></div>`).join('') || '<span class="muted" style="font-size:13px">Ninguém bloqueado. Para bloquear, abra a ficha do cliente.</span>'}</div></div></div></section>
+      </div></div>
+      <div class="salvar-barra" id="salvarBarra"><span></span><button type="button" class="btn pri" data-a="salvar">${ic('check', 17)}Salvar alterações</button></div>`;
+  }
+  /** Confere o rascunho e manda para o servidor. Volta true se salvou. */
+  async function salvarCfg() {
+    const d = V.draft; const st = S.settings;
+    const erro = (t, x, alvo) => { alerta('erro', t, x); if (alvo) marcar(alvo); return false; };
+    if (!d.shopName.trim()) return erro('Falta o nome da barbearia', 'Escreva o nome que aparece no site.', '#e-cnome');
+    if (!d.tagline.trim()) return erro('Falta a frase de boas-vindas', 'Ela aparece em destaque no início do site.', '#e-ctag');
+    const fone = digits(d.phone); if (fone && (fone.length < 10 || fone.length > 11)) return erro('WhatsApp incompleto', 'Digite o WhatsApp da barbearia com DDD, ou deixe em branco.', '#e-cfone');
+    const abertos = [0, 1, 2, 3, 4, 5, 6].filter((i) => d.days[i].on);
+    if (!abertos.length) return erro('A barbearia precisa abrir pelo menos um dia', 'Ligue a chave de algum dia da semana.');
+    for (const i of abertos) { const x = d.days[i]; if (!A.isTime(x.open) || !A.isTime(x.close) || A.toMin(x.open) >= A.toMin(x.close)) return erro(`Confira o horário de ${DOWL[i]}`, 'O horário de abrir precisa ser antes do de fechar.', '#e-dia' + i); }
+    if (A.toMin(d.lunchStart) > A.toMin(d.lunchEnd)) return erro('Confira o almoço', 'O fim do almoço precisa ser depois do começo.', '#e-almoco');
+    if (!d.bookFrom || !d.bookTo || d.bookFrom > d.bookTo) return erro('Confira as datas da agenda', 'A data final precisa ser depois da inicial.', '#e-cate');
+    for (let i = 0; i < d.svcs.length; i++) {
+      const s = d.svcs[i]; const p = parseFloat(String(s.price).replace(/\s/g, '').replace(',', '.'));
+      if (!s.name.trim()) return erro('Serviço sem nome', 'Escreva o nome de cada serviço.', '#e-svc' + i);
+      if (!(p >= 0)) return erro(`Preço inválido em ${s.name}`, 'Digite só números. Ex.: 35 ou 35,50.', '#e-svc' + i);
+    }
+    const hours = {}; d.days.forEach((x, i) => { hours[i] = { open: x.open, close: x.close }; });
+    const patch = {
+      shopName: d.shopName.trim(), tagline: d.tagline.trim(), address: d.address.trim(), phone: fone, color: d.color, custom: d.custom, hours,
+      closed: [0, 1, 2, 3, 4, 5, 6].filter((i) => !d.days[i].on),
+      open: abertos.map((i) => d.days[i].open).sort()[0], close: abertos.map((i) => d.days[i].close).sort().pop(),
+      lunchStart: d.lunchStart, lunchEnd: d.lunchEnd, bookFrom: d.bookFrom, bookTo: d.bookTo,
+      maxActive: Number(d.maxActive), maxPerDay: Number(d.maxPerDay), maxDevice: Number(d.maxDevice), autoBlock: Number(d.autoBlock),
+    };
+    const mudouSvc = d.svcs.filter((s) => { const o = S.services.find((x) => x.id === s.id); return o && (o.name !== s.name.trim() || o.dur !== s.dur || o.price !== parseFloat(String(s.price).replace(',', '.'))); });
+    V.saving = true;
+    try {
+      await api('PUT', '/api/admin/configuracoes', patch);
+      for (const s of mudouSvc) await api('PUT', '/api/admin/servicos/' + s.id, { name: s.name.trim(), dur: s.dur, price: parseFloat(String(s.price).replace(',', '.')) });
+      await reload(); V.draft = mkDraft();
+      alerta('ok', 'Configurações salvas', 'O site do cliente já está com as mudanças.');
+      return true;
+    } catch (e) {
+      alerta('erro', 'Não deu para salvar', e.message);
+      try { await reload(); } catch { /* ignora */ }
+      return false;
+    } finally { V.saving = false; render(); }
   }
 
-  // ===== Perfil =====
-  function vAPerfil() {
+  // ===== Meu perfil =====
+  function vPerfil() {
     const b = S.barber;
-    return `<div class="ph"><div><span class="eyebrow">Acesso ao painel</span><h1>Meu perfil</h1></div><button class="btn" data-a="logout">${IC.out} Sair do painel</button></div>
-    <div class="cgrid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));align-items:start">
-    <form class="card" id="profForm" style="display:flex;flex-direction:column;gap:14px"><div style="display:flex;gap:14px;align-items:center"><span class="av" style="width:56px;height:56px;font-size:20px;background:var(--acc);color:var(--on-acc)">${esc(initials(b.name))}</span><div><b style="font-size:17px">${esc(b.name)}</b><div class="muted" style="font-size:13px">${esc(b.email || 'Sem e-mail')}</div></div></div>
-     <div class="field"><label for="b-name">Nome</label><input class="input" id="b-name" value="${esc(b.name)}" autocomplete="name"></div>
-     <div class="field"><label for="b-email">E-mail</label><input class="input" id="b-email" type="email" value="${esc(b.email)}" autocomplete="email"></div>
-     <div class="field"><label for="b-user">Usuário de acesso</label><input class="input" id="b-user" value="${esc(b.user)}" autocomplete="username" autocapitalize="none"></div>
-     <button class="btn pri" type="submit">Salvar dados</button></form>
-    <form class="card" id="pwForm" style="display:flex;flex-direction:column;gap:14px"><h3>Trocar senha</h3>
-     <div class="field"><label for="pw-cur">Senha atual</label><input class="input" type="password" id="pw-cur" autocomplete="current-password"></div>
-     <div class="field"><label for="pw-new">Nova senha</label><input class="input" type="password" id="pw-new" autocomplete="new-password"></div>
-     <div class="field"><label for="pw-new2">Repita a nova senha</label><input class="input" type="password" id="pw-new2" autocomplete="new-password"></div>
-     ${V.pwMsg ? `<div class="${V.pwMsg.startsWith('Senha alterada') ? 'muted' : 'err'}" role="alert">${esc(V.pwMsg)}</div>` : ''}<button class="btn pri" type="submit">Salvar nova senha</button></form></div>`;
+    return `<div class="perfil-c">
+      <div class="perfil-topo"><span class="av">${esc(initials(b.name))}</span><div><b>${esc(b.name)}</b><small>Barbeiro · ${esc(S.settings.shopName)}</small></div><button type="button" class="btn-vidro" data-a="logout">${ic('out', 17)}Sair do painel</button></div>
+      <form class="cartao form-g" id="profForm" novalidate><div class="cartao-topo" style="margin:0"><h3><span class="ico-k p">${ic('user', 17)}</span>Dados de acesso</h3></div>
+        <div class="duas"><div class="campo"><label for="pp-n">Nome</label><div class="entrada" id="e-ppn"><input id="pp-n" value="${esc(b.name)}" autocomplete="name"></div></div><div class="campo"><label for="pp-u">Usuário</label><div class="entrada" id="e-ppu"><input id="pp-u" value="${esc(b.user)}" autocomplete="username" autocapitalize="none"></div></div></div>
+        <div class="campo"><label for="pp-e">E-mail</label><div class="entrada" id="e-ppe"><input id="pp-e" type="email" value="${esc(b.email || '')}" autocomplete="email" placeholder="opcional"></div></div>
+        <div><button type="submit" class="btn pri">${ic('check', 17)}Salvar dados</button></div></form>
+      <form class="cartao form-g" id="pwForm" novalidate><div class="cartao-topo" style="margin:0"><h3><span class="ico-k p">${ic('lock', 17)}</span>Trocar senha</h3></div>
+        <div class="campo"><label for="ps-a">Senha atual</label><div class="entrada" id="e-psa"><input id="ps-a" type="password" autocomplete="current-password"></div></div>
+        <div class="duas"><div class="campo"><label for="ps-n">Nova senha</label><div class="entrada" id="e-psn"><input id="ps-n" type="password" placeholder="Mínimo 6 caracteres" autocomplete="new-password"></div></div><div class="campo"><label for="ps-c">Repita a nova senha</label><div class="entrada" id="e-psc"><input id="ps-c" type="password" autocomplete="new-password"></div></div></div>
+        <div><button type="submit" class="btn pri">${ic('check', 17)}Trocar senha</button></div></form></div>`;
   }
 
-  // ===== Gaveta lateral =====
-  function drawer() {
-    const d = V.drawer; let h = '', b = '';
+  // ===== Ficha lateral: agendamento ou cliente =====
+  function openLado(type, id) { V.lado = { type, id }; V.ladoAsk = null; V.sino = false; V.menu = false; render(); }
+  function vLado() {
+    const d = V.lado; let h = '', b = '';
     if (d.type === 'ap') {
       const x = S.appts.find((y) => y.id === d.id);
-      if (!x) { V.drawer = null; return ''; }
+      if (!x) { V.lado = null; return ''; }
       const c = cById(x.clientId);
-      h = `<div><span class="eyebrow">${cap(longDate(x.date))}</span><h2 class="serif numd" style="font-size:30px">${x.time} às ${A.fromMin(A.toMin(x.time) + x.dur)}</h2></div>`;
-      b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="st st-${x.status}">${STATUS[x.status]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
-      <button class="pitem" style="border:1px solid var(--line);padding:12px" data-a="dr-cli" data-id="${c.id}">${avatar(c, 44)}<span class="t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha →</small></span>${c.blocked ? '<span class="tag red">Bloqueado</span>' : ''}</button>
-      <div class="kv"><div><span>Serviço</span><b>${esc(x.service)}</b></div><div><span>Duração</span><b>${x.dur} min</b></div><div><span>Valor</span><b class="num">${money(x.price)}</b></div></div>
-      ${x.status === 'agendado' ? `<div class="actgrid"><button class="btn okb" data-a="st" data-id="${x.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn badb" data-a="st" data-id="${x.id}" data-s="faltou">${IC.x} Não veio</button></div>
-       ${V.dConfirm === 'a' + x.id ? `<div class="confirm-inline"><span>Cancelar e liberar o horário?</span><button class="btn sm badb" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button class="btn sm" data-a="confirm-no">Não</button></div>` : `<button class="btn ghost" data-a="ap-cancel-ask" data-id="${x.id}">Cancelar agendamento</button>`}`
-        : `<button class="btn" data-a="st" data-id="${x.id}" data-s="agendado">Voltar para agendado</button>`}
-      <button class="btn" data-a="copy" data-v="${maskPhone(c.phone)}">${IC.copy} Copiar WhatsApp</button>`;
-    } else if (d.type === 'cli') {
-      const all = clientStats(); const x = all.find((y) => y.c.id === d.id);
-      if (!x) { V.drawer = null; return ''; }
-      const hist = sortAp(live().filter((y) => y.clientId === x.c.id)).reverse().slice(0, 12);
-      h = `<div style="display:flex;gap:14px;align-items:center">${avatar(x.c, 52)}<div><h2 class="serif" style="font-size:26px">${esc(x.c.name)}</h2><span class="muted" style="font-size:13px">Cliente desde ${shortDate(x.c.since)}/${A.parse(x.c.since).getFullYear()}</span></div></div>`;
-      const fut = live().filter((y) => y.clientId === x.c.id && y.status === 'agendado' && y.date >= TODAY).length;
-      const blk = x.c.blocked
-        ? `<div class="blkbox"><span class="ic">${IC.ban}</span><div class="t"><b>Bloqueado no site</b><small>${esc(x.c.blockedReason || 'Bloqueado pelo barbeiro')}. Não consegue marcar pelo site; pelo painel você ainda consegue agendar.</small></div><button class="btn sm" data-a="cli-unblock" data-id="${x.c.id}">Desbloquear</button></div>`
-        : '';
-      const blkAct = x.c.blocked ? ''
-        : V.dConfirm === 'b' + x.c.id
-          ? `<div class="confirm-inline blkask"><span>Bloquear ${esc(x.c.name.split(' ')[0])}? Não vai conseguir mais marcar pelo site${fut ? ` e ${fut === 1 ? 'o horário já marcado será cancelado' : `os ${fut} horários já marcados serão cancelados`}` : ''}.</span><button class="btn sm badb" data-a="cli-block" data-id="${x.c.id}">Sim, bloquear</button><button class="btn sm" data-a="confirm-no">Não</button></div>`
-          : `<button class="btn ghost badb" data-a="cli-block-ask" data-id="${x.c.id}">${IC.ban} Bloquear cliente</button>`;
-      b = `${blk}<div class="tags" style="display:flex;gap:6px;flex-wrap:wrap">${tagsFor(x, all)}</div>
-      <div class="kgrid" style="grid-template-columns:repeat(3,1fr);gap:8px">${[['Visitas', x.visits], ['Gastou', money0(x.spent)], ['Faltas', x.faltas]].map(([l, v]) => `<div class="stat" style="padding:12px;gap:2px"><span class="eyebrow" style="font-size:10px">${l}</span><span class="v" style="font-size:20px">${v}</span></div>`).join('')}</div>
-      <form id="cliForm" data-id="${x.c.id}" style="display:flex;flex-direction:column;gap:12px"><div class="field"><label for="cd-name">Nome</label><input class="input" id="cd-name" value="${esc(x.c.name)}"></div>
-      <div class="field"><label for="cd-phone">WhatsApp</label><div style="display:flex;gap:6px"><input class="input" id="cd-phone" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"><button class="btn" type="button" data-a="copy" data-v="${maskPhone(x.c.phone)}" aria-label="Copiar WhatsApp">${IC.copy}</button></div></div>
-      <button class="btn pri" type="submit">Salvar dados</button></form>
-      <div><span class="eyebrow">Histórico</span><div class="plist" style="margin-top:8px">${hist.map((y) => `<button class="pitem" data-a="dr-ap" data-id="${y.id}"><b class="num" style="width:46px;font-size:13px">${shortDate(y.date)}</b><span class="t"><b style="font-size:13.5px">${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}</small></span><span class="st st-${y.status}">${STATUS[y.status]}</span></button>`).join('') || '<div class="muted">Sem histórico.</div>'}</div></div>
-      ${blkAct}`;
+      const pil = { agendado: x.date <= TODAY ? ['laranja', 'Aguardando'] : ['azul', 'Confirmado'], realizado: ['verde', 'Atendido'], faltou: ['vermelho', 'Não veio'], cancelado: ['cinza', 'Cancelado'] }[x.status];
+      h = `<div><small class="muted" style="font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase">${cap(longDate(x.date))}</small><h3 style="font-size:28px;font-family:var(--f-body);font-weight:800;letter-spacing:-.02em">${x.time} às ${endOf(x.time, x.dur)}</h3></div>`;
+      b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
+        <button type="button" class="quem-l" data-a="cli" data-id="${c.id}">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>
+        <div class="kv"><div><small>Serviço</small><b>${esc(x.service)}</b></div><div><small>Duração</small><b>${tempo(x.dur)}</b></div><div><small>Valor</small><b class="num">${money(x.price)}</b></div></div>
+        ${x.status === 'agendado' ? `<div class="acoes"><button type="button" class="btn ok-soft" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 16)}Atendido</button><button type="button" class="btn verm" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 16)}Não veio</button></div>
+          ${V.ladoAsk === 'cancel' ? `<div class="confirma"><span>Cancelar o horário de ${esc(first(c.name))}? A vaga fica livre no site.</span><div><button type="button" class="btn p sim" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>` : `<button type="button" class="btn" data-a="lado-ask" data-v="cancel">${ic('ban', 16)}Cancelar agendamento</button>`}`
+          : `<button type="button" class="btn" data-a="st" data-id="${x.id}" data-s="agendado">${ic('undo', 16)}Voltar para aguardando</button>`}
+        ${c.phone ? `<a class="btn" href="${waLink(c.phone, x.status === 'agendado' ? waMsg(x) : '')}" target="_blank" rel="noopener">${ic('whats', 16)}Chamar no WhatsApp</a>` : ''}`;
     } else {
-      const nv = V.nv; const svc = S.services.find((s) => s.id === nv.svc) || S.services[0];
-      const free = daySlots(nv.date).filter((t) => !isPast(nv.date, t) && fits(nv.date, t, svc.dur));
-      if (!free.includes(nv.time)) nv.time = free[0] || '';
-      h = '<div><span class="eyebrow">Encaixe ou agendamento por telefone</span><h2 class="serif" style="font-size:30px">Novo agendamento</h2></div>';
-      b = `<form id="nvForm" style="display:flex;flex-direction:column;gap:16px">${nvClientField(nv)}
-      <div class="field"><label for="nv-svc">Serviço</label><select class="input" id="nv-svc" data-ch="nv" data-k="svc">${S.services.map((s) => `<option value="${s.id}" ${nv.svc === s.id ? 'selected' : ''}>${esc(s.name)} · ${money0(s.price)} · ${s.dur} min</option>`).join('')}</select></div>
-      <div class="row2"><div class="field"><label for="nv-date">Dia</label><input type="date" class="input" id="nv-date" min="${TODAY}" value="${nv.date}" data-ch="nv" data-k="date"></div><div class="field"><label for="nv-time">Horário livre</label><select class="input" id="nv-time" data-ch="nv" data-k="time" ${free.length ? '' : 'disabled'}>${free.map((t) => `<option ${nv.time === t ? 'selected' : ''}>${t}</option>`).join('') || '<option>Sem horários</option>'}</select></div></div>
-      ${free.length ? '' : `<div class="muted" style="font-size:13px">${daySlots(nv.date).length ? 'Não há horário livre para esse serviço nesse dia.' : 'A barbearia está fechada nesse dia.'}</div>`}
-      ${nv.err ? `<div class="err" role="alert">${esc(nv.err)}</div>` : ''}<button class="btn pri" style="padding:14px" type="submit" ${free.length ? '' : 'disabled'}>Agendar</button></form>`;
+      const { arr } = clientStats(); const x = arr.find((y) => y.c.id === d.id);
+      if (!x) { V.lado = null; return ''; }
+      const hist = sortAp(live().filter((y) => y.clientId === x.c.id)).reverse().slice(0, 12);
+      const fut = live().filter((y) => y.clientId === x.c.id && y.status === 'agendado' && y.date >= TODAY).length;
+      h = `<div style="display:flex;gap:14px;align-items:center;min-width:0">${avk(x.c, 52)}<div style="min-width:0"><h3 style="font-size:22px">${esc(x.c.name)}</h3><span class="muted" style="font-size:13px">Cliente desde ${shortDate(x.c.since)}/${A.parse(x.c.since).getFullYear()}</span></div></div>`;
+      const pilHist = { agendado: ['azul', 'Marcado'], realizado: ['verde', 'Atendido'], faltou: ['vermelho', 'Não veio'] };
+      b = `${x.c.blocked ? `<div class="faixa" data-t="erro"><span class="f-ico">${ic('ban', 17)}</span><div><strong>Bloqueado no site</strong><p>${esc(x.c.blockedReason || 'Bloqueado pelo barbeiro')}. Pelo painel você ainda consegue agendar.</p></div><button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${x.c.id}">Desbloquear</button></div>` : ''}
+        ${x.tags.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${x.tags.map(([k, t]) => `<span class="tag" data-k="${k}">${t}</span>`).join('')}</div>` : ''}
+        <div class="kv"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div><div><small>Faltas</small><b>${x.faltas}</b></div></div>
+        <form id="cliForm" data-id="${x.c.id}" class="form-g" novalidate><div class="campo"><label for="cd-n">Nome</label><div class="entrada" id="e-cdn"><input id="cd-n" value="${esc(x.c.name)}"></div></div>
+          <div class="campo"><label for="cd-p">WhatsApp</label><div class="entrada" id="e-cdp">${ic('whats', 18)}<input id="cd-p" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"></div></div>
+          <div class="acoes"><button type="submit" class="btn pri">${ic('check', 16)}Salvar dados</button>${x.c.phone ? `<a class="btn" href="${waLink(x.c.phone)}" target="_blank" rel="noopener">${ic('whats', 16)}WhatsApp</a>` : ''}</div></form>
+        <div><span class="lab" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div></div>
+        ${x.c.blocked ? '' : V.ladoAsk === 'block' ? `<div class="confirma"><span>Bloquear ${esc(first(x.c.name))}? Não vai conseguir mais marcar pelo site${fut ? ` e ${fut === 1 ? 'o horário já marcado será cancelado' : `os ${fut} horários já marcados serão cancelados`}` : ''}.</span><div><button type="button" class="btn p sim" data-a="bloq" data-id="${x.c.id}">Sim, bloquear</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>`
+          : `<button type="button" class="btn verm" data-a="lado-ask" data-v="block">${ic('ban', 16)}Bloquear cliente</button>`}`;
     }
-    return `<div class="dr-bg" data-a="dr-close"></div><aside class="drawer" role="dialog" aria-modal="true"><div class="dh">${h}<button class="xbtn" data-a="dr-close" aria-label="Fechar">${IC.x.replace('<svg', '<svg width="16" height="16"')}</button></div><div class="db">${b}</div></aside>`;
+    return `<div class="overlay" data-a="lado-x"></div><aside class="lado" role="dialog" aria-modal="true"><div class="folha-topo">${h}<button type="button" class="btn-icone" data-a="lado-x" aria-label="Fechar">${ic('x', 18)}</button></div>${b}</aside>`;
   }
 
-  // ----- Novo agendamento: busca de cliente enquanto digita -----
-  const norm = (t) => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  function nvClientField(nv) {
-    if (nv.cid) {
-      const c = cById(nv.cid);
-      return `<div class="field"><span class="lab">Cliente</span><div class="pick">${avatar(c, 38)}<span class="t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></span><button type="button" class="btn sm ghost" data-a="nv-clear">Trocar</button></div></div>`;
-    }
-    if (nv.isNew) {
-      return `<div class="field"><div style="display:flex;justify-content:space-between;align-items:center"><span class="lab">Cliente novo</span><button type="button" class="btn sm ghost" data-a="nv-clear">Buscar cliente cadastrado</button></div>
-       <div class="row2"><div class="field"><label for="nv-name">Nome</label><input class="input" id="nv-name" value="${esc(nv.name)}" data-in="nv-name" autocomplete="off"></div><div class="field"><label for="nv-phone">WhatsApp</label><input class="input" id="nv-phone" value="${esc(maskPhone(nv.phone))}" data-in="nv-phone" inputmode="tel" autocomplete="off"></div></div></div>`;
-    }
-    return `<div class="field"><label for="nv-q">Cliente</label><div class="ac"><span class="ac-ic">${IC.search}</span><input class="input" id="nv-q" placeholder="Digite o nome ou o WhatsApp" value="${esc(nv.q)}" data-in="nv-q" autocomplete="off" role="combobox" aria-controls="nv-sug" aria-autocomplete="list"></div><div id="nv-sug" class="sug" role="listbox">${nvSug(nv.q)}</div></div>`;
+  // ===== Novo agendamento (encaixe ou cliente que ligou) =====
+  const norm = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  function novoAg() {
+    V.menu = false; V.sino = false; V.lado = null;
+    V.nv = { cid: '', q: '', isNew: false, name: '', phone: '', date: TODAY, time: '', svc: S.services[0].id };
+    for (let i = 0; i < 60 && !freeCount(V.nv.date); i++) V.nv.date = A.iso(A.addDays(NOW, i + 1)); // primeiro dia com horário livre
+    render(); setTimeout(() => { const f = $('#nv-q'); if (f && matchMedia('(min-width:901px)').matches) f.focus(); }, 60);
   }
   function nvSug(q) {
     q = String(q || '').trim();
     if (q.length < 2) return '';
     const d = digits(q); const nq = norm(q);
     const l = S.clients.filter((c) => norm(c.name).includes(nq) || (d.length >= 3 && c.phone.includes(d)))
-      .sort((p, r) => (norm(p.name).startsWith(nq) ? 0 : 1) - (norm(r.name).startsWith(nq) ? 0 : 1) || p.name.localeCompare(r.name)).slice(0, 6);
-    return l.map((c) => `<button type="button" class="sgi" role="option" data-a="nv-pick" data-id="${c.id}">${avatar(c, 32)}<span class="t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></span></button>`).join('')
-      + `<button type="button" class="sgi new" data-a="nv-new"><span class="nic">${IC.plus}</span><span class="t"><b>Cadastrar cliente novo</b><small>${l.length ? 'Não é nenhum desses?' : 'Nenhum cliente encontrado com esse nome'}</small></span></button>`;
+      .sort((p, r) => (norm(p.name).startsWith(nq) ? 0 : 1) - (norm(r.name).startsWith(nq) ? 0 : 1) || p.name.localeCompare(r.name)).slice(0, 5);
+    return l.map((c) => `<button type="button" data-a="nv-pick" data-id="${c.id}">${avk(c, 30)}<span><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></span></button>`).join('')
+      + `<button type="button" class="novo" data-a="nv-new"><span class="ico-k p" style="width:30px;height:30px">${ic('userplus', 16)}</span><span><b>Cadastrar cliente novo</b><small>${l.length ? 'Não é nenhum desses?' : 'Ninguém com esse nome ainda'}</small></span></button>`;
+  }
+  function nvAviso() {
+    const nv = V.nv; const s = S.services.find((x) => x.id === nv.svc) || S.services[0];
+    if (!nv.time) return '';
+    if (fits(nv.date, nv.time, s.dur)) return `<div class="faixa" data-t="ok"><span class="f-ico">${ic('check', 18)}</span><div><strong>Cabe certinho</strong><p>${esc(s.name)} das ${nv.time} às ${endOf(nv.time, s.dur)}.</p></div></div>`;
+    const r = whyNot(nv.date, nv.time, s.dur) || { m: 'ocupado' };
+    const mot = r.m === 'fecha' ? `Terminaria às ${endOf(nv.time, s.dur)}, depois do fechamento.` : r.m === 'almoco' ? 'Entraria no horário de almoço.' : `Às ${r.t || 'esse horário'} já tem cliente.`;
+    return `<div class="faixa pisca" data-t="erro"><span class="f-ico">${ic('ban', 18)}</span><div><strong>${esc(s.name)} não cabe às ${nv.time}</strong><p>${mot} Escolha outro horário ou serviço.</p></div></div>`;
+  }
+  function vNovo() {
+    const nv = V.nv; const dias = [];
+    for (let i = 0; i < 60 && dias.length < 30; i++) { const ds = A.iso(A.addDays(NOW, i)); if (daySlots(ds).length) dias.push(ds); }
+    if (!dias.includes(nv.date)) dias.unshift(nv.date);
+    const bz = busy(nv.date); const livres = daySlots(nv.date).filter((t) => !bz.has(t) && !isPast(nv.date, t));
+    if (nv.time && !livres.includes(nv.time)) nv.time = '';
+    let cli;
+    if (nv.cid) { const c = cById(nv.cid); cli = `<div class="sel-cli">${ic('userok', 18)}<span>${esc(c.name)} <small>${maskPhone(c.phone)}</small></span><button type="button" class="link" data-a="nv-clear">Trocar</button></div>`; }
+    else if (nv.isNew) cli = `<div class="duas"><div class="entrada" id="e-nvn">${ic('user', 18)}<input id="nv-name" data-in="nv-name" value="${esc(nv.name)}" placeholder="Nome e sobrenome" autocomplete="off" aria-label="Nome do cliente"></div><div class="entrada" id="e-nvp">${ic('whats', 18)}<input id="nv-phone" data-in="nv-phone" value="${esc(maskPhone(nv.phone))}" placeholder="WhatsApp com DDD" inputmode="tel" autocomplete="off" aria-label="WhatsApp do cliente"></div></div><button type="button" class="link" data-a="nv-clear" style="align-self:flex-start">${ic('search', 15)}Buscar cliente cadastrado</button>`;
+    else cli = `<div class="entrada" id="e-nvq">${ic('search', 18)}<input id="nv-q" data-in="nv-q" placeholder="Digite o nome ou o WhatsApp" value="${esc(nv.q)}" autocomplete="off" aria-controls="nvSug"></div><div class="sugest" id="nvSug">${nvSug(nv.q)}</div>`;
+    return `<div class="overlay" data-a="nv-x"></div><form class="janela" id="nvForm" novalidate role="dialog" aria-modal="true" aria-label="Novo agendamento">
+      <div class="folha-topo"><div><h3>Novo agendamento</h3><p>Para encaixe ou cliente que ligou.</p></div><button type="button" class="btn-icone" data-a="nv-x" aria-label="Fechar">${ic('x', 18)}</button></div>
+      <div class="campo"><label for="nv-q">${nv.isNew ? 'Cliente novo' : 'Cliente'}</label>${cli}</div>
+      <div class="duas"><div class="campo"><label for="nv-d">Dia</label><div class="entrada">${ic('cal', 18)}<select id="nv-d" data-nv="date">${dias.map((ds) => `<option value="${ds}" ${ds === nv.date ? 'selected' : ''}>${DOW[A.parse(ds).getDay()]}, ${shortDate(ds)}${ds === TODAY ? ' (hoje)' : ds === TOMORROW ? ' (amanhã)' : ''}</option>`).join('')}</select></div></div>
+        <div class="campo"><label for="nv-h">Horário livre</label><div class="entrada" id="e-nvh">${ic('clock', 18)}<select id="nv-h" data-nv="time" ${livres.length ? '' : 'disabled'}><option value="">${livres.length ? 'Escolha' : 'Sem horário livre'}</option>${livres.map((t) => `<option value="${t}" ${nv.time === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div></div>
+      <div class="campo"><label for="nv-s">Serviço</label><div class="entrada" id="e-nvs">${ic('scissors', 18)}<select id="nv-s" data-nv="svc">${S.services.map((s) => `<option value="${s.id}" ${nv.svc === s.id ? 'selected' : ''}>${esc(s.name)} · ${tempo(s.dur)} · ${money(s.price)}</option>`).join('')}</select></div></div>
+      <div id="nvAviso">${livres.length ? nvAviso() : `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${daySlots(nv.date).length ? 'Esse dia está cheio' : 'A barbearia está fechada nesse dia'}</strong><p>Escolha outro dia.</p></div></div>`}</div>
+      <button type="submit" class="btn pri bloco">${ic('check', 18)}Agendar</button></form>`;
   }
 
-  // ===== Eventos =====
+  // ===== Ações =====
   const put = (path, body) => api('PUT', path, body);
-  const saveSettings = (patch, msg = 'Salvo.') => act(() => put('/api/admin/configuracoes', patch), msg);
+  function setStatus(id, s, quiet) {
+    const x = S.appts.find((y) => y.id === id); if (!x) return;
+    const c = cById(x.clientId); const prev = x.status;
+    V.cancel = null; V.ladoAsk = null;
+    act(() => api('PATCH', '/api/admin/agendamentos/' + id, { status: s }), (r) => {
+      if (quiet) { alerta('info', 'Pronto, desfeito', 'O horário voltou para aguardando.'); return; }
+      if (s === 'realizado') alerta('ok', `${first(c.name)} atendido!`, `${x.service} · ${money(x.price)} entrou no ${x.date === TODAY ? 'caixa de hoje' : 'financeiro'}.`, [{ r: 'Desfazer', fn: () => setStatus(id, prev, true) }], 6000);
+      else if (s === 'faltou') {
+        const bl = r && r.blockedClient;
+        alerta('aviso', `${c.name} não compareceu`, bl ? `${first(c.name)} já faltou ${S.settings.autoBlock} ${S.settings.autoBlock === 1 ? 'vez' : 'vezes'} e foi bloqueado no site. Para liberar, abra a ficha do cliente.` : 'A falta foi registrada no cadastro do cliente.', [{ r: 'Desfazer', fn: () => setStatus(id, prev, true) }]);
+      } else if (s === 'cancelado') alerta('ok', 'Horário cancelado', `A vaga de ${diaTxt(x.date)} às ${x.time} ficou livre no site.`);
+      else alerta('info', 'Voltou para aguardando', `${first(c.name)} · ${diaTxt(x.date)} às ${x.time}.`);
+    });
+  }
+  function irPara(sec, extra) {
+    if (V.sec === 'cfg' && sec !== 'cfg' && dirty()) {
+      alerta('aviso', 'Você tem mudanças não salvas', 'Salve antes de sair das configurações para não perder o que mudou.', [
+        { r: 'Salvar e sair', fn: async () => { if (await salvarCfg()) irPara(sec, extra); } },
+        { r: 'Sair sem salvar', fn: () => { V.draft = null; irPara(sec, extra); } },
+      ]);
+      marcar('#salvarBarra', 'aviso');
+      V.menu = false; render(); return;
+    }
+    if (sec !== 'cfg') V.draft = null;
+    V.sec = sec; V.menu = false; V.sino = false; V.lado = null; V.cancel = null; V.despAsk = null;
+    if (extra) extra();
+    render(); window.scrollTo({ top: 0 });
+  }
 
   document.addEventListener('submit', (e) => {
     const f = e.target; e.preventDefault();
     if (f.id === 'loginForm') {
       Som.unlock();
       const user = $('#l-user').value.trim(), pass = $('#l-pass').value; V.loginUser = user;
+      if (!user || !pass) { alerta('erro', 'Preencha usuário e senha', !user ? 'O campo de usuário está vazio.' : 'O campo de senha está vazio.'); marcar(!user ? '#e-luser' : '#e-lpass'); return; }
       api('POST', '/api/admin/login', { user, pass })
-        .then(async () => { V.logged = true; V.loginErr = ''; await reload(); connectLive(); render(); })
-        .catch((err) => { V.loginErr = err.message; render(); });
+        .then(async () => {
+          V.logged = true; V.sec = 'inicio'; await reload(); connectLive(); render();
+          const ag = S.appts.filter((x) => x.date === TODAY && x.status === 'agendado').length;
+          alerta('ok', `Bem-vindo de volta, ${first(S.barber.name)}!`, ag ? `Você tem ${ag} cliente${ag > 1 ? 's' : ''} aguardando hoje.` : 'Nenhum cliente aguardando agora.');
+        })
+        .catch((err) => { alerta('erro', err.status === 429 ? 'Muitas tentativas' : 'Não deu para entrar', err.message); marcar('#e-lpass'); });
     }
-    if (f.id === 'expForm') {
-      const desc = $('#e-desc').value.trim(); const val = parseFloat($('#e-val').value.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.')); const date = $('#e-date').value;
-      if (!desc) { V.expErr = 'Escreva o que foi pago.'; render(); return; }
-      if (!(val > 0)) { V.expErr = 'Digite um valor maior que zero.'; render(); return; }
-      V.expErr = '';
-      act(() => api('POST', '/api/admin/despesas', { desc, val, date }), 'Despesa lançada.');
-    }
-    if (f.id === 'blkForm') {
-      const date = $('#blk-date').value, why = $('#blk-why').value.trim();
-      if (!date) { alerta('aviso', 'Falta escolher o dia', 'Escolha o dia que quer bloquear.'); marcar('#blk-date', 'aviso'); return; }
-      act(async () => {
-        const r = await api('POST', '/api/admin/bloqueios', { date, why });
-        if (r.existing) setTimeout(() => alerta('aviso', 'Dia bloqueado', `Atenção: ${r.existing} cliente${r.existing > 1 ? 's já tinham' : ' já tinha'} horário nesse dia.`), 50);
-      }, 'Dia bloqueado. Ninguém consegue marcar nele.');
+    if (f.id === 'despForm') {
+      const t = $('#d-t').value.trim(); const v = parseFloat($('#d-v').value.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.'));
+      const date = $('#d-d').value; const cat = $('#d-c').value;
+      if (!t) { alerta('erro', 'Falta a descrição', 'Escreva o que foi comprado ou pago.'); marcar('#e-dt'); return; }
+      if (!(v > 0)) { alerta('erro', 'Valor inválido', 'Digite um valor maior que zero. Ex.: 59,90'); marcar('#e-dv'); return; }
+      if (!date) { alerta('erro', 'Falta a data', 'Escolha o dia em que foi pago.'); marcar('#e-dd'); return; }
+      act(() => api('POST', '/api/admin/despesas', { desc: t, val: v, date, cat }), () => {
+        V.despForm = false; const [de, ate] = faixaPer(); if (date < de || date > ate) V.per = 'mes';
+        alerta('ok', 'Despesa lançada', `${t} · ${money(v)}`);
+      });
     }
     if (f.id === 'cliForm') {
-      const name = $('#cd-name').value.trim(), phone = digits($('#cd-phone').value);
-      const err = A.nameError(name) || A.phoneError(phone);
-      if (err) { alerta('erro', 'Confira os dados', err); return; }
-      act(() => put('/api/admin/clientes/' + f.dataset.id, { name, phone }), 'Cliente atualizado.');
+      const name = $('#cd-n').value.trim(), phone = digits($('#cd-p').value);
+      const ne = A.nameError(name), pe = A.phoneError(phone);
+      if (ne || pe) { alerta('erro', 'Confira os dados', ne || pe); marcar(ne ? '#e-cdn' : '#e-cdp'); return; }
+      act(() => put('/api/admin/clientes/' + f.dataset.id, { name, phone }), () => alerta('ok', 'Cliente atualizado', `${name} · ${maskPhone(phone)}`));
     }
     if (f.id === 'nvForm') {
-      const nv = V.nv;
-      const body = { date: nv.date, time: nv.time, serviceId: nv.svc };
-      if (nv.cid) body.clientId = nv.cid;
+      const nv = V.nv; const s = S.services.find((x) => x.id === nv.svc);
+      const body = { date: nv.date, time: nv.time, serviceId: nv.svc }; let nome;
+      if (nv.cid) { body.clientId = nv.cid; nome = cById(nv.cid).name; }
       else if (nv.isNew) {
         const ne = A.nameError(nv.name), pe = A.phoneError(nv.phone);
-        if (ne || pe) { nv.err = ne || pe; render(); alerta('erro', 'Confira o cliente', nv.err); return; }
-        body.name = A.tidyName(nv.name); body.phone = A.phoneDigits(nv.phone);
-      }
-      else { nv.err = 'Escolha o cliente: digite o nome e toque nele na lista, ou cadastre um cliente novo.'; render(); alerta('aviso', 'Falta escolher o cliente', nv.err); marcar('#nv-q', 'aviso'); return; }
+        if (ne || pe) { alerta('erro', 'Confira o cliente', ne || pe); marcar(ne ? '#e-nvn' : '#e-nvp'); return; }
+        body.name = A.tidyName(nv.name); body.phone = A.phoneDigits(nv.phone); nome = body.name;
+      } else { alerta('erro', 'Escolha o cliente', 'Digite o nome e toque nele na lista, ou cadastre um cliente novo.'); marcar('#e-nvq'); return; }
+      if (!nv.time) { alerta('erro', 'Escolha o horário', 'Só aparecem horários livres na lista.'); marcar('#e-nvh'); return; }
+      if (!fits(nv.date, nv.time, s.dur)) { alerta('erro', `${s.name} não cabe às ${nv.time}`, 'Esse serviço precisa de mais tempo livre. Troque o horário ou o serviço.'); marcar('#e-nvs'); return; }
       api('POST', '/api/admin/agendamentos', body)
-        .then(async () => { V.drawer = null; await reload(); toast(`Agendado para ${shortDate(nv.date)} às ${nv.time}.`); render(); })
-        .catch((err) => { nv.err = err.message; render(); alerta('erro', 'Não foi possível agendar', err.message); });
+        .then(async () => { V.nv = null; await reload(); render(); alerta('ok', 'Agendamento criado', `${nome} · ${diaTxt(body.date)} às ${body.time}. O horário já aparece ocupado no site.`); })
+        .catch((err) => alerta('erro', 'Não foi possível agendar', err.message));
     }
     if (f.id === 'profForm') {
-      act(() => put('/api/admin/perfil', { name: $('#b-name').value, email: $('#b-email').value, user: $('#b-user').value }), 'Dados salvos.');
+      const name = $('#pp-n').value.trim(), user = $('#pp-u').value.trim(), email = $('#pp-e').value.trim();
+      if (!name) { alerta('erro', 'Falta o seu nome', 'Escreva como quer aparecer no painel.'); marcar('#e-ppn'); return; }
+      if (!/^[a-z0-9._-]{3,30}$/i.test(user)) { alerta('erro', 'Usuário inválido', 'Use de 3 a 30 letras ou números, sem espaço.'); marcar('#e-ppu'); return; }
+      act(() => put('/api/admin/perfil', { name, email, user }), () => alerta('ok', 'Dados salvos', 'Use o novo usuário no próximo login, se você trocou.'));
     }
     if (f.id === 'pwForm') {
-      const cur = $('#pw-cur').value, n1 = $('#pw-new').value, n2 = $('#pw-new2').value;
-      if (n1.length < 6) { V.pwMsg = 'A nova senha precisa ter pelo menos 6 caracteres.'; render(); return; }
-      if (n1 !== n2) { V.pwMsg = 'As duas senhas novas não são iguais.'; render(); return; }
+      const cur = $('#ps-a').value, n1 = $('#ps-n').value, n2 = $('#ps-c').value;
+      if (!cur) { alerta('erro', 'Falta a senha atual', 'Digite a senha que você usa hoje.'); marcar('#e-psa'); return; }
+      if (n1.length < 6) { alerta('erro', 'Senha muito curta', 'A nova senha precisa ter pelo menos 6 caracteres.'); marcar('#e-psn'); return; }
+      if (n1 !== n2) { alerta('erro', 'As senhas não são iguais', 'Digite a mesma senha nos dois campos.'); marcar('#e-psc'); return; }
       api('PUT', '/api/admin/senha', { cur, next: n1 })
-        .then(() => { V.pwMsg = 'Senha alterada. Use a nova senha no próximo acesso.'; render(); })
-        .catch((err) => { V.pwMsg = err.message; render(); });
+        .then(() => { alerta('ok', 'Senha trocada', 'Use a nova senha no próximo login.'); ['#ps-a', '#ps-n', '#ps-c'].forEach((s) => { $(s).value = ''; }); })
+        .catch((err) => { alerta('erro', 'Não deu para trocar a senha', err.message); marcar('#e-psa'); });
     }
   });
 
   document.addEventListener('click', (e) => {
     if (Som.enabled()) Som.unlock();
-    if (V.bellOpen && !e.target.closest('.bellwrap')) { V.bellOpen = false; render(); }
     const el = e.target.closest('[data-a]'); if (!el) return;
-    const a = el.dataset.a;
+    const a = el.dataset.a; const id = el.dataset.id; const v = el.dataset.v;
     switch (a) {
-      case 'logout': api('POST', '/api/admin/logout').finally(() => { if (es) es.close(); V.logged = false; S = null; V.drawer = null; V.more = false; render(); }); break;
-      case 'sec': V.sec = el.dataset.s; V.pwMsg = ''; V.drawer = null; V.dConfirm = null; V.more = false; render(); window.scrollTo({ top: 0 }); break;
-      case 'more': V.more = true; V.bellOpen = false; render(); break;
-      case 'more-close': V.more = false; render(); break;
-      case 'pg': {
-        V.pg[el.dataset.k] = Number(el.dataset.p); render();
-        const t = document.querySelector('.chips') || document.querySelector('.main'); if (t) window.scrollTo({ top: Math.max(0, t.getBoundingClientRect().top + window.scrollY - 90) });
+      case 'olho': { const i = $('#l-pass'); i.type = i.type === 'password' ? 'text' : 'password'; el.innerHTML = ic(i.type === 'password' ? 'eye' : 'eyeoff', 18); el.setAttribute('aria-label', i.type === 'password' ? 'Mostrar senha' : 'Esconder senha'); break; }
+      case 'logout': api('POST', '/api/admin/logout').finally(() => { if (es) es.close(); V.logged = false; S = null; V.menu = false; V.lado = null; V.draft = null; render(); alerta('info', 'Você saiu do painel', 'Até logo!'); }); break;
+      case 'sec': irPara(el.dataset.s); break;
+      case 'menu': V.menu = !V.menu; render(); break;
+      case 'sino':
+        V.sino = !V.sino; V.nClearAsk = false; V.menu = false; render();
+        if (V.sino && unread()) api('POST', '/api/admin/avisos/lidos').then(() => { setTimeout(() => { S.notifications.forEach((n) => (n.read = true)); render(); }, 2500); }).catch(() => {});
         break;
-      }
-      case 'go-agenda': V.sec = 'agenda'; V.agView = 'lista'; V.agTab = 'hoje'; V.pg.ag = 1; render(); break;
-      case 'go-sumidos': V.sec = 'cli'; V.cliFilter = 'sumidos'; V.pg.cli = 1; render(); break;
-      case 'bell':
-        V.bellOpen = !V.bellOpen; V.nClearAsk = false; render();
-        if (V.bellOpen && unread()) {
-          api('POST', '/api/admin/avisos/lidos').then(() => { setTimeout(() => { S.notifications.forEach((n) => (n.read = true)); render(); }, 2500); }).catch(() => {});
-        }
-        break;
-      case 'n-del': {
-        const id = el.dataset.id; S.notifications = S.notifications.filter((x) => x.id !== id); render();
-        api('DELETE', '/api/admin/avisos/' + id).catch((err) => { alerta('erro', 'Não deu certo', err.message); reload().then(render); });
-        break;
-      }
+      case 'n-del': { S.notifications = S.notifications.filter((x) => x.id !== id); render(); api('DELETE', '/api/admin/avisos/' + id).catch((err) => { alerta('erro', 'Não deu certo', err.message); reload().then(render); }); break; }
       case 'n-clear-ask': V.nClearAsk = true; render(); break;
       case 'n-clear-no': V.nClearAsk = false; render(); break;
-      case 'n-clear': V.nClearAsk = false; act(() => api('DELETE', '/api/admin/avisos'), 'Avisos apagados.'); break;
-      case 'sound-toggle': Som.setEnabled(!Som.enabled()); if (Som.enabled()) { Som.unlock(); setTimeout(() => Som.play('novo'), 100); } render(); break;
-      case 'sound-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); toast('Som ativado. É assim que vai tocar quando chegar agendamento.'); break;
-      case 'ag-view': V.agView = el.dataset.v; render(); break;
-      case 'ag-tab': V.agTab = el.dataset.t; V.pg.ag = 1; render(); break;
-      case 'wk': { const n = Number(el.dataset.n); V.weekStart = n === 0 ? A.iso(A.addDays(NOW, -NOW.getDay())) : A.iso(A.addDays(A.parse(V.weekStart), n)); render(); break; }
-      case 'cal-m': { const m = A.parse(V.calMonth); V.calMonth = A.iso(new Date(m.getFullYear(), m.getMonth() + Number(el.dataset.n), 1)); render(); break; }
-      case 'cal-day': V.calDay = el.dataset.d; render(); break;
-      case 'f-range': V.fin = el.dataset.r; V.pg.exp = 1; render(); break;
-      case 'e-ask': V.dConfirm = 'e' + el.dataset.id; render(); break;
-      case 'svc-ask': V.dConfirm = 's' + el.dataset.id; render(); break;
-      case 'ap-cancel-ask': V.dConfirm = 'a' + el.dataset.id; render(); break;
-      case 'confirm-no': V.dConfirm = null; render(); break;
-      case 'e-del': V.dConfirm = null; act(() => api('DELETE', '/api/admin/despesas/' + el.dataset.id), 'Despesa excluída.'); break;
-      case 'st': {
-        e.stopPropagation(); const s = el.dataset.s; V.dConfirm = null;
-        act(() => api('PATCH', '/api/admin/agendamentos/' + el.dataset.id, { status: s }),
-          (r) => (r && r.blockedClient
-            ? `${r.blockedClient.name.split(' ')[0]} já faltou ${S.settings.autoBlock} ${S.settings.autoBlock === 1 ? 'vez' : 'vezes'} e foi bloqueado no site. Para liberar, abra a ficha do cliente.`
-            : { realizado: 'Atendimento concluído. Já entrou no financeiro.', faltou: 'Marcado como não compareceu.', cancelado: 'Agendamento cancelado. O horário ficou livre.', agendado: 'Voltou para agendado.' }[s]));
+      case 'n-clear': V.nClearAsk = false; act(() => api('DELETE', '/api/admin/avisos'), () => alerta('ok', 'Avisos apagados', 'Os agendamentos continuam na agenda.')); break;
+      case 'som-toggle': Som.setEnabled(!Som.enabled()); if (Som.enabled()) { Som.unlock(); setTimeout(() => Som.play('novo'), 100); } render(); break;
+      case 'som-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); alerta('ok', 'Som ativado', 'É assim que vai tocar quando chegar agendamento novo.'); break;
+      case 'pag': {
+        V.pg[el.dataset.k] = Number(el.dataset.p); render();
+        const t = $('.p-main'); if (t) window.scrollTo({ top: 0, behavior: 'smooth' });
         break;
       }
-      case 'dr-ap': V.drawer = { type: 'ap', id: el.dataset.id }; V.dConfirm = null; V.bellOpen = false; render(); break;
-      case 'dr-cli': V.drawer = { type: 'cli', id: el.dataset.id }; render(); break;
-      case 'dr-novo':
-        V.more = false;
-        V.nv = { cid: '', q: '', isNew: false, name: '', phone: '', date: TODAY, svc: S.services[0].id, time: '', err: '' };
-        for (let i = 0; i < 60 && !freeCount(V.nv.date); i++) V.nv.date = A.iso(A.addDays(NOW, i + 1)); // primeiro dia com horário livre
-        V.drawer = { type: 'novo' }; render(); break;
-      case 'dr-close': V.drawer = null; V.dConfirm = null; render(); break;
-      case 'nv-pick': V.nv.cid = el.dataset.id; V.nv.isNew = false; V.nv.err = ''; render(); break;
+      case 'ir-ag': irPara('agenda', () => { V.vista = 'lista'; V.ab = v; V.pg.ag = 1; }); break;
+      case 'ir-cfg': irPara('cfg'); break;
+      case 'ir-folga': irPara('cfg'); setTimeout(() => { const i = $('#cfg-folga'); if (i) { i.closest('.cartao').scrollIntoView({ behavior: 'smooth', block: 'center' }); marcar('#e-folga', 'aviso'); } }, 80); break;
+      case 'ir-desp': irPara('fin', () => { V.despForm = true; }); setTimeout(() => { const c = $('#cartaoDesp'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); const i = $('#d-t'); if (i) i.focus({ preventScroll: true }); }, 80); break;
+      case 'ir-sumidos': irPara('cli', () => { V.cliF = 'sumidos'; V.cliQ = ''; V.pg.cli = 1; }); break;
+      case 'ag-ab': V.ab = v; V.vista = 'lista'; V.pg.ag = 1; V.cancel = null; render(); break;
+      case 'vista': V.vista = v; if (v === 'lista' && V.ab === 'dia') V.ab = 'hoje'; render(); break;
+      case 'ver-dia': V.ab = 'dia'; V.agDia = v; V.vista = 'lista'; V.pg.ag = 1; render(); window.scrollTo({ top: 0 }); break;
+      case 'mes-n': { const n = Number(el.dataset.n); const m = A.parse(V.calMonth); V.calMonth = n === 0 ? TODAY.slice(0, 8) + '01' : A.iso(new Date(m.getFullYear(), m.getMonth() + n, 1)); render(); break; }
+      case 'cancel-ask': V.cancel = id; render(); break;
+      case 'cancel-no': V.cancel = null; render(); break;
+      case 'st': e.stopPropagation(); setStatus(id, el.dataset.s); break;
+      case 'ap': openLado('ap', id); break;
+      case 'cli': openLado('cli', id); break;
+      case 'lado-x': V.lado = null; V.ladoAsk = null; render(); break;
+      case 'lado-ask': V.ladoAsk = v; render(); break;
+      case 'lado-no': V.ladoAsk = null; render(); break;
+      case 'bloq': V.ladoAsk = null;
+        act(() => api('POST', `/api/admin/clientes/${id}/bloquear`, {}), (r) => alerta('aviso', 'Cliente bloqueado no site', `${first(cById(id).name)} não consegue mais marcar pelo site.${r && r.cancelled && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`, [{ r: 'Desfazer', fn: () => act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('info', 'Bloqueio desfeito', 'O cliente já pode marcar pelo site de novo.')) }]));
+        break;
+      case 'desbloq': e.stopPropagation(); act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('ok', `${first(cById(id).name)} desbloqueado`, 'Já pode agendar pelo site de novo.')); break;
+      case 'cli-f': V.cliF = v; V.pg.cli = 1; render(); break;
+      case 'per': V.per = v; V.pg.desp = 1; render(); break;
+      case 'desp-form': V.despForm = !V.despForm; render(); if (V.despForm) setTimeout(() => { const i = $('#d-t'); if (i) i.focus(); }, 30); break;
+      case 'desp-ask': V.despAsk = id; render(); break;
+      case 'desp-no': V.despAsk = null; render(); break;
+      case 'desp-del': { const d = S.expenses.find((x) => x.id === id); V.despAsk = null;
+        act(() => api('DELETE', '/api/admin/despesas/' + id), () => alerta('ok', 'Despesa excluída', d ? `${d.desc} · ${money(d.val)}` : '', d ? [{ r: 'Desfazer', fn: () => act(() => api('POST', '/api/admin/despesas', { desc: d.desc, val: d.val, date: d.date, cat: d.cat }), () => alerta('info', 'Despesa de volta', `${d.desc} · ${money(d.val)}`)) }] : []));
+        break; }
+      case 'novo': novoAg(); break;
+      case 'nv-x': V.nv = null; render(); break;
+      case 'nv-pick': V.nv.cid = id; V.nv.isNew = false; render(); break;
       case 'nv-new': {
-        const q = V.nv.q.trim(); V.nv.isNew = true; V.nv.cid = ''; V.nv.err = '';
+        const q = V.nv.q.trim(); V.nv.isNew = true; V.nv.cid = '';
         if (digits(q).length >= 8 && !/[a-zà-ú]/i.test(q)) V.nv.phone = q; else V.nv.name = q;
         render(); const f = $(V.nv.name ? '#nv-phone' : '#nv-name'); if (f) f.focus();
         break;
       }
-      case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; V.nv.err = ''; render(); { const f = $('#nv-q'); if (f) f.focus(); } break;
-      case 'copy': { const v = el.dataset.v; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('WhatsApp copiado.'), () => toast(`WhatsApp: ${v}`)); break; }
-      case 'cli-f': V.cliFilter = el.dataset.f; V.pg.cli = 1; render(); break;
-      case 'cli-block-ask': V.dConfirm = 'b' + el.dataset.id; render(); break;
-      case 'cli-block': V.dConfirm = null;
-        act(() => api('POST', `/api/admin/clientes/${el.dataset.id}/bloquear`, {}),
-          (r) => `Cliente bloqueado.${r && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`);
-        break;
-      case 'cli-unblock': act(() => api('POST', `/api/admin/clientes/${el.dataset.id}/desbloquear`, {}), 'Cliente desbloqueado. Já pode marcar pelo site de novo.'); break;
-      case 'cfg-color': saveSettings({ color: el.dataset.c }, 'Cor atualizada.'); break;
-      case 'cfg-logo-rm': saveSettings({ logo: null }, 'Logo removida.'); break;
+      case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; render(); { const f = $('#nv-q'); if (f) f.focus(); } break;
+      // configurações
+      case 'cor': V.draft.color = v; render(); break;
+      case 'dia-on': { const x = V.draft.days[Number(v)]; x.on = !x.on; render(); break; }
       case 'bk-quick': {
-        const n = Number(el.dataset.n); const bookTo = A.iso(new Date(NOW.getFullYear(), NOW.getMonth() + n + 1, 0));
-        const patch = { bookTo }; if (S.settings.bookFrom > bookTo) patch.bookFrom = TODAY;
-        saveSettings(patch, `Agenda aberta até ${shortDate(bookTo)}.`); break;
+        const n = Number(el.dataset.n); V.draft.bookTo = A.iso(new Date(NOW.getFullYear(), NOW.getMonth() + n + 1, 0));
+        if (V.draft.bookFrom > V.draft.bookTo || V.draft.bookFrom < TODAY) V.draft.bookFrom = TODAY;
+        render(); alerta('info', `Agenda aberta até ${shortDate(V.draft.bookTo)}`, 'Toque em "Salvar alterações" para valer no site.', [], 4000); break;
       }
-      case 'blk-del': act(() => api('DELETE', '/api/admin/bloqueios/' + el.dataset.d), 'Dia liberado para agendamento.'); break;
-      case 'svc-add': act(() => api('POST', '/api/admin/servicos', { name: 'Novo serviço', price: 30, dur: 30 }), 'Serviço criado. Edite o nome e o preço.'); break;
-      case 'svc-del': V.dConfirm = null; act(() => api('DELETE', '/api/admin/servicos/' + el.dataset.id), 'Serviço removido.'); break;
+      case 'salvar': salvarCfg(); break;
+      case 'logo-rm': act(() => put('/api/admin/configuracoes', { logo: null }), () => { V.draft.logo = S.settings.logo; alerta('ok', 'Logo removida', 'No lugar dela aparecem as iniciais da barbearia.'); }); break;
+      case 'svc-add': act(() => api('POST', '/api/admin/servicos', { name: 'Novo serviço', price: 30, dur: 30 }), (r) => {
+        if (V.draft && r && r.service) V.draft.svcs.push({ id: r.service.id, name: r.service.name, price: String(r.service.price).replace('.', ','), dur: r.service.dur });
+        alerta('ok', 'Serviço criado', 'Troque o nome, a duração e o preço, e depois salve.');
+        setTimeout(() => { const l = document.querySelectorAll('[data-svc][data-k="name"]'); const i = l[l.length - 1]; if (i) { i.focus(); i.select(); } }, 60);
+      }); break;
+      case 'svc-del': {
+        if (S.services.length <= 1) { alerta('erro', 'Precisa ter pelo menos 1 serviço', 'Sem serviço, o cliente não consegue agendar.'); return; }
+        const s = S.services.find((x) => x.id === id);
+        act(() => api('DELETE', '/api/admin/servicos/' + id), () => {
+          if (V.draft) V.draft.svcs = V.draft.svcs.filter((x) => x.id !== id);
+          alerta('aviso', `${s.name} removido`, 'Ele saiu do site. Atendimentos antigos continuam no financeiro.', [{ r: 'Desfazer', fn: () => act(() => api('POST', '/api/admin/servicos', { name: s.name, price: s.price, dur: s.dur }), (r) => { if (V.draft && r && r.service) V.draft.svcs.push({ id: r.service.id, name: r.service.name, price: String(r.service.price).replace('.', ','), dur: r.service.dur }); alerta('info', `${s.name} voltou`, 'O serviço aparece no site de novo.'); }) }]);
+        });
+        break;
+      }
+      case 'folga-del': act(() => api('DELETE', '/api/admin/bloqueios/' + v), () => alerta('ok', 'Dia liberado', `${shortDate(v)} voltou a aceitar agendamentos.`)); break;
+      case 'folga-add': {
+        const d = $('#cfg-folga').value; const why = $('#cfg-folga-r').value.trim() || 'Folga';
+        if (!d) { alerta('erro', 'Escolha a data primeiro', 'Toque no campo de data e escolha o dia da folga.'); marcar('#e-folga'); return; }
+        if (blockedOf(d)) { alerta('aviso', 'Esse dia já está bloqueado', `${shortDate(d)} já aparece como fechado no site.`); marcar('#e-folga', 'aviso'); return; }
+        act(() => api('POST', '/api/admin/bloqueios', { date: d, why }), (r) => {
+          if (r && r.existing) alerta('aviso', `Dia bloqueado, mas tem ${r.existing} cliente${r.existing > 1 ? 's' : ''} marcado${r.existing > 1 ? 's' : ''}`, 'Avise esses clientes para remarcar. Eles estão na agenda desse dia.', [{ r: 'Ver agenda do dia', fn: () => irPara('agenda', () => { V.ab = 'dia'; V.agDia = d; V.vista = 'lista'; V.pg.ag = 1; }) }]);
+          else alerta('ok', 'Dia bloqueado', `${shortDate(d)} não aparece mais para agendar.`);
+        });
+        break;
+      }
     }
   });
 
   document.addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button]')) { e.preventDefault(); e.target.click(); }
-    if (e.target.id === 'nv-q' && (e.key === 'Enter' || e.key === 'ArrowDown')) { e.preventDefault(); const f = $('#nv-sug .sgi'); if (f) { if (e.key === 'Enter') f.click(); else f.focus(); } }
-    if (e.target.matches('.sgi') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); const n = e.key === 'ArrowDown' ? e.target.nextElementSibling : e.target.previousElementSibling || $('#nv-q'); if (n) n.focus(); }
-    if (e.key === 'Escape') { if (V.drawer) { V.drawer = null; render(); } else if (V.more) { V.more = false; render(); } else if (V.bellOpen) { V.bellOpen = false; render(); } }
+    if (e.target.id === 'nv-q' && (e.key === 'Enter' || e.key === 'ArrowDown')) { e.preventDefault(); const f = $('#nvSug button'); if (f) { if (e.key === 'Enter') f.click(); else f.focus(); } }
+    if (e.target.matches('#nvSug button') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); const n = e.key === 'ArrowDown' ? e.target.nextElementSibling : e.target.previousElementSibling || $('#nv-q'); if (n) n.focus(); }
+    if (e.key === 'Escape') {
+      if (V.nv) V.nv = null; else if (V.lado) V.lado = null; else if (V.sino) V.sino = false; else if (V.menu) V.menu = false; else return;
+      render();
+    }
   });
 
   document.addEventListener('input', (e) => {
-    const el = e.target; const k = el.dataset.in; if (!k) return;
-    if (['mask', 'nv-phone'].includes(k)) el.value = maskPhone(el.value);
-    if (k === 'nv-name') V.nv.name = el.value;
-    if (k === 'nv-q') { V.nv.q = el.value; V.nv.err = ''; $('#nv-sug').innerHTML = nvSug(el.value); }
-    if (k === 'nv-phone') V.nv.phone = el.value;
-    if (k === 'cli-search') { V.cliSearch = el.value; V.pg.cli = 1; $('#cli-list').innerHTML = cliCards(); }
+    const el = e.target;
+    if (el.dataset.in) {
+      const k = el.dataset.in;
+      if (['mask', 'nv-phone'].includes(k)) el.value = maskPhone(el.value);
+      if (k === 'nv-name') V.nv.name = el.value;
+      if (k === 'nv-phone') V.nv.phone = el.value;
+      if (k === 'nv-q') { V.nv.q = el.value; $('#nvSug').innerHTML = nvSug(el.value); }
+      if (k === 'cli-q') { V.cliQ = el.value; V.pg.cli = 1; $('#cliLista').innerHTML = cliLista(); }
+    }
+    if (!V.draft) return;
+    if (el.dataset.d) { if (el.dataset.mask) el.value = maskPhone(el.value); V.draft[el.dataset.d] = el.dataset.num ? Number(el.value) : el.value; paintSave(); }
+    if (el.dataset.dia) { V.draft.days[Number(el.dataset.dia)][el.dataset.k] = el.value; paintSave(); }
+    if (el.dataset.svc) { const s = V.draft.svcs[Number(el.dataset.svc)]; s[el.dataset.k] = el.dataset.k === 'dur' ? Number(el.value) : el.value; paintSave(); }
+    if (el.dataset.ch === 'cor-custom') { V.draft.custom = el.value; V.draft.color = 'custom'; applyTheme(V.draft); paintSave(); }
   });
 
   document.addEventListener('change', (e) => {
-    const el = e.target; const k = el.dataset.ch; if (!k) return;
-    if (k === 'f-from') { V.from = el.value; V.pg.exp = 1; render(); }
-    if (k === 'f-to') { V.to = el.value; V.pg.exp = 1; render(); }
-    if (k === 'nv') { V.nv[el.dataset.k] = el.value; V.nv.err = ''; render(); }
-    if (k === 'cfg') {
-      const v = el.value.trim(); const key = el.dataset.k;
-      if (!v && key !== 'address') { alerta('erro', 'Campo vazio', 'Esse campo não pode ficar vazio.'); render(); return; }
-      saveSettings({ [key]: v });
+    const el = e.target;
+    if (el.dataset.nv) {
+      V.nv[el.dataset.nv] = el.value;
+      if (el.dataset.nv === 'date') { V.nv.time = ''; render(); return; }
+      $('#nvAviso').innerHTML = nvAviso();
+      return;
     }
-    if (k === 'cfg-num') saveSettings({ [el.dataset.k]: Number(el.value) }, 'Proteção atualizada.');
-    if (k === 'cfg-custom') saveSettings({ custom: el.value, color: 'custom' }, 'Cor atualizada.');
-    if (k === 'cfg-closed') {
-      const i = Number(el.dataset.i);
-      const closed = el.checked ? [...S.settings.closed, i] : S.settings.closed.filter((x) => x !== i);
-      saveSettings({ closed });
-    }
-    if (k === 'cfg-logo') {
+    if (V.draft && (el.dataset.d === 'shopName' || el.dataset.d === 'tagline' || el.dataset.svc)) { const p = document.querySelector('.previa-cel'); if (p) p.outerHTML = previa(V.draft); }
+    const k = el.dataset.ch; if (!k) return;
+    if (k === 'per-de') { V.de = el.value || V.de; V.pg.desp = 1; render(); }
+    if (k === 'per-ate') { V.ate = el.value || V.ate; V.pg.desp = 1; render(); }
+    if (k === 'cor-custom') render();
+    if (k === 'logo') {
       const f = el.files[0]; if (!f) return;
       if (f.size > 1.5e6) { alerta('erro', 'Imagem muito grande', 'Use uma imagem de até 1,5 MB.'); return; }
-      const fr = new FileReader(); fr.onload = () => saveSettings({ logo: fr.result }, 'Logo atualizada.'); fr.readAsDataURL(f);
-    }
-    if (k === 'svc') {
-      const row = el.closest('[data-svc]'); const id = row.dataset.svc; const s = S.services.find((x) => x.id === id);
-      const body = { name: s.name, price: s.price, dur: s.dur };
-      const key = el.dataset.k;
-      if (key === 'price') { const v = parseFloat(el.value.replace(',', '.')); if (!(v >= 0)) { alerta('erro', 'Preço inválido', 'Digite só números. Ex.: 35 ou 35,50.'); render(); return; } body.price = v; }
-      else if (key === 'dur') body.dur = Number(el.value);
-      else { if (!el.value.trim()) { alerta('erro', 'Nome vazio', 'O nome do serviço não pode ficar vazio.'); render(); return; } body.name = el.value.trim(); }
-      act(() => put('/api/admin/servicos/' + id, body), 'Serviço salvo.');
+      const fr = new FileReader();
+      fr.onload = () => act(() => put('/api/admin/configuracoes', { logo: fr.result }), () => { if (V.draft) V.draft.logo = S.settings.logo; alerta('ok', 'Logo atualizada', 'Ela já aparece no site e no painel.'); });
+      fr.readAsDataURL(f);
     }
   });
 
   // Atualiza a tela a cada minuto (horários que passaram, "próximo cliente")
   setInterval(() => {
-    if (!V.logged || !S || V.drawer || document.activeElement?.matches('input,select')) return;
+    if (!V.logged || !S || V.lado || V.nv || document.activeElement?.matches('input,select')) return;
     if (A.todayIn() !== TODAY) reload().then(render).catch(() => {}); else render();
   }, 60000);
+
+  // Avisa antes de fechar a aba com configurações não salvas
+  window.addEventListener('beforeunload', (e) => { if (V.sec === 'cfg' && dirty()) { e.preventDefault(); e.returnValue = ''; } });
 
   // ----- iniciar: se já estiver logado (cookie), entra direto -----
   (async function start() {
@@ -703,7 +912,7 @@
       await reload(); V.logged = true; connectLive();
     } catch (e) {
       V.logged = false; S = null;
-      if (e.status !== 401) V.loginErr = e.message;
+      if (e.status && e.status !== 401) setTimeout(() => alerta('erro', 'Não deu para carregar o painel', e.message), 50);
     }
     render();
   })();
