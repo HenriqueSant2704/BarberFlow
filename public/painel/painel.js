@@ -61,9 +61,10 @@
     if (V.saving) return;
     V.saving = true;
     try {
-      await fn();
+      const r = await fn();
       await reload();
-      if (okMsg) toast(okMsg);
+      const msg = typeof okMsg === 'function' ? okMsg(r) : okMsg;
+      if (msg) toast(msg);
     } catch (e) {
       if (e.status === 401) { V.logged = false; S = null; }
       toast(e.message);
@@ -320,6 +321,7 @@
     if (x.last) { const d = Math.round((NOW - A.parse(x.last)) / 864e5); if (d >= 25 && !x.next) t.push(`<span class="tag red">Sumido há ${d} dias</span>`); }
     if (x.next) t.push(`<span class="tag">Volta ${shortDate(x.next)}</span>`);
     if (x.faltas >= 2) t.push(`<span class="tag red">${x.faltas} faltas</span>`);
+    if (x.c.blocked) t.unshift('<span class="tag red">Bloqueado</span>');
     return t.join('');
   }
   function cliCards() {
@@ -328,14 +330,16 @@
     if (V.cliFilter === 'frequentes') l.sort((p, q2) => q2.visits - p.visits);
     else if (V.cliFilter === 'gastam') l.sort((p, q2) => q2.spent - p.spent);
     else if (V.cliFilter === 'sumidos') l = l.filter((x) => !x.thisMonth).sort((p, q2) => (p.last || '').localeCompare(q2.last || ''));
+    else if (V.cliFilter === 'bloqueados') l = l.filter((x) => x.c.blocked).sort((p, q2) => p.c.name.localeCompare(q2.c.name));
     else l.sort((p, q2) => p.c.name.localeCompare(q2.c.name));
-    if (!l.length) return `<div class="empty">${S.clients.length ? 'Nenhum cliente encontrado.' : 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'}</div>`;
+    if (!l.length) return `<div class="empty">${V.cliFilter === 'bloqueados' && !q ? 'Nenhum cliente bloqueado.' : S.clients.length ? 'Nenhum cliente encontrado.' : 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'}</div>`;
     const pg = pageOf(l, 'cli');
     return `<div class="cgrid">${pg.items.map((x) => `<button class="ccard" data-a="dr-cli" data-id="${x.c.id}"><div class="hd">${avatar(x.c, 46)}<div style="min-width:0"><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div></div><div class="tags">${tagsFor(x, all)}</div><div class="nums"><div><b>${x.visits}</b><small>visitas</small></div><div><b>${money0(x.spent)}</b><small>gastou</small></div><div><b>${x.last ? shortDate(x.last) : '—'}</b><small>última</small></div></div></button>`).join('')}</div>${pager(pg, 'cli')}`;
   }
   function vCli() {
     const all = clientStats();
     const f = [['todos', 'Todos', all.length], ['frequentes', 'Mais frequentes', null], ['gastam', 'Quem mais gasta', null], ['sumidos', 'Não vieram este mês', all.filter((x) => !x.thisMonth).length]];
+    const nb = all.filter((x) => x.c.blocked).length; if (nb || V.cliFilter === 'bloqueados') f.push(['bloqueados', 'Bloqueados', nb]);
     return `<div class="ph"><div><span class="eyebrow">${all.length} clientes cadastrados</span><h1>Clientes</h1></div><label class="search">${IC.search}<input class="input" id="cli-search" placeholder="Buscar por nome ou WhatsApp" value="${esc(V.cliSearch)}" data-in="cli-search" aria-label="Buscar cliente"></label></div>
     <div class="chips">${f.map(([k, l, n]) => `<button class="chipb ${V.cliFilter === k ? 'on' : ''}" data-a="cli-f" data-f="${k}">${l}${n != null ? `<span class="n">${n}</span>` : ''}</button>`).join('')}</div><div id="cli-list">${cliCards()}</div>`;
   }
@@ -375,10 +379,27 @@
       <div style="display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--line);padding-top:14px"><span class="lab" style="font-size:12.5px;font-weight:700;color:var(--muted)">Dias bloqueados (folgas, feriados, cursos)</span>
        <form class="expform blkform" id="blkForm"><input type="date" class="input" id="blk-date" min="${TODAY}" aria-label="Dia"><input class="input" id="blk-why" placeholder="Motivo. Ex.: feriado" maxlength="80"><button class="btn acc" type="submit">Bloquear</button></form>
        ${blocked.map((b) => `<div class="exp"><span class="ic">${IC.cal}</span><span class="t"><b>${cap(longDate(b.date))}</b><small>${esc(b.why || 'Bloqueado')}</small></span><button class="btn sm ghost" data-a="blk-del" data-d="${b.date}">Liberar</button></div>`).join('') || '<div class="muted" style="font-size:12.5px">Nenhum dia bloqueado.</div>'}</div></div>
+     ${protCard()}
      <div class="card" style="display:flex;flex-direction:column;gap:10px"><div class="card-h" style="margin:0 0 4px"><h3>Serviços e preços</h3><button class="btn sm acc" data-a="svc-add">${IC.plus} Novo serviço</button></div>
       ${S.services.map((s) => `<div class="svrow" data-svc="${s.id}"><span class="ic">${svcIcon(s.name)}</span><input class="input" value="${esc(s.name)}" data-ch="svc" data-k="name" aria-label="Nome do serviço" maxlength="60"><input class="input" inputmode="decimal" value="${String(s.price).replace('.', ',')}" data-ch="svc" data-k="price" aria-label="Preço em reais"><select class="input" data-ch="svc" data-k="dur" aria-label="Duração">${[30, 60, 90, 120].map((m) => `<option value="${m}" ${s.dur === m ? 'selected' : ''}>${m} min</option>`).join('')}</select>${V.dConfirm === 's' + s.id ? `<span style="display:flex;gap:4px"><button class="btn sm badb" data-a="svc-del" data-id="${s.id}">Remover</button><button class="btn sm ghost" data-a="confirm-no">Não</button></span>` : `<button class="btn sm ghost badb" data-a="svc-ask" data-id="${s.id}" aria-label="Remover serviço">${IC.x.replace('<svg', '<svg width="15" height="15"')}</button>`}</div>`).join('')}
       <div class="muted" style="font-size:12.5px">Mudar o preço não altera atendimentos antigos. O financeiro guarda o valor cobrado no dia.</div></div>
     </div><div class="preview"><span class="eyebrow">Prévia ao vivo</span><div class="pmini"><div class="scr">${previewPhone()}</div></div></div></div>`;
+  }
+
+  // Proteção contra agendamentos de trote (vale só para o site; no painel você marca à vontade)
+  function protCard() {
+    const st = S.settings;
+    const sel = (key, id, label, opts, help) => `<div class="field"><label for="${id}">${label}</label><select class="input" id="${id}" data-ch="cfg-num" data-k="${key}">${opts.map(([v, l]) => `<option value="${v}" ${st[key] === v ? 'selected' : ''}>${l}</option>`).join('')}</select><small class="muted hlp">${help}</small></div>`;
+    const n = (a, one, many) => a.map((v) => [v, `${v} ${v === 1 ? one : many}`]);
+    const bl = S.clients.filter((c) => c.blocked);
+    return `<div class="card prot" style="display:flex;flex-direction:column;gap:14px"><div class="card-h" style="margin:0"><h3>Proteção contra trote</h3><span class="ic sh">${IC.shield}</span></div>
+      <div class="muted" style="font-size:13px;margin-top:-6px">Freia quem marca vários horários pelo site só para atrapalhar. Pelo painel você continua marcando sem limite.</div>
+      <div class="row2">${sel('maxActive', 'cfg-ma', 'Horários marcados por cliente', [[0, 'Sem limite'], ...n([1, 2, 3, 4, 5], 'por vez', 'ao mesmo tempo')], 'Quando um passa, pode marcar outro.')}
+      ${sel('maxPerDay', 'cfg-md', 'Horários no mesmo dia', [[0, 'Sem limite'], ...n([1, 2, 3], 'por cliente', 'por cliente')], 'Evita a mesma pessoa pegar a tarde inteira.')}</div>
+      <div class="row2">${sel('maxDevice', 'cfg-mv', 'Agendamentos por celular em 24 h', [[0, 'Sem limite'], ...n([2, 3, 4, 5, 8, 10], 'agendamento', 'agendamentos')], 'Pega quem inventa vários nomes no mesmo celular.')}
+      ${sel('autoBlock', 'cfg-ab', 'Bloquear quem faltar sem avisar', [[0, 'Nunca bloquear sozinho'], ...[1, 2, 3, 4, 5].map((v) => [v, `Depois de ${v} falta${v > 1 ? 's' : ''}`])], 'Conta quando você toca em "Não veio".')}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;border-top:1px dashed var(--line);padding-top:14px"><span class="lab" style="font-size:12.5px;font-weight:700;color:var(--muted)">Clientes bloqueados${bl.length ? ` (${bl.length})` : ''}</span>
+       ${bl.map((c) => `<div class="exp"><span class="ic">${IC.ban}</span><span class="t"><b>${esc(c.name)}</b><small>${esc(c.blockedReason || 'Bloqueado pelo barbeiro')}</small></span><button class="btn sm ghost" data-a="cli-unblock" data-id="${c.id}">Desbloquear</button></div>`).join('') || '<div class="muted" style="font-size:12.5px">Ninguém bloqueado. Para bloquear, abra a ficha do cliente.</div>'}</div></div>`;
   }
 
   // ===== Perfil =====
@@ -407,7 +428,7 @@
       const c = cById(x.clientId);
       h = `<div><span class="eyebrow">${cap(longDate(x.date))}</span><h2 class="serif numd" style="font-size:30px">${x.time} às ${A.fromMin(A.toMin(x.time) + x.dur)}</h2></div>`;
       b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="st st-${x.status}">${STATUS[x.status]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
-      <button class="pitem" style="border:1px solid var(--line);padding:12px" data-a="dr-cli" data-id="${c.id}">${avatar(c, 44)}<span class="t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha →</small></span></button>
+      <button class="pitem" style="border:1px solid var(--line);padding:12px" data-a="dr-cli" data-id="${c.id}">${avatar(c, 44)}<span class="t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha →</small></span>${c.blocked ? '<span class="tag red">Bloqueado</span>' : ''}</button>
       <div class="kv"><div><span>Serviço</span><b>${esc(x.service)}</b></div><div><span>Duração</span><b>${x.dur} min</b></div><div><span>Valor</span><b class="num">${money(x.price)}</b></div></div>
       ${x.status === 'agendado' ? `<div class="actgrid"><button class="btn okb" data-a="st" data-id="${x.id}" data-s="realizado">${IC.check} Atendido</button><button class="btn badb" data-a="st" data-id="${x.id}" data-s="faltou">${IC.x} Não veio</button></div>
        ${V.dConfirm === 'a' + x.id ? `<div class="confirm-inline"><span>Cancelar e liberar o horário?</span><button class="btn sm badb" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button class="btn sm" data-a="confirm-no">Não</button></div>` : `<button class="btn ghost" data-a="ap-cancel-ask" data-id="${x.id}">Cancelar agendamento</button>`}`
@@ -418,12 +439,21 @@
       if (!x) { V.drawer = null; return ''; }
       const hist = sortAp(live().filter((y) => y.clientId === x.c.id)).reverse().slice(0, 12);
       h = `<div style="display:flex;gap:14px;align-items:center">${avatar(x.c, 52)}<div><h2 class="serif" style="font-size:26px">${esc(x.c.name)}</h2><span class="muted" style="font-size:13px">Cliente desde ${shortDate(x.c.since)}/${A.parse(x.c.since).getFullYear()}</span></div></div>`;
-      b = `<div class="tags" style="display:flex;gap:6px;flex-wrap:wrap">${tagsFor(x, all)}</div>
+      const fut = live().filter((y) => y.clientId === x.c.id && y.status === 'agendado' && y.date >= TODAY).length;
+      const blk = x.c.blocked
+        ? `<div class="blkbox"><span class="ic">${IC.ban}</span><div class="t"><b>Bloqueado no site</b><small>${esc(x.c.blockedReason || 'Bloqueado pelo barbeiro')}. Não consegue marcar pelo site; pelo painel você ainda consegue agendar.</small></div><button class="btn sm" data-a="cli-unblock" data-id="${x.c.id}">Desbloquear</button></div>`
+        : '';
+      const blkAct = x.c.blocked ? ''
+        : V.dConfirm === 'b' + x.c.id
+          ? `<div class="confirm-inline blkask"><span>Bloquear ${esc(x.c.name.split(' ')[0])}? Não vai conseguir mais marcar pelo site${fut ? ` e ${fut === 1 ? 'o horário já marcado será cancelado' : `os ${fut} horários já marcados serão cancelados`}` : ''}.</span><button class="btn sm badb" data-a="cli-block" data-id="${x.c.id}">Sim, bloquear</button><button class="btn sm" data-a="confirm-no">Não</button></div>`
+          : `<button class="btn ghost badb" data-a="cli-block-ask" data-id="${x.c.id}">${IC.ban} Bloquear cliente</button>`;
+      b = `${blk}<div class="tags" style="display:flex;gap:6px;flex-wrap:wrap">${tagsFor(x, all)}</div>
       <div class="kgrid" style="grid-template-columns:repeat(3,1fr);gap:8px">${[['Visitas', x.visits], ['Gastou', money0(x.spent)], ['Faltas', x.faltas]].map(([l, v]) => `<div class="stat" style="padding:12px;gap:2px"><span class="eyebrow" style="font-size:10px">${l}</span><span class="v" style="font-size:20px">${v}</span></div>`).join('')}</div>
       <form id="cliForm" data-id="${x.c.id}" style="display:flex;flex-direction:column;gap:12px"><div class="field"><label for="cd-name">Nome</label><input class="input" id="cd-name" value="${esc(x.c.name)}"></div>
       <div class="field"><label for="cd-phone">WhatsApp</label><div style="display:flex;gap:6px"><input class="input" id="cd-phone" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"><button class="btn" type="button" data-a="copy" data-v="${maskPhone(x.c.phone)}" aria-label="Copiar WhatsApp">${IC.copy}</button></div></div>
       <button class="btn pri" type="submit">Salvar dados</button></form>
-      <div><span class="eyebrow">Histórico</span><div class="plist" style="margin-top:8px">${hist.map((y) => `<button class="pitem" data-a="dr-ap" data-id="${y.id}"><b class="num" style="width:46px;font-size:13px">${shortDate(y.date)}</b><span class="t"><b style="font-size:13.5px">${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}</small></span><span class="st st-${y.status}">${STATUS[y.status]}</span></button>`).join('') || '<div class="muted">Sem histórico.</div>'}</div></div>`;
+      <div><span class="eyebrow">Histórico</span><div class="plist" style="margin-top:8px">${hist.map((y) => `<button class="pitem" data-a="dr-ap" data-id="${y.id}"><b class="num" style="width:46px;font-size:13px">${shortDate(y.date)}</b><span class="t"><b style="font-size:13.5px">${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}</small></span><span class="st st-${y.status}">${STATUS[y.status]}</span></button>`).join('') || '<div class="muted">Sem histórico.</div>'}</div></div>
+      ${blkAct}`;
     } else {
       const nv = V.nv; const svc = S.services.find((s) => s.id === nv.svc) || S.services[0];
       const free = daySlots(nv.date).filter((t) => !isPast(nv.date, t) && fits(nv.date, t, svc.dur));
@@ -569,7 +599,9 @@
       case 'st': {
         e.stopPropagation(); const s = el.dataset.s; V.dConfirm = null;
         act(() => api('PATCH', '/api/admin/agendamentos/' + el.dataset.id, { status: s }),
-          { realizado: 'Atendimento concluído. Já entrou no financeiro.', faltou: 'Marcado como não compareceu.', cancelado: 'Agendamento cancelado. O horário ficou livre.', agendado: 'Voltou para agendado.' }[s]);
+          (r) => (r && r.blockedClient
+            ? `${r.blockedClient.name.split(' ')[0]} já faltou ${S.settings.autoBlock} ${S.settings.autoBlock === 1 ? 'vez' : 'vezes'} e foi bloqueado no site. Para liberar, abra a ficha do cliente.`
+            : { realizado: 'Atendimento concluído. Já entrou no financeiro.', faltou: 'Marcado como não compareceu.', cancelado: 'Agendamento cancelado. O horário ficou livre.', agendado: 'Voltou para agendado.' }[s]));
         break;
       }
       case 'dr-ap': V.drawer = { type: 'ap', id: el.dataset.id }; V.dConfirm = null; V.bellOpen = false; render(); break;
@@ -590,6 +622,12 @@
       case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; V.nv.err = ''; render(); { const f = $('#nv-q'); if (f) f.focus(); } break;
       case 'copy': { const v = el.dataset.v; (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('WhatsApp copiado.'), () => toast(`WhatsApp: ${v}`)); break; }
       case 'cli-f': V.cliFilter = el.dataset.f; V.pg.cli = 1; render(); break;
+      case 'cli-block-ask': V.dConfirm = 'b' + el.dataset.id; render(); break;
+      case 'cli-block': V.dConfirm = null;
+        act(() => api('POST', `/api/admin/clientes/${el.dataset.id}/bloquear`, {}),
+          (r) => `Cliente bloqueado.${r && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`);
+        break;
+      case 'cli-unblock': act(() => api('POST', `/api/admin/clientes/${el.dataset.id}/desbloquear`, {}), 'Cliente desbloqueado. Já pode marcar pelo site de novo.'); break;
       case 'cfg-color': saveSettings({ color: el.dataset.c }, 'Cor atualizada.'); break;
       case 'cfg-logo-rm': saveSettings({ logo: null }, 'Logo removida.'); break;
       case 'bk-quick': {
@@ -629,6 +667,7 @@
       if (!v && key !== 'address') { toast('Esse campo não pode ficar vazio.'); render(); return; }
       saveSettings({ [key]: v });
     }
+    if (k === 'cfg-num') saveSettings({ [el.dataset.k]: Number(el.value) }, 'Proteção atualizada.');
     if (k === 'cfg-custom') saveSettings({ custom: el.value, color: 'custom' }, 'Cor atualizada.');
     if (k === 'cfg-closed') {
       const i = Number(el.dataset.i);

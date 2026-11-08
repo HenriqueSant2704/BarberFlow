@@ -6,9 +6,13 @@ const mapSettings = (r) => ({
   color: r.color, custom: r.custom_color,
   open: r.open_time, close: r.close_time, lunchStart: r.lunch_start, lunchEnd: r.lunch_end,
   closed: (r.closed_days || []).map(Number), bookFrom: r.book_from, bookTo: r.book_to,
+  maxActive: r.max_active, maxPerDay: r.max_per_day, maxDevice: r.max_device, autoBlock: r.auto_block,
 });
 const mapService = (r) => ({ id: String(r.id), name: r.name, price: r.price, dur: r.duration });
-const mapClient = (r) => ({ id: String(r.id), name: r.name, phone: r.phone, since: r.created_at });
+const mapClient = (r) => ({
+  id: String(r.id), name: r.name, phone: r.phone, since: r.created_at,
+  blocked: !!r.blocked, blockedReason: r.blocked_reason || '',
+});
 const mapAppt = (r) => ({
   id: String(r.id), date: r.date, time: r.time, clientId: String(r.client_id),
   serviceId: r.service_id == null ? null : String(r.service_id), service: r.service_name,

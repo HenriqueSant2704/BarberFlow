@@ -93,6 +93,8 @@ Para testar o site do cliente pelo celular na mesma rede Wi-Fi, use o IP do comp
 
 **Cliente sem senha.** O cliente entra só com o WhatsApp, como foi combinado no protótipo. É simples para ele, mas quem souber o número de alguém consegue ver e cancelar os horários dessa pessoa. Uma melhoria futura é mandar um código pelo WhatsApp para confirmar.
 
+**Proteção contra trote.** Em Configurações > Proteção contra trote o barbeiro escolhe quantos horários cada cliente pode ter marcados ao mesmo tempo, quantos no mesmo dia, quantos agendamentos um mesmo celular pode fazer em 24 horas e depois de quantas faltas o cliente é bloqueado sozinho. Na ficha do cliente dá para bloquear ou desbloquear na mão (bloquear cancela os horários futuros dele). Essas travas valem só para o site: pelo painel o barbeiro marca sem limite. O IP não é guardado: o servidor guarda só uma versão embaralhada, para contar repetições. Atualizar o sistema já cria as colunas novas no banco sozinho, quando o servidor liga.
+
 **Fuso horário.** Tudo usa o horário de Brasília (`America/Sao_Paulo`). Dá para trocar pela variável `TZ_BARBEARIA`.
 
 ## Estrutura
@@ -106,6 +108,7 @@ src/
   reset-login.js     redefine o login do barbeiro (npm run db:login)
   auth.js            login do barbeiro (cookie) e do cliente (token)
   booking.js         criação de agendamento com todas as conferências
+  guard.js           travas contra agendamento de trote (só no site)
   notify.js          avisos em tempo real para o painel
   repo.js            leitura do banco
   routes/public.js   rotas do site do cliente

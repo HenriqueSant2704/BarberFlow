@@ -5,6 +5,7 @@ const repo = require('../repo');
 const { signClient, readClient, requireClient } = require('../auth');
 const { createAppointment, findOrCreateClient } = require('../booking');
 const notify = require('../notify');
+const guard = require('../guard');
 const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, lookupPhone, cleanId } = require('../util');
 
 const r = express.Router();
@@ -39,7 +40,11 @@ r.post('/identificar', ah(async (req, res) => {
 r.post('/agendar', ah(async (req, res) => {
   const { date, time, serviceId } = req.body;
   const tokenClientId = readClient(req);
+  const device = guard.deviceOf(req);
+  const ipHash = guard.ipHashOf(req);
   const result = await db.tx(async (c) => {
+    const settings = await repo.getSettings(c);
+    await guard.checkDevice(c, settings, device, ipHash);
     let client;
     if (tokenClientId) {
       const { rows } = await c.query('SELECT * FROM clients WHERE id = $1', [tokenClientId]);
@@ -48,7 +53,8 @@ r.post('/agendar', ah(async (req, res) => {
     } else {
       client = await findOrCreateClient(c, cleanName(req.body.name), cleanPhone(req.body.phone));
     }
-    const appt = await createAppointment(c, { clientId: Number(client.id), date, time, serviceId, origin: 'site', enforceWindow: true });
+    if (Agenda.isDate(date)) await guard.checkClient(c, settings, client, date);
+    const appt = await createAppointment(c, { clientId: Number(client.id), date, time, serviceId, origin: 'site', enforceWindow: true, device, ipHash });
     const { rows: n } = await c.query("INSERT INTO notifications (type, appointment_id) VALUES ('novo', $1) RETURNING id, created_at", [appt.id]);
     return { client, appt, notif: n[0] };
   });

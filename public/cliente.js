@@ -18,6 +18,14 @@
 
   const token = () => store.get(TOKEN_KEY);
   const authH = () => (token() ? { Authorization: 'Bearer ' + token() } : {});
+  // Número aleatório deste aparelho (não identifica a pessoa): ajuda a barbearia a frear trotes
+  function deviceId() {
+    try {
+      let d = localStorage.getItem('barbearia_dev');
+      if (!d) { d = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)).replace(/[^A-Za-z0-9-]/g, ''); localStorage.setItem('barbearia_dev', d); }
+      return d;
+    } catch { return ''; }
+  }
 
   // ----- regras da agenda com os dados carregados -----
   const daySlots = (ds) => A.daySlots(S.settings, S.blocked, ds);
@@ -270,7 +278,8 @@
           try {
             const body = { date: V.date, time: V.time, serviceId: V.svc };
             if (!ME) { body.name = V.newName.trim(); body.phone = digits(V.newPhone); }
-            const d = await api('POST', '/api/public/agendar', body, authH());
+            const dev = deviceId();
+            const d = await api('POST', '/api/public/agendar', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
             store.set(TOKEN_KEY, d.token);
             await Promise.all([loadMe(), loadBusy()]);
             Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', done: true });
