@@ -169,12 +169,13 @@
           <h1>${TITULOS[V.sec]}</h1>
           <div class="direita">
             <span class="ao-vivo ${V.live ? 'on' : ''}" id="aoVivo" title="Avisos em tempo real"><i></i>${V.live ? 'Ao vivo' : 'Conectando…'}</span>
+            ${window.U.tema.botao('btn-icone')}
             <button type="button" class="btn-icone" id="sinoBtn" data-a="sino" aria-label="Avisos${n ? `, ${n} novos` : ''}" aria-expanded="${V.sino}">${ic('bell', 20)}${n ? `<span class="bolinha">${n > 9 ? '9+' : n}</span>` : ''}</button>
             <button type="button" class="p-user" data-a="sec" data-s="perfil"><div><b>${esc(S.barber.name)}</b><small>Barbeiro</small></div><span class="av" style="width:34px;height:34px;font-size:13px">${esc(initials(S.barber.name))}</span></button>
           </div>
         </header>
         <main class="p-main ${anim ? 'vista' : ''}">
-          ${needSound ? `<div class="faixa" data-t="info"><span class="f-ico">${ic('sound', 18)}</span><div><strong>Ligue o som dos avisos</strong><p>Toque em "Ativar som" para ouvir a campainha quando um cliente marcar pelo site.</p></div><button type="button" class="btn p" data-a="som-on">Ativar som</button></div>` : ''}
+          ${needSound ? `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('sound', 16)}</span><div><strong>Som dos avisos desligado</strong><p>Ligue para ouvir a campainha quando um cliente marcar.</p></div><button type="button" class="btn p" data-a="som-on">Ativar som</button></div>` : ''}
           ${view}
         </main>
       </div></div>`;
@@ -223,39 +224,44 @@
       const c = cById(depois.clientId); const dd = Math.round((A.parse(depois.date) - NOW) / 864e5);
       proxCard = `<button type="button" class="prox livre" data-a="ap" data-id="${depois.id}"><small>Próximo cliente</small><div class="linha"><span class="av">${esc(initials(c.name))}</span><div><b>${esc(c.name)}</b><span>${cap(diaTxt(depois.date))} às ${depois.time}</span></div></div><span class="em">${ic('cal', 14)}${dd === 1 ? 'Amanhã' : `Daqui a ${dd} dias`}</span></button>`;
     }
+    // Na lista de hoje ficam só os que faltam atender; atendidos e faltas ficam guardados numa linha
+    const feitos = hoje.filter((x) => x.status !== 'agendado');
+    const mostra = V.verFeitos ? hoje : aguard;
     let agoraFeito = false;
-    const tl = hoje.map((x) => {
+    const tl = mostra.map((x) => {
       const c = cById(x.clientId); const k = x.status === 'realizado' ? 'verde' : x.status === 'faltou' ? 'vermelho' : x === prox ? 'accent' : 'laranja';
       let pre = '';
       if (!agoraFeito && A.toMin(x.time) >= nm) { agoraFeito = true; pre = '<div class="agora-linha"><span>Agora</span><i></i><hr></div>'; }
       const pil = x.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : x.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>' : '';
       return `${pre}<div class="tl-item ${x === prox ? 'agora' : ''} ${x.status !== 'agendado' ? 'feito' : ''}" data-k="${k}"><div class="tl-h">${x.time}<small>${endOf(x.time, x.dur)}</small></div><div class="tl-linha"><i></i></div>
         <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b><small>${esc(x.service)}</small></div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
-    }).join('') + (hoje.length && !agoraFeito && aberto && nm < A.toMin(hh.close) ? '<div class="agora-linha"><span>Agora</span><i></i><hr></div>' : '');
+    }).join('') + (mostra.length && !agoraFeito && aberto && nm < A.toMin(hh.close) ? '<div class="agora-linha"><span>Agora</span><i></i><hr></div>' : '');
+    const nAt = feitos.filter((x) => x.status === 'realizado').length; const nFal = feitos.length - nAt;
+    const linhaFeitos = feitos.length ? `<button type="button" class="tl-feitos" data-a="ver-feitos" aria-expanded="${!!V.verFeitos}"><span class="ico-k p" data-k="verde">${ic('check', 15)}</span><span>${nAt ? `<b>${nAt}</b> atendido${nAt > 1 ? 's' : ''}` : ''}${nAt && nFal ? ' · ' : ''}${nFal ? `<b>${nFal}</b> não ${nFal > 1 ? 'vieram' : 'veio'}` : ''}</span><span class="link">${V.verFeitos ? 'Esconder' : 'Mostrar'}</span></button>` : '';
     const resumo = hoje.length ? `Hoje você tem <b>${hoje.length} atendimento${hoje.length > 1 ? 's' : ''}</b>. ${aguard.length ? `Ainda falta${aguard.length > 1 ? 'm' : ''} <b>${aguard.length}</b>.` : 'Todos já foram atendidos.'}`
       : aberto ? 'Ninguém marcado para hoje ainda. Os horários livres já aparecem no site.' : `Hoje a barbearia está fechada${blockedOf(TODAY) ? ` (${esc(blockedOf(TODAY).why || 'folga')})` : ''}. Bom descanso!`;
     return `${daysLeft <= 10 ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${daysLeft < 0 ? 'A agenda online está fechada' : `A agenda online fecha em ${shortDate(st.bookTo)}`}</strong><p>${daysLeft < 0 ? 'Nenhum cliente consegue marcar pelo site agora.' : 'Depois dessa data ninguém consegue marcar pelo site.'}</p></div><button type="button" class="btn p" data-a="ir-cfg">Abrir mais datas</button></div>` : ''}
     <section class="hero"><div><small>${cap(longDate(TODAY))}</small><h2>${greet()}, ${esc(first(S.barber.name))}.</h2><p>${resumo}</p>
-      <div class="acoes-hero"><button type="button" class="btn-claro" data-a="novo">${ic('plus', 18)}Novo agendamento</button><button type="button" class="btn-vidro" data-a="ir-ag" data-v="hoje">${ic('cal', 18)}Ver agenda</button></div></div>${proxCard}</section>
+      <div class="acoes-hero"><button type="button" class="btn-claro" data-a="novo">${ic('plus', 18)}<span class="so-pc">Novo agendamento</span><span class="so-cel">Agendar</span></button><button type="button" class="btn-vidro" data-a="ir-ag" data-v="hoje">${ic('cal', 18)}Ver agenda</button></div></div>${proxCard}</section>
     <div class="kpis">
-      ${kpi('neutro', 'cal', hoje.length, 'Agendados hoje', aberto ? `Entre ${hh.open} e ${hh.close}` : 'Hoje está fechado', 'hoje')}
+      ${kpi('neutro', 'cal', hoje.length, 'Hoje', aberto ? `Entre ${hh.open} e ${hh.close}` : 'Hoje está fechado', 'hoje')}
       ${kpi('neutro', 'clock', aguard.length, 'Aguardando', prox ? `Próximo às ${prox.time}` : 'Ninguém na fila', 'hoje')}
-      ${kpi('neutro', 'userok', at, 'Atendidos hoje', 'Marcados como atendido', 'realizados')}
+      ${kpi('neutro', 'userok', at, 'Atendidos', 'Hoje, até agora', 'realizados')}
       ${kpi('vermelho', 'userx', faltasMes, 'Faltas no mês', 'Clientes que não vieram', 'faltas')}
     </div>
     <div class="duas-col">
       <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('list', 17)}</span>Agenda de hoje</h3><button type="button" class="link" data-a="ir-ag" data-v="hoje">Ver tudo${ic('right', 16)}</button></div>
-        <div class="tl">${tl || `<div class="vazio"><span class="ico-k" data-k="${aberto ? 'verde' : 'cinza'}">${ic(aberto ? 'cal' : 'coffee', 26)}</span><h4>${aberto ? 'Nenhum atendimento hoje' : 'Hoje é dia de folga'}</h4><p>${aberto ? 'Quando alguém marcar, aparece aqui na hora.' : depois ? `O próximo cliente é ${esc(first(cById(depois.clientId).name))}, ${diaTxt(depois.date)} às ${depois.time}.` : 'Nenhum cliente marcado nos próximos dias.'}</p></div>`}</div></section>
+        ${linhaFeitos}<div class="tl">${tl || (aguard.length === 0 && hoje.length ? `<div class="vazio" style="padding:18px 10px"><span class="ico-k" data-k="verde">${ic('check', 24)}</span><h4>Todos de hoje já foram atendidos</h4><p>${depois ? `O próximo é ${esc(first(cById(depois.clientId).name))}, ${diaTxt(depois.date)} às ${depois.time}.` : 'Bom trabalho!'}</p></div>` : '') || `<div class="vazio"><span class="ico-k" data-k="${aberto ? 'verde' : 'cinza'}">${ic(aberto ? 'cal' : 'coffee', 26)}</span><h4>${aberto ? 'Nenhum atendimento hoje' : 'Hoje é dia de folga'}</h4><p>${aberto ? 'Quando alguém marcar, aparece aqui na hora.' : depois ? `O próximo cliente é ${esc(first(cById(depois.clientId).name))}, ${diaTxt(depois.date)} às ${depois.time}.` : 'Nenhum cliente marcado nos próximos dias.'}</p></div>`}</div></section>
       <div class="col">
-        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('spark', 17)}</span>Ações rápidas</h3></div>
+        <section class="cartao acoes-ini"><div class="cartao-topo"><h3><span class="ico-k p">${ic('spark', 17)}</span>Ações rápidas</h3></div>
           <div class="acoes-rapidas">
             <button type="button" class="acao-rapida" data-a="novo"><span class="ico-k">${ic('plus')}</span><span>Novo agendamento<small>Encaixe ou cliente de balcão</small></span></button>
             <button type="button" class="acao-rapida" data-a="ir-folga"><span class="ico-k">${ic('ban')}</span><span>Bloquear um dia<small>Folga ou feriado</small></span></button>
             <button type="button" class="acao-rapida" data-a="ir-desp"><span class="ico-k">${ic('receipt')}</span><span>Lançar despesa<small>Produtos, contas</small></span></button>
             <button type="button" class="acao-rapida" data-a="ir-sumidos"><span class="ico-k">${ic('users')}</span><span>Clientes sumidos<small>Chame de volta</small></span></button>
           </div></section>
-        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('bell', 17)}</span>Avisos recentes</h3>${S.notifications.length > 4 ? '<button type="button" class="link" data-a="sino">Ver todos</button>' : ''}</div>
-          <div class="avisos-l">${S.notifications.slice(0, 4).map((x) => rAviso(x)).join('') || '<div class="muted" style="font-size:13.5px">Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</div>'}</div></section>
+        <section class="cartao avisos-ini"><div class="cartao-topo"><h3><span class="ico-k p">${ic('bell', 17)}</span>Avisos recentes</h3>${S.notifications.length > 3 ? '<button type="button" class="link" data-a="sino">Ver todos</button>' : ''}</div>
+          <div class="avisos-l">${S.notifications.slice(0, 3).map((x) => rAviso(x)).join('') || '<div class="muted" style="font-size:13.5px">Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</div>'}</div></section>
       </div>
     </div>`;
   }
@@ -774,6 +780,8 @@
       case 'n-clear-no': V.nClearAsk = false; render(); break;
       case 'n-clear': V.nClearAsk = false; act(() => api('DELETE', '/api/admin/avisos'), () => alerta('ok', 'Avisos apagados', 'Os agendamentos continuam na agenda.')); break;
       case 'som-toggle': Som.setEnabled(!Som.enabled()); if (Som.enabled()) { Som.unlock(); setTimeout(() => Som.play('novo'), 100); } render(); break;
+      case 'tema': window.U.tema.trocar(); render(); break;
+      case 'ver-feitos': V.verFeitos = !V.verFeitos; render(); break;
       case 'som-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); alerta('ok', 'Som ativado', 'É assim que vai tocar quando chegar agendamento novo.'); break;
       case 'ag-rola': { const el2 = $('#agCols'); if (el2) el2.scrollBy({ left: Number(v) * 628, behavior: 'smooth' }); break; }
       case 'pag': {

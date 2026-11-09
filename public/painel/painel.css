@@ -24,6 +24,15 @@
   --vermelho:#f87171; --vermelho-soft:#3a1d22; --azul:#6f99ff; --azul-soft:#1a2540; --cinza:#94a3b8; --cinza-soft:#1e2532;
   --roxo:#b197ff; --roxo-soft:#2a2145; --rosa:#f472b6; --rosa-soft:#3b1a2c; --ciano:#4fd1e8; --ciano-soft:#132f36;
   --shadow-lg:0 24px 60px rgba(0,0,0,.5); --backdrop:rgba(3,6,12,.62); --bezel:#000; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111113; --surface:#19191c; --surface-2:#202024; --line:#2a2a2f; --line-strong:#36363c;
+  --ink:#ededeb; --ink-soft:#d0d0cc; --muted:#9a9a9f; --bloco:#0b0b0c;
+  --ouro:var(--acc-d); --on-ouro:var(--on-acc-d); --ouro-soft:color-mix(in srgb,var(--ouro) 16%,var(--surface));
+  --accent:var(--acc-d); --on-accent:var(--on-acc-d); --accent-soft:color-mix(in srgb,var(--acc-d) 14%,var(--surface)); --accent-ring:color-mix(in srgb,var(--acc-d) 35%,transparent);
+  --verde:#4ade80; --verde-soft:#16301f; --laranja:#fbbf24; --laranja-soft:#3a2c12;
+  --vermelho:#f87171; --vermelho-soft:#3a1d22; --azul:#6f99ff; --azul-soft:#1a2540; --cinza:#94a3b8; --cinza-soft:#1e2532;
+  --roxo:#b197ff; --roxo-soft:#2a2145; --rosa:#f472b6; --rosa-soft:#3b1a2c; --ciano:#4fd1e8; --ciano-soft:#132f36;
+  --shadow-lg:0 24px 60px rgba(0,0,0,.5); --backdrop:rgba(3,6,12,.62); --bezel:#000; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{background:var(--bg)}
 body{color:var(--ink);font-size:15px;-webkit-font-smoothing:antialiased}
@@ -530,6 +539,53 @@ button.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42
   .acao-rapida{padding:12px;gap:10px}
 }
 
+
+/* ===== Início mais enxuto ===== */
+.faixa.fina{align-items:center;padding:10px 14px}
+.faixa.fina .f-ico{width:30px;height:30px;border-radius:8px}
+.faixa.fina strong{font-size:13.5px}
+.faixa.fina p{margin:0;font-size:12.5px}
+.tl-feitos{width:100%;display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:10px 12px;border-radius:10px;border:1px dashed var(--line-strong);background:none;color:var(--ink);font-size:13.5px;text-align:left}
+.tl-feitos>span:nth-child(2){flex:1}
+.tl-feitos .ico-k{width:28px;height:28px;background:var(--verde-soft);color:var(--verde)}
+.tl-feitos .link{font-size:12.5px}
+.so-cel{display:none}
+@media (min-width:901px){
+  .kpis:not(.fin) .kpi{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"ico n" "ico t" "ico s";align-items:center;gap:0 14px;padding:16px 18px}
+  .kpis:not(.fin) .kpi-topo{grid-area:ico}
+  .kpis:not(.fin) .kpi-topo>svg{display:none}
+  .kpis:not(.fin) .kpi b{grid-area:n;font-size:28px}
+  .kpis:not(.fin) .kpi p{grid-area:t;margin-top:4px}
+  .kpis:not(.fin) .kpi .sub{grid-area:s;margin:0}
+  .acoes-ini .acao-rapida{flex-direction:row;align-items:center;padding:12px;gap:10px}
+}
+@media (max-width:900px){
+  .so-pc{display:none}
+  .so-cel{display:inline}
+  .faixa.fina p{display:none}
+  .prox .linha{flex:1 1 100%}
+  .hero .acoes-hero{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .hero .acoes-hero>*{justify-content:center;padding-left:8px;padding-right:8px}
+  .prox{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 14px}
+  .prox>small{width:100%}
+  .prox .av{width:38px;height:38px}
+  .kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+  .kpis:not(.fin) .kpi{border:0;border-radius:0;padding:12px 6px;gap:4px;align-items:center;text-align:center}
+  .kpis:not(.fin) .kpi+.kpi{border-left:1px solid var(--line)}
+  .kpis:not(.fin) .kpi-topo,.kpis:not(.fin) .kpi .sub{display:none}
+  .kpis:not(.fin) .kpi b{font-size:24px}
+  .kpis:not(.fin) .kpi p{font-size:11.5px;color:var(--muted);font-weight:700}
+  .kpis:not(.fin) .kpi[data-k="vermelho"] b{color:var(--vermelho)}
+  .kpis.fin{border:0;background:none;border-radius:0;overflow:visible}
+  .duas-col>.col{order:-1}
+  .avisos-ini{display:none}
+  .acoes-ini{padding:14px}
+  .acoes-ini .cartao-topo{display:none}
+  .acoes-ini .acoes-rapidas{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .acoes-ini .acao-rapida{align-items:center;text-align:center;padding:10px 4px;gap:6px;font-size:11.5px;background:none;border-color:transparent}
+  .acoes-ini .acao-rapida small{display:none}
+}
+
 /* ===== Cores de cartaz (tom suave por dia da semana / por cliente) ===== */
 [data-tom="terracota"]{--tom:#b4532a}
 [data-tom="salvia"]{--tom:#4f7d5c}
@@ -540,6 +596,7 @@ button.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42
 [data-tom="ardosia"]{--tom:#3d5f91}
 [data-tom]{--tom-ink:color-mix(in srgb,var(--tom) 78%,var(--ink));--tom-bg:color-mix(in srgb,var(--tom) 7%,var(--surface));--tom-bg2:color-mix(in srgb,var(--tom) 13%,var(--surface));--tom-line:color-mix(in srgb,var(--tom) 24%,var(--line))}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) [data-tom]{--tom-ink:color-mix(in srgb,var(--tom) 45%,#fff);--tom-bg:color-mix(in srgb,var(--tom) 10%,var(--surface));--tom-bg2:color-mix(in srgb,var(--tom) 19%,var(--surface));--tom-line:color-mix(in srgb,var(--tom) 38%,var(--line))}}
+:root[data-theme="dark"] [data-tom]{--tom-ink:color-mix(in srgb,var(--tom) 45%,#fff);--tom-bg:color-mix(in srgb,var(--tom) 10%,var(--surface));--tom-bg2:color-mix(in srgb,var(--tom) 19%,var(--surface));--tom-line:color-mix(in srgb,var(--tom) 38%,var(--line))}
 
 /* card de agendamento: cara de ingresso */
 .ag[data-tom]{position:relative;overflow:hidden;background:linear-gradient(170deg,var(--tom-bg2),var(--tom-bg) 55%);border-color:var(--tom-line);padding-top:18px}
