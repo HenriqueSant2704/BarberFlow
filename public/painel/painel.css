@@ -614,3 +614,10 @@ button.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42
   .ag-cols-dica{display:inline-flex;align-items:center;gap:6px}
   .ag-col.unico .ag-col-corpo{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Detalhe discreto: cantinho na cor da marca nos cards; coluna do dia com borda na cor da marca */
+.ag,.cli{position:relative;overflow:hidden}
+.ag::after,.cli::after{content:"";position:absolute;top:0;right:0;width:26px;height:26px;background:linear-gradient(225deg,var(--ouro) 0 50%,transparent 50%);opacity:.9;pointer-events:none}
+.ag .hr{color:var(--ouro)}
+.ag-col{border:1.5px solid var(--ouro)}
+.ag-col-topo{border-bottom-color:color-mix(in srgb,var(--ouro) 35%,var(--line))}
