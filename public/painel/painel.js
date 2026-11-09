@@ -169,6 +169,7 @@
           <h1>${TITULOS[V.sec]}</h1>
           <div class="direita">
             <span class="ao-vivo ${V.live ? 'on' : ''}" id="aoVivo" title="Avisos em tempo real"><i></i>${V.live ? 'Ao vivo' : 'Conectando…'}</span>
+            ${window.U.tema.botao('btn-icone')}
             <button type="button" class="btn-icone" id="sinoBtn" data-a="sino" aria-label="Avisos${n ? `, ${n} novos` : ''}" aria-expanded="${V.sino}">${ic('bell', 20)}${n ? `<span class="bolinha">${n > 9 ? '9+' : n}</span>` : ''}</button>
             <button type="button" class="p-user" data-a="sec" data-s="perfil"><div><b>${esc(S.barber.name)}</b><small>Barbeiro</small></div><span class="av" style="width:34px;height:34px;font-size:13px">${esc(initials(S.barber.name))}</span></button>
           </div>
@@ -779,6 +780,7 @@
       case 'n-clear-no': V.nClearAsk = false; render(); break;
       case 'n-clear': V.nClearAsk = false; act(() => api('DELETE', '/api/admin/avisos'), () => alerta('ok', 'Avisos apagados', 'Os agendamentos continuam na agenda.')); break;
       case 'som-toggle': Som.setEnabled(!Som.enabled()); if (Som.enabled()) { Som.unlock(); setTimeout(() => Som.play('novo'), 100); } render(); break;
+      case 'tema': window.U.tema.trocar(); render(); break;
       case 'ver-feitos': V.verFeitos = !V.verFeitos; render(); break;
       case 'som-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); alerta('ok', 'Som ativado', 'É assim que vai tocar quando chegar agendamento novo.'); break;
       case 'ag-rola': { const el2 = $('#agCols'); if (el2) el2.scrollBy({ left: Number(v) * 628, behavior: 'smooth' }); break; }

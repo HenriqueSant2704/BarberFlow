@@ -85,6 +85,8 @@
     userx: I('<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M17 8l5 5M22 8l-5 5"/>'),
     door: I('<path d="M4 21h16"/><path d="M6 21V4a1 1 0 011-1h10a1 1 0 011 1v17"/><path d="M14 12h.01"/>'),
     list: I('<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>', 2.4),
+    sol: I('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+    lua: I('<path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>'),
   };
   /** Ícone com tamanho fixo: ic('cal', 18). */
   const ic = (n, size = 18) => (IC[n] || '').replace('<svg', `<svg width="${size}" height="${size}"`);
@@ -190,5 +192,24 @@
     set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* sem armazenamento */ } },
   };
 
-  window.U = { alerta, fecharAlerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, STATUS, PRESETS, avColor, IC, svcIcon, applyTheme, toast, logo, avatar, api, store };
+  // ----- Tema claro ou escuro: cada pessoa escolhe e fica salvo no aparelho -----
+  const TEMA_KEY = 'barbearia_tema';
+  const escuroSistema = () => !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  const tema = {
+    /** 'escuro' ou 'claro', como está na tela agora. */
+    atual() { const t = document.documentElement.dataset.theme; return t ? (t === 'dark' ? 'escuro' : 'claro') : (escuroSistema() ? 'escuro' : 'claro'); },
+    trocar() {
+      const novo = tema.atual() === 'escuro' ? 'claro' : 'escuro';
+      document.documentElement.dataset.theme = novo === 'escuro' ? 'dark' : 'light';
+      store.set(TEMA_KEY, novo);
+      return novo;
+    },
+    /** Botão de sol/lua: mostra o ícone do tema para onde vai trocar. */
+    botao(cls) {
+      const e = tema.atual() === 'escuro';
+      return `<button type="button" class="${cls}" data-a="tema" aria-label="${e ? 'Usar tema claro' : 'Usar tema escuro'}" title="${e ? 'Tema claro' : 'Tema escuro'}">${ic(e ? 'sol' : 'lua', 18)}</button>`;
+    },
+  };
+
+  window.U = { alerta, fecharAlerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, STATUS, PRESETS, avColor, IC, svcIcon, applyTheme, toast, logo, avatar, api, store, tema };
 })();

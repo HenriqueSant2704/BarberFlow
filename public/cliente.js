@@ -133,7 +133,7 @@
       <header class="c-topo"><div class="c-topo-in">
         <button type="button" class="c-logo" data-a="tab" data-t="inicio">${window.U.logo(S.settings, 44)}<div><b>${esc(S.settings.shopName)}</b><small data-st="${now.st}">${now.r}</small></div></button>
         <nav class="c-nav" aria-label="Menu">${TABS.map(tabBtn(18)).join('')}</nav>
-        <a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
+        ${window.U.tema.botao('c-tema')}<a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
       </div></header>
       <main class="c-main ${animTab ? 'vista' : ''}">${view}</main>
       ${barra ? bookbar() : ''}
@@ -539,6 +539,7 @@
     const el = e.target.closest('[data-a]'); if (!el) return;
     switch (el.dataset.a) {
       case 'tab': goTab(el.dataset.t); break;
+      case 'tema': window.U.tema.trocar(); render(true); break;
       case 'again': Object.assign(V, { date: null, time: null, svc: null, done: false }); goTab('agendar'); break;
       case 'ini-svc': goTab('agendar'); pickSvc(el.dataset.id); break;
       case 'carro': { const c = $('#carrossel'); const card = c && c.querySelector('.car-svc'); if (c) c.scrollBy({ left: Number(el.dataset.n) * ((card ? card.offsetWidth : 200) + 12), behavior: 'smooth' }); break; }

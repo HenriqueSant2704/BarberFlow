@@ -24,6 +24,15 @@
   --vermelho:#f87171; --vermelho-soft:#3a1d22; --azul:#6f99ff; --azul-soft:#1a2540; --cinza:#94a3b8; --cinza-soft:#1e2532;
   --roxo:#b197ff; --roxo-soft:#2a2145; --rosa:#f472b6; --rosa-soft:#3b1a2c; --ciano:#4fd1e8; --ciano-soft:#132f36;
   --shadow-lg:0 24px 60px rgba(0,0,0,.5); --backdrop:rgba(3,6,12,.62); --bezel:#000; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111113; --surface:#19191c; --surface-2:#202024; --line:#2a2a2f; --line-strong:#36363c;
+  --ink:#ededeb; --ink-soft:#d0d0cc; --muted:#9a9a9f; --bloco:#0b0b0c;
+  --ouro:var(--acc-d); --on-ouro:var(--on-acc-d); --ouro-soft:color-mix(in srgb,var(--ouro) 16%,var(--surface));
+  --accent:var(--acc-d); --on-accent:var(--on-acc-d); --accent-soft:color-mix(in srgb,var(--acc-d) 14%,var(--surface)); --accent-ring:color-mix(in srgb,var(--acc-d) 35%,transparent);
+  --verde:#4ade80; --verde-soft:#16301f; --laranja:#fbbf24; --laranja-soft:#3a2c12;
+  --vermelho:#f87171; --vermelho-soft:#3a1d22; --azul:#6f99ff; --azul-soft:#1a2540; --cinza:#94a3b8; --cinza-soft:#1e2532;
+  --roxo:#b197ff; --roxo-soft:#2a2145; --rosa:#f472b6; --rosa-soft:#3b1a2c; --ciano:#4fd1e8; --ciano-soft:#132f36;
+  --shadow-lg:0 24px 60px rgba(0,0,0,.5); --backdrop:rgba(3,6,12,.62); --bezel:#000; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{background:var(--bg)}
 body{color:var(--ink);font-size:15px;-webkit-font-smoothing:antialiased}
@@ -587,6 +596,7 @@ button.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42
 [data-tom="ardosia"]{--tom:#3d5f91}
 [data-tom]{--tom-ink:color-mix(in srgb,var(--tom) 78%,var(--ink));--tom-bg:color-mix(in srgb,var(--tom) 7%,var(--surface));--tom-bg2:color-mix(in srgb,var(--tom) 13%,var(--surface));--tom-line:color-mix(in srgb,var(--tom) 24%,var(--line))}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) [data-tom]{--tom-ink:color-mix(in srgb,var(--tom) 45%,#fff);--tom-bg:color-mix(in srgb,var(--tom) 10%,var(--surface));--tom-bg2:color-mix(in srgb,var(--tom) 19%,var(--surface));--tom-line:color-mix(in srgb,var(--tom) 38%,var(--line))}}
+:root[data-theme="dark"] [data-tom]{--tom-ink:color-mix(in srgb,var(--tom) 45%,#fff);--tom-bg:color-mix(in srgb,var(--tom) 10%,var(--surface));--tom-bg2:color-mix(in srgb,var(--tom) 19%,var(--surface));--tom-line:color-mix(in srgb,var(--tom) 38%,var(--line))}
 
 /* card de agendamento: cara de ingresso */
 .ag[data-tom]{position:relative;overflow:hidden;background:linear-gradient(170deg,var(--tom-bg2),var(--tom-bg) 55%);border-color:var(--tom-line);padding-top:18px}
