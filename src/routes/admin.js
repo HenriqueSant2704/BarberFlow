@@ -216,6 +216,7 @@ const FIELDS = {
   lunchEnd: ['lunch_end', (v) => { if (!Agenda.isTime(v)) fail(400, 'Horário inválido.'); return v; }],
   closed: ['closed_days', (v) => { if (!Array.isArray(v) || v.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) fail(400, 'Dias inválidos.'); if (v.length >= 7) fail(400, 'A barbearia precisa abrir pelo menos um dia na semana.'); return [...new Set(v)]; }],
   phone: ['phone', (v) => { const d = Agenda.phoneDigits(v); if (!d) return ''; if (d.length < 10 || d.length > 11) fail(400, 'Digite o WhatsApp da barbearia com DDD.'); return d; }],
+  step: ['slot_step', (v) => { const n = Number(v); if (![30, 60].includes(n)) fail(400, 'Escolha de 30 em 30 minutos ou de 1 em 1 hora.'); return n; }],
   remindOn: ['remind_on', (v) => !!v],
   remindMin: ['remind_min', (v) => { const n = Number(v); if (![30, 60, 90, 120, 180].includes(n)) fail(400, 'Escolha quanto tempo antes manda o lembrete.'); return n; }],
   remindMsg: ['remind_msg', (v) => {

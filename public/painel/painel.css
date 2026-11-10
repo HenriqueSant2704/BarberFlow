@@ -677,3 +677,8 @@ button.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42
   .lado-lembra{grid-template-columns:auto minmax(0,1fr)}
   .lado-lembra .btn{grid-column:1/-1}
 }
+
+/* Intervalo dos horários (Configurações > Horário de funcionamento) */
+.campo.intervalo{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.campo.intervalo .seg{align-self:flex-start}
+@media (max-width:560px){.campo.intervalo .seg{align-self:stretch}.campo.intervalo .seg button{flex:1;justify-content:center}}

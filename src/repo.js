@@ -10,6 +10,7 @@ const mapSettings = (r) => ({
   phone: r.phone || '', hours: r.day_hours || {},
   maxActive: r.max_active, maxPerDay: r.max_per_day, maxDevice: r.max_device, autoBlock: r.auto_block,
   remindOn: !!r.remind_on, remindMin: r.remind_min || 60, remindMsg: r.remind_msg || REMIND_MSG,
+  step: Number(r.slot_step) === 60 ? 60 : 30,
 });
 const mapService = (r) => ({ id: String(r.id), name: r.name, price: r.price, dur: r.duration });
 const mapClient = (r) => ({

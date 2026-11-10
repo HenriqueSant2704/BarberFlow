@@ -3,7 +3,7 @@
  * O servidor sempre confere de novo antes de gravar, então o navegador
  * só usa isto para mostrar os horários livres.
  *
- * settings: { open, close, lunchStart, lunchEnd, closed:[0..6] }
+ * settings: { open, close, lunchStart, lunchEnd, closed:[0..6], step: 30|60 }
  * blocked:  [{ date:'AAAA-MM-DD' }]
  * appts:    [{ id, date, time:'HH:MM', dur, status }]
  */
@@ -54,6 +54,35 @@
       if (m >= ls && m < le) continue;
       out.push(fromMin(m));
     }
+    return out;
+  }
+
+  /** De quanto em quanto tempo o cliente pode começar (30 ou 60 minutos, escolhido em Configurações). */
+  const stepOf = (settings) => (Number(settings && settings.step) === 60 ? 60 : STEP);
+
+  /**
+   * Horários de início que o cliente vê no site. Com "de 1 em 1 hora" fica 9:00, 10:00, 11:00...
+   * contando a partir da hora de abrir, e recomeça certinho na volta do almoço.
+   */
+  function startSlots(settings, blocked, ds) {
+    const all = daySlots(settings, blocked, ds);
+    const step = stepOf(settings);
+    if (step === STEP || !all.length) return all;
+    const ok = new Set(all); const out = [];
+    let m = toMin(all[0]); const fim = toMin(all[all.length - 1]);
+    while (m <= fim) {
+      if (ok.has(fromMin(m))) { out.push(fromMin(m)); m += step; }
+      else m += STEP; // almoço: anda de meia em meia hora até voltar a abrir
+    }
+    return out;
+  }
+
+  /** Inícios tomados: o horário conta como ocupado se qualquer pedaço dele já tem cliente. */
+  function startBusy(settings, appts, ds, ignoreId) {
+    const b = busySet(appts, ds, ignoreId); const step = stepOf(settings);
+    if (step === STEP) return b;
+    const out = new Set(b);
+    for (const t of b) { const m = toMin(t); for (let k = m - step + STEP; k < m; k += STEP) out.add(fromMin(k)); }
     return out;
   }
 
@@ -138,5 +167,5 @@
     return String(tpl || REMIND_MSG).replace(/\{(nome|hora|servico|serviço|barbearia)\}/gi, (m, k) => map[k.toLowerCase().replace('ç', 'c')]);
   }
 
-  return { STEP, TZ, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText };
+  return { STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText };
 });
