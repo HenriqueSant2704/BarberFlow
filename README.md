@@ -95,6 +95,8 @@ Para testar o site do cliente pelo celular na mesma rede Wi-Fi, use o IP do comp
 
 **Proteção contra trote.** Em Configurações > Proteção contra trote o barbeiro escolhe quantos horários cada cliente pode ter marcados ao mesmo tempo, quantos no mesmo dia, quantos agendamentos um mesmo celular pode fazer em 24 horas e depois de quantas faltas o cliente é bloqueado sozinho. Na ficha do cliente dá para bloquear ou desbloquear na mão (bloquear cancela os horários futuros dele). Essas travas valem só para o site: pelo painel o barbeiro marca sem limite. O IP não é guardado: o servidor guarda só uma versão embaralhada, para contar repetições. Atualizar o sistema já cria as colunas novas no banco sozinho, quando o servidor liga.
 
+**Lembrete no WhatsApp.** Em Configurações > Lembrete no WhatsApp o barbeiro toca em **Conectar** e lê o QR Code com o WhatsApp de um chip separado (em Aparelhos conectados, igual ao WhatsApp Web). Daí em diante o sistema manda sozinho uma mensagem para cada cliente no dia do horário (padrão: 1 hora antes), com o nome, a hora e o serviço dele, uma de cada vez. O texto e o tempo de antecedência são editáveis. A conexão fica guardada no banco (tabela `wa_auth`), então volta sozinha quando o Render reinicia. A lista de quem lembrar fica na memória do servidor e só é recarregada do banco quando algo muda, para o Neon continuar dormindo. Na agenda cada cliente mostra se o lembrete vai sair, saiu ou falhou (com botão para mandar de novo ou à mão). **Atenção:** não é a API oficial da Meta. Use sempre um chip separado, nunca o WhatsApp principal da barbearia, porque o número pode ser bloqueado se muitas pessoas denunciarem.
+
 **Fuso horário.** Tudo usa o horário de Brasília (`America/Sao_Paulo`). Dá para trocar pela variável `TZ_BARBEARIA`.
 
 ## Estrutura
@@ -110,6 +112,8 @@ src/
   booking.js         criação de agendamento com todas as conferências
   guard.js           travas contra agendamento de trote (só no site)
   notify.js          avisos em tempo real para o painel
+  whatsapp.js        conexão com o WhatsApp dos lembretes (QR Code, sessão no banco)
+  lembretes.js       envio automático do lembrete antes do horário
   repo.js            leitura do banco
   routes/public.js   rotas do site do cliente
   routes/admin.js    rotas do painel

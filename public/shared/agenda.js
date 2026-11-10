@@ -129,5 +129,14 @@
     return '';
   }
 
-  return { STEP, TZ, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError };
+  // ----- Lembrete no WhatsApp -----
+  const REMIND_MSG = 'Olá, {nome}! Passando para lembrar do seu horário hoje às {hora} ({servico}) na {barbearia}. Se não puder vir, cancele pelo site para liberar a vaga. Até já!';
+  /** Troca {nome}, {hora}, {servico} e {barbearia} pelos dados do agendamento. */
+  function remindText(tpl, d) {
+    const first = String(d.nome || '').trim().split(/\s+/)[0] || '';
+    const map = { nome: first, hora: d.hora || '', servico: d.servico || '', barbearia: d.barbearia || '' };
+    return String(tpl || REMIND_MSG).replace(/\{(nome|hora|servico|serviço|barbearia)\}/gi, (m, k) => map[k.toLowerCase().replace('ç', 'c')]);
+  }
+
+  return { STEP, TZ, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText };
 });

@@ -35,6 +35,21 @@
   const avk = (c, size) => `<span class="av-k"${size ? ` style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.34)}px"` : ''}>${esc(initials(c.name))}</span>`;
   const diaTxt = (ds) => (ds === TODAY ? 'hoje' : ds === TOMORROW ? 'amanhã' : `${DOW[A.parse(ds).getDay()].toLowerCase()}, ${shortDate(ds)}`);
   const waLink = (phone, txt) => `https://wa.me/55${digits(phone)}${txt ? `?text=${encodeURIComponent(txt)}` : ''}`;
+  const hm = (at) => new Date(at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const waOn = () => S.whats && S.whats.state === 'on';
+  /** Situação do lembrete no WhatsApp de um agendamento: [cor, texto, falhou?] ou null. */
+  function lembrete(x) {
+    const r = x.remind;
+    if (r && r.status === 'enviado') return ['verde', `Lembrete enviado às ${hm(r.at)}`];
+    if (r && r.status === 'enviando') return ['azul', 'Enviando lembrete…'];
+    if (r && r.status === 'falhou') return ['vermelho', 'Lembrete não foi enviado', true];
+    if (x.status !== 'agendado' || x.date !== TODAY || !S.settings.remindOn) return null;
+    const ini = A.toMin(x.time); const quando = ini - S.settings.remindMin; const nm = nowMin();
+    if (nm > ini - 10) return null;
+    if (!waOn()) return ['laranja', 'Lembrete parado: WhatsApp desconectado', true];
+    return nm >= quando ? ['azul', 'Enviando lembrete…'] : ['cinza', `Lembrete às ${A.fromMin(Math.max(quando, 0))}`];
+  }
+  const lembreteTag = (x) => { const l = lembrete(x); return l ? `<span class="lembra" data-k="${l[0]}">${ic('whats', 13)}${l[1]}</span>` : ''; };
   const waMsg = (x) => `Olá, ${first(cById(x.clientId).name)}! Aqui é da ${S.settings.shopName}. Passando para lembrar do seu horário ${diaTxt(x.date)} às ${x.time} (${x.service}).`;
   /** Por que um serviço de "dur" minutos não cabe começando em "t". */
   function whyNot(ds, t, dur) {
@@ -101,6 +116,20 @@
       hadOpen = true;
     };
     es.onerror = () => { V.live = false; paintLive(); };
+    es.addEventListener('whatsapp', (ev) => {
+      const antes = S && S.whats && S.whats.state;
+      if (!S) return;
+      S.whats = JSON.parse(ev.data);
+      if (antes !== 'on' && S.whats.state === 'on') alerta('ok', 'WhatsApp conectado!', 'Os lembretes já podem sair por esse número.');
+      if (antes === 'on' && S.whats.state !== 'on' && S.whats.state !== 'conectando') alerta('aviso', 'O WhatsApp dos lembretes desconectou', S.whats.error || 'Conecte de novo em Configurações.');
+      paintWa();
+    });
+    es.addEventListener('lembrete', (ev) => {
+      const n = JSON.parse(ev.data); if (!S) return;
+      const x = S.appts.find((y) => y.id === n.id); if (!x) return;
+      x.remind = { status: n.status, at: n.at };
+      if (!V.nv && !document.activeElement?.matches('input,select,textarea')) render();
+    });
     es.addEventListener('agendamento', async (ev) => {
       const n = JSON.parse(ev.data);
       Som.play(n.type);
@@ -234,13 +263,15 @@
       if (!agoraFeito && A.toMin(x.time) >= nm) { agoraFeito = true; pre = '<div class="agora-linha"><span>Agora</span><i></i><hr></div>'; }
       const pil = x.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : x.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>' : '';
       return `${pre}<div class="tl-item ${x === prox ? 'agora' : ''} ${x.status !== 'agendado' ? 'feito' : ''}" data-k="${k}"><div class="tl-h">${x.time}<small>${endOf(x.time, x.dur)}</small></div><div class="tl-linha"><i></i></div>
-        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b><small>${esc(x.service)}</small></div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
+        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b><small>${esc(x.service)}</small>${lembreteTag(x)}</div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
     }).join('') + (mostra.length && !agoraFeito && aberto && nm < A.toMin(hh.close) ? '<div class="agora-linha"><span>Agora</span><i></i><hr></div>' : '');
     const nAt = feitos.filter((x) => x.status === 'realizado').length; const nFal = feitos.length - nAt;
     const linhaFeitos = feitos.length ? `<button type="button" class="tl-feitos" data-a="ver-feitos" aria-expanded="${!!V.verFeitos}"><span class="ico-k p" data-k="verde">${ic('check', 15)}</span><span>${nAt ? `<b>${nAt}</b> atendido${nAt > 1 ? 's' : ''}` : ''}${nAt && nFal ? ' · ' : ''}${nFal ? `<b>${nFal}</b> não ${nFal > 1 ? 'vieram' : 'veio'}` : ''}</span><span class="link">${V.verFeitos ? 'Esconder' : 'Mostrar'}</span></button>` : '';
     const resumo = hoje.length ? `Hoje você tem <b>${hoje.length} atendimento${hoje.length > 1 ? 's' : ''}</b>. ${aguard.length ? `Ainda falta${aguard.length > 1 ? 'm' : ''} <b>${aguard.length}</b>.` : 'Todos já foram atendidos.'}`
       : aberto ? 'Ninguém marcado para hoje ainda. Os horários livres já aparecem no site.' : `Hoje a barbearia está fechada${blockedOf(TODAY) ? ` (${esc(blockedOf(TODAY).why || 'folga')})` : ''}. Bom descanso!`;
-    return `${daysLeft <= 10 ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${daysLeft < 0 ? 'A agenda online está fechada' : `A agenda online fecha em ${shortDate(st.bookTo)}`}</strong><p>${daysLeft < 0 ? 'Nenhum cliente consegue marcar pelo site agora.' : 'Depois dessa data ninguém consegue marcar pelo site.'}</p></div><button type="button" class="btn p" data-a="ir-cfg">Abrir mais datas</button></div>` : ''}
+    const waFaixa = st.remindOn && !waOn() && S.whats && S.whats.state !== 'conectando'
+      ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('whats', 18)}</span><div><strong>Os lembretes no WhatsApp estão parados</strong><p>O WhatsApp dos lembretes está desconectado. Conecte de novo para os clientes voltarem a receber o aviso.</p></div><button type="button" class="btn p" data-a="ir-wa">Conectar</button></div>` : '';
+    return `${waFaixa}${daysLeft <= 10 ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${daysLeft < 0 ? 'A agenda online está fechada' : `A agenda online fecha em ${shortDate(st.bookTo)}`}</strong><p>${daysLeft < 0 ? 'Nenhum cliente consegue marcar pelo site agora.' : 'Depois dessa data ninguém consegue marcar pelo site.'}</p></div><button type="button" class="btn p" data-a="ir-cfg">Abrir mais datas</button></div>` : ''}
     <section class="hero"><div><small>${cap(longDate(TODAY))}</small><h2>${greet()}, ${esc(first(S.barber.name))}.</h2><p>${resumo}</p>
       <div class="acoes-hero"><button type="button" class="btn-claro" data-a="novo">${ic('plus', 18)}<span class="so-pc">Novo agendamento</span><span class="so-cel">Agendar</span></button><button type="button" class="btn-vidro" data-a="ir-ag" data-v="hoje">${ic('cal', 18)}Ver agenda</button></div></div>${proxCard}</section>
     <div class="kpis">
@@ -313,7 +344,7 @@
     }
     return `<div class="ag"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
       <button type="button" class="quem" data-a="ap" data-id="${x.id}">${avk(c)}<div><b>${esc(c.name)}</b><small>${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}</small></div></button>
-      <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${acoes}</div>`;
+      <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${lembreteTag(x)}${acoes}</div>`;
   }
   function vMes() {
     if (!V.calMonth) V.calMonth = TODAY.slice(0, 8) + '01';
@@ -460,10 +491,12 @@
       days: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ on: !st.closed.includes(i), ...A.dayHours(st, i) })),
       lunchStart: st.lunchStart, lunchEnd: st.lunchEnd, bookFrom: st.bookFrom, bookTo: st.bookTo,
       maxActive: st.maxActive, maxPerDay: st.maxPerDay, maxDevice: st.maxDevice, autoBlock: st.autoBlock,
+      remindOn: st.remindOn, remindMin: st.remindMin, remindMsg: st.remindMsg,
       svcs: S.services.map((s) => ({ id: s.id, name: s.name, price: String(s.price).replace('.', ','), dur: s.dur })),
     };
   }
   const dirty = () => !!V.draft && JSON.stringify(V.draft) !== JSON.stringify(mkDraft());
+  function paintWaPrevia() { const p = $('#waPrevia p'); if (p && V.draft) p.textContent = waPrevia(V.draft); }
   function paintSave() {
     const b = $('#salvarBarra'); if (!b) return;
     const d = dirty(); b.classList.toggle('sujo', d);
@@ -501,6 +534,7 @@
             <div class="campo"><label for="cfg-fone">WhatsApp da barbearia</label><div class="entrada" id="e-cfone">${ic('whats', 18)}<input id="cfg-fone" data-d="phone" data-mask="1" inputmode="tel" placeholder="(16) 99999-9999" value="${esc(d.phone)}"></div><span class="ajuda">Aparece no site para o cliente chamar no WhatsApp. Pode deixar em branco.</span></div>
             <div class="campo"><label for="cfg-end">Endereço</label><div class="entrada">${ic('pin', 18)}<input id="cfg-end" data-d="address" value="${esc(d.address)}" maxlength="140" placeholder="Rua, número - bairro, cidade"></div><span class="ajuda">Usado no mapa do site.</span></div>
           </div></section>
+        ${cartaoWa(d)}
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('clock', 17)}</span>Horário de funcionamento</h3></div>
           <div class="lista-v">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const x = d.days[i]; return `<div class="dia-func ${x.on ? '' : 'off'}" id="e-dia${i}"><button type="button" class="chave ${x.on ? 'on' : ''}" data-a="dia-on" data-v="${i}" aria-label="${cap(DOWL[i])}: ${x.on ? 'aberto' : 'fechado'}" aria-pressed="${x.on}"></button><b>${cap(DOWL[i])}</b><div class="hs">${x.on ? `<div class="entrada"><input type="time" step="1800" value="${x.open}" data-dia="${i}" data-k="open" aria-label="Abre"></div>às<div class="entrada"><input type="time" step="1800" value="${x.close}" data-dia="${i}" data-k="close" aria-label="Fecha"></div>` : '<span class="tag" data-k="cinza">Fechado</span>'}</div></div>`; }).join('')}
             <div class="dia-func almoco" id="e-almoco"><span class="ico-k p" data-k="laranja">${ic('coffee', 16)}</span><b>Almoço</b><div class="hs"><div class="entrada"><input type="time" step="1800" value="${d.lunchStart}" data-d="lunchStart" aria-label="Início do almoço"></div>às<div class="entrada"><input type="time" step="1800" value="${d.lunchEnd}" data-d="lunchEnd" aria-label="Fim do almoço"></div></div></div>
@@ -527,6 +561,68 @@
       </div></div>
       <div class="salvar-barra" id="salvarBarra"><span></span><button type="button" class="btn pri" data-a="salvar">${ic('check', 17)}Salvar alterações</button></div>`;
   }
+  // ----- Lembrete no WhatsApp -----
+  const WA_PIL = { on: ['verde', 'Conectado'], qr: ['laranja', 'Esperando o QR Code'], conectando: ['azul', 'Conectando…'], off: ['cinza', 'Desconectado'] };
+  function waConexao() {
+    const w = S.whats || { state: 'off' };
+    if (w.state === 'on') {
+      return `<div class="wa-on"><span class="ico-k" data-k="verde">${ic('whats', 22)}</span><div><b>${maskPhone(w.number)}${w.name ? ` · ${esc(w.name)}` : ''}</b><small>Os lembretes saem por este número.</small></div>
+        ${V.waSair ? `<div class="confirma"><span>Desconectar? Os lembretes param até você ler o QR Code de novo.</span><div><button type="button" class="btn p verm" data-a="wa-sair">Desconectar</button><button type="button" class="btn p" data-a="wa-sair-no">Voltar</button></div></div>`
+          : `<button type="button" class="btn p" data-a="wa-sair-ask">${ic('out', 15)}Desconectar</button>`}</div>`;
+    }
+    if (w.state === 'qr' && w.qr) {
+      return `<div class="wa-qr"><img src="${w.qr}" alt="QR Code para conectar o WhatsApp" width="200" height="200"><ol>
+        <li>Abra o WhatsApp <b>do chip dos lembretes</b> no celular.</li>
+        <li>Toque em <b>⋮</b> (ou <b>Configurações</b>) e depois em <b>Aparelhos conectados</b>.</li>
+        <li>Toque em <b>Conectar um aparelho</b> e aponte a câmera para este código.</li></ol>
+        <p class="muted">O código muda sozinho a cada 20 segundos.</p><button type="button" class="btn p" data-a="wa-sair">Cancelar</button></div>`;
+    }
+    if (w.state === 'conectando' || w.state === 'qr') return `<div class="wa-off"><span class="giro" aria-hidden="true"></span><p>Conectando ao WhatsApp…</p></div>`;
+    return `<div class="wa-off">${w.error ? `<div class="faixa" data-t="aviso" style="width:100%"><span class="f-ico">${ic('alert', 16)}</span><div><strong>WhatsApp desconectado</strong><p>${esc(w.error)}</p></div></div>` : ''}
+      <p>O sistema manda uma mensagem para o cliente antes do horário, sozinho, por um WhatsApp só para isso.</p>
+      <div class="faixa fina" data-t="aviso"><span class="f-ico">${ic('alert', 15)}</span><div><strong>Use um chip separado</strong><p>Nunca o WhatsApp principal da barbearia.</p></div></div>
+      <button type="button" class="btn pri" data-a="wa-con">${ic('whats', 17)}Conectar WhatsApp</button></div>`;
+  }
+  function waPrevia(d) {
+    const st = S.settings; const h = A.fromMin(Math.min(A.toMin(A.dayHours(st, NOW.getDay()).open || '09:00') + 360, 22 * 60));
+    return A.remindText(d.remindMsg, { nome: S.barber.name || 'João Silva', hora: h, servico: (S.services[0] || {}).name || 'Corte', barbearia: d.shopName || st.shopName });
+  }
+  function cartaoWa(d) {
+    const w = S.whats || { state: 'off' }; const p = WA_PIL[w.state] || WA_PIL.off;
+    const vars = [['{nome}', 'Nome'], ['{hora}', 'Hora'], ['{servico}', 'Serviço'], ['{barbearia}', 'Barbearia']];
+    return `<section class="cartao" id="cartaoWa"><div class="cartao-topo"><h3><span class="ico-k p">${ic('whats', 17)}</span>Lembrete no WhatsApp</h3><span class="pilula ${w.state === 'on' ? 'viva' : ''}" data-k="${p[0]}" id="waPil">${p[1]}</span></div>
+      <div id="waCon">${waConexao()}</div>
+      <div class="form-g wa-cfg">
+        <div class="wa-liga"><button type="button" class="chave ${d.remindOn ? 'on' : ''}" data-a="wa-liga" aria-pressed="${!!d.remindOn}" aria-label="Mandar lembrete automático"></button><div><b>Mandar lembrete automático</b><small>${d.remindOn ? 'Ligado. Cada cliente recebe uma mensagem no dia do horário.' : 'Desligado. Ninguém recebe lembrete.'}</small></div></div>
+        ${d.remindOn ? `<div class="campo"><label for="cfg-wamin">Quanto tempo antes</label><div class="entrada"><select id="cfg-wamin" data-d="remindMin" data-num="1">${[[30, '30 minutos antes'], [60, '1 hora antes'], [90, '1h30 antes'], [120, '2 horas antes'], [180, '3 horas antes']].map(([v, l]) => `<option value="${v}" ${Number(d.remindMin) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+        <div class="campo"><label for="cfg-wamsg">Mensagem</label><div class="entrada area" id="e-wamsg"><textarea id="cfg-wamsg" data-d="remindMsg" rows="4" maxlength="500">${esc(d.remindMsg)}</textarea></div>
+          <div class="wa-vars"><span class="muted">Toque para colocar:</span>${vars.map(([v, l]) => `<button type="button" class="chip" data-a="wa-var" data-v="${v}">${l}</button>`).join('')}${d.remindMsg.trim() !== A.REMIND_MSG ? `<button type="button" class="link" data-a="wa-padrao">Voltar ao texto padrão</button>` : ''}</div>
+          <span class="ajuda">Cada cliente recebe com o próprio nome, hora e serviço. Evite colocar links.</span></div>
+        <div class="campo"><span class="lab">Como o cliente vai ver</span><div class="wa-balao" id="waPrevia"><p>${esc(waPrevia(d))}</p><small>${A.fromMin(nowMin())} ✓✓</small></div></div>
+        ${w.state === 'on' ? `<div class="wa-teste"><div class="campo"><label for="wa-tel">Mandar um teste para</label><div class="entrada" id="e-watel">${ic('phone', 18)}<input id="wa-tel" data-in="mask" inputmode="tel" placeholder="(16) 99999-9999" value="${esc(V.waTel || '')}"></div></div><button type="button" class="btn" data-a="wa-teste" ${V.waTestando ? 'disabled' : ''}>${ic('whats', 16)}${V.waTestando ? 'Enviando…' : 'Enviar teste'}</button></div>
+          <span class="ajuda muted" style="font-size:12px">O teste usa o texto já salvo. Salve antes se mudou a mensagem.</span>` : ''}` : ''}
+      </div></section>`;
+  }
+  /** Atualiza só o quadro do WhatsApp (sem atrapalhar quem está digitando) e a faixa do Início. */
+  function paintWa() {
+    const con = $('#waCon');
+    if (con) {
+      con.innerHTML = waConexao();
+      const p = WA_PIL[S.whats.state] || WA_PIL.off; const pil = $('#waPil');
+      if (pil) { pil.dataset.k = p[0]; pil.textContent = p[1]; pil.classList.toggle('viva', S.whats.state === 'on'); }
+      const teste = !!$('#wa-tel');
+      if (teste !== (S.whats.state === 'on' && !!V.draft && V.draft.remindOn) && !document.activeElement?.matches('input,select,textarea')) render();
+    } else if (!V.nv && !document.activeElement?.matches('input,select,textarea')) render();
+    waPoll();
+  }
+  // Se os avisos ao vivo falharem, confere a conexão de tempos em tempos enquanto espera o QR Code
+  let waTimer = null;
+  function waPoll() {
+    clearTimeout(waTimer);
+    if (!S || !S.whats || !['qr', 'conectando'].includes(S.whats.state) || V.live) return;
+    waTimer = setTimeout(() => api('GET', '/api/admin/whatsapp').then((w) => { const mudou = JSON.stringify(w) !== JSON.stringify(S.whats); S.whats = w; if (mudou) paintWa(); else waPoll(); }).catch(waPoll), 4000);
+  }
+
   /** Confere o rascunho e manda para o servidor. Volta true se salvou. */
   async function salvarCfg() {
     const d = V.draft; const st = S.settings;
@@ -544,6 +640,8 @@
       if (!s.name.trim()) return erro('Serviço sem nome', 'Escreva o nome de cada serviço.', '#e-svc' + i);
       if (!(p >= 0)) return erro(`Preço inválido em ${s.name}`, 'Digite só números. Ex.: 35 ou 35,50.', '#e-svc' + i);
     }
+    if (!d.remindMsg.trim() || d.remindMsg.trim().length > 500) return erro('Confira a mensagem do lembrete', 'Escreva a mensagem com até 500 letras.', '#e-wamsg');
+    if (!/\{hora\}/i.test(d.remindMsg)) return erro('Falta o {hora} na mensagem', 'Ele vira o horário do cliente. Sem ele o cliente não sabe a hora.', '#e-wamsg');
     const hours = {}; d.days.forEach((x, i) => { hours[i] = { open: x.open, close: x.close }; });
     const patch = {
       shopName: d.shopName.trim(), tagline: d.tagline.trim(), address: d.address.trim(), phone: fone, color: d.color, custom: d.custom, hours,
@@ -551,6 +649,7 @@
       open: abertos.map((i) => d.days[i].open).sort()[0], close: abertos.map((i) => d.days[i].close).sort().pop(),
       lunchStart: d.lunchStart, lunchEnd: d.lunchEnd, bookFrom: d.bookFrom, bookTo: d.bookTo,
       maxActive: Number(d.maxActive), maxPerDay: Number(d.maxPerDay), maxDevice: Number(d.maxDevice), autoBlock: Number(d.autoBlock),
+      remindOn: !!d.remindOn, remindMin: Number(d.remindMin), remindMsg: d.remindMsg.trim() === A.REMIND_MSG ? '' : d.remindMsg.trim(),
     };
     const mudouSvc = d.svcs.filter((s) => { const o = S.services.find((x) => x.id === s.id); return o && (o.name !== s.name.trim() || o.dur !== s.dur || o.price !== parseFloat(String(s.price).replace(',', '.'))); });
     V.saving = true;
@@ -595,6 +694,7 @@
       b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
         <button type="button" class="quem-l" data-a="cli" data-id="${c.id}">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>
         <div class="kv"><div><small>Serviço</small><b>${esc(x.service)}</b></div><div><small>Duração</small><b>${tempo(x.dur)}</b></div><div><small>Valor</small><b class="num">${money(x.price)}</b></div></div>
+        ${ladoLembrete(x, c)}
         ${x.status === 'agendado' ? `<div class="acoes"><button type="button" class="btn ok-soft" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 16)}Atendido</button><button type="button" class="btn verm" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 16)}Não veio</button></div>
           ${V.ladoAsk === 'cancel' ? `<div class="confirma"><span>Cancelar o horário de ${esc(first(c.name))}? A vaga fica livre no site.</span><div><button type="button" class="btn p sim" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>` : `<button type="button" class="btn" data-a="lado-ask" data-v="cancel">${ic('ban', 16)}Cancelar agendamento</button>`}`
           : `<button type="button" class="btn" data-a="st" data-id="${x.id}" data-s="agendado">${ic('undo', 16)}Voltar para aguardando</button>`}
@@ -617,6 +717,15 @@
           : `<button type="button" class="btn verm" data-a="lado-ask" data-v="block">${ic('ban', 16)}Bloquear cliente</button>`}`;
     }
     return `<div class="overlay" data-a="lado-x"></div><aside class="lado" role="dialog" aria-modal="true"><div class="folha-topo">${h}<button type="button" class="btn-icone" data-a="lado-x" aria-label="Fechar">${ic('x', 18)}</button></div>${b}</aside>`;
+  }
+
+  function ladoLembrete(x, c) {
+    const l = lembrete(x);
+    const podeMandar = x.status === 'agendado' && x.date >= TODAY && c.phone && waOn() && !(x.remind && ['enviado', 'enviando'].includes(x.remind.status));
+    if (!l && !podeMandar) return '';
+    const txt = l ? l[1] : 'Lembrete no WhatsApp';
+    return `<div class="lado-lembra" data-k="${l ? l[0] : 'cinza'}"><span class="ico-k p">${ic('whats', 16)}</span><div><b>${txt}</b><small>${l && l[0] === 'verde' ? 'Chegou pelo WhatsApp dos lembretes.' : podeMandar ? 'Quer avisar agora? Manda pelo WhatsApp dos lembretes.' : 'Mande pelo seu WhatsApp, com a mensagem pronta.'}</small></div>
+      ${podeMandar ? `<button type="button" class="btn p" data-a="lembrar" data-id="${x.id}">${ic('whats', 15)}Mandar agora</button>` : l && l[2] && c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}Mandar à mão</a>` : ''}</div>`;
   }
 
   // ===== Novo agendamento (encaixe ou cliente que ligou) =====
@@ -833,6 +942,27 @@
         render(); alerta('info', `Agenda aberta até ${shortDate(V.draft.bookTo)}`, 'Toque em "Salvar alterações" para valer no site.', [], 4000); break;
       }
       case 'salvar': salvarCfg(); break;
+      case 'wa-liga': V.draft.remindOn = !V.draft.remindOn; render(); break;
+      case 'wa-var': {
+        const t = $('#cfg-wamsg'); if (!t) break;
+        const a0 = t.selectionStart ?? t.value.length, b0 = t.selectionEnd ?? t.value.length;
+        t.value = t.value.slice(0, a0) + v + t.value.slice(b0); t.focus(); t.setSelectionRange(a0 + v.length, a0 + v.length);
+        V.draft.remindMsg = t.value; paintWaPrevia(); paintSave(); break;
+      }
+      case 'wa-padrao': V.draft.remindMsg = A.REMIND_MSG; render(); break;
+      case 'wa-con': S.whats = { ...S.whats, state: 'conectando', error: '' }; paintWa(); api('POST', '/api/admin/whatsapp/conectar').then((w) => { S.whats = w; paintWa(); }).catch((err) => { alerta('erro', 'Não deu para conectar', err.message); reload().then(render); }); break;
+      case 'wa-sair-ask': V.waSair = true; paintWa(); break;
+      case 'wa-sair-no': V.waSair = false; paintWa(); break;
+      case 'wa-sair': V.waSair = false; act(() => api('POST', '/api/admin/whatsapp/desconectar'), () => alerta('info', 'WhatsApp desconectado', 'Os lembretes ficam parados até você conectar de novo.')); break;
+      case 'wa-teste': {
+        const tel = digits($('#wa-tel') ? $('#wa-tel').value : '');
+        if (A.phoneError(tel)) { alerta('erro', 'Confira o número do teste', A.phoneError(tel)); marcar('#e-watel'); break; }
+        V.waTel = maskPhone(tel); V.waTestando = true; render();
+        api('POST', '/api/admin/whatsapp/teste', { phone: tel }).then(() => alerta('ok', 'Teste enviado!', 'Confira o WhatsApp desse número.')).catch((err) => alerta('erro', 'O teste não foi', err.message)).finally(() => { V.waTestando = false; render(); });
+        break;
+      }
+      case 'lembrar': act(() => api('POST', `/api/admin/agendamentos/${id}/lembrete`), () => alerta('ok', 'Lembrete enviado!', 'A mensagem saiu pelo WhatsApp dos lembretes.')); break;
+      case 'ir-wa': irPara('cfg'); setTimeout(() => { const c = $('#cartaoWa'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80); break;
       case 'logo-rm': act(() => put('/api/admin/configuracoes', { logo: null }), () => { V.draft.logo = S.settings.logo; alerta('ok', 'Logo removida', 'No lugar dela aparecem as iniciais da barbearia.'); }); break;
       case 'svc-add': act(() => api('POST', '/api/admin/servicos', { name: 'Novo serviço', price: 30, dur: 30 }), (r) => {
         if (V.draft && r && r.service) V.draft.svcs.push({ id: r.service.id, name: r.service.name, price: String(r.service.price).replace('.', ','), dur: r.service.dur });
@@ -883,7 +1013,7 @@
       if (k === 'cli-q') { V.cliQ = el.value; V.pg.cli = 1; $('#cliLista').innerHTML = cliLista(); }
     }
     if (!V.draft) return;
-    if (el.dataset.d) { if (el.dataset.mask) el.value = maskPhone(el.value); V.draft[el.dataset.d] = el.dataset.num ? Number(el.value) : el.value; paintSave(); }
+    if (el.dataset.d) { if (el.dataset.mask) el.value = maskPhone(el.value); V.draft[el.dataset.d] = el.dataset.num ? Number(el.value) : el.value; paintSave(); if (el.dataset.d === 'remindMsg') paintWaPrevia(); }
     if (el.dataset.dia) { V.draft.days[Number(el.dataset.dia)][el.dataset.k] = el.value; paintSave(); }
     if (el.dataset.svc) { const s = V.draft.svcs[Number(el.dataset.svc)]; s[el.dataset.k] = el.dataset.k === 'dur' ? Number(el.value) : el.value; paintSave(); }
     if (el.dataset.ch === 'cor-custom') { V.draft.custom = el.value; V.draft.color = 'custom'; applyTheme(V.draft); paintSave(); }

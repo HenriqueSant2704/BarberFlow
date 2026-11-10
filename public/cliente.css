@@ -460,3 +460,7 @@ a.info-cab{border-top:1px solid var(--line)}
 /* Detalhe discreto dos cards de agendamento: cantinho dobrado na cor da marca */
 .ag-c,.ini-prox{position:relative;overflow:hidden}
 .ag-c::after,.ini-prox::after{content:"";position:absolute;top:0;right:0;width:26px;height:26px;background:linear-gradient(225deg,var(--ouro) 0 48%,transparent 52%);opacity:.9;pointer-events:none}
+/* Aviso do lembrete no WhatsApp (tela "Horário confirmado!") */
+.sucesso .faixa.lembrete{width:100%;text-align:left}
+.sucesso .faixa.lembrete p{color:var(--ink-soft)}
+.sucesso .faixa.lembrete p b{color:var(--ink);white-space:nowrap}
