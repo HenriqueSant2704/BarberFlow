@@ -100,3 +100,15 @@ CREATE INDEX IF NOT EXISTS appointments_created_idx ON appointments(created_at);
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS phone     text  NOT NULL DEFAULT '';   -- WhatsApp da barbearia (aparece no site)
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS day_hours jsonb NOT NULL DEFAULT '{}'; -- horário próprio de cada dia: {"6":{"open":"08:00","close":"14:00"}}
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category  text  NOT NULL DEFAULT 'Outros';
+
+-- ----- Lembrete no WhatsApp (v1.5) -----
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS remind_on  boolean  NOT NULL DEFAULT false; -- manda lembrete automático
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS remind_min smallint NOT NULL DEFAULT 60;    -- quantos minutos antes do horário
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS remind_msg text     NOT NULL DEFAULT '';    -- texto (vazio = texto padrão)
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS remind_status text;        -- vazio, enviando, enviado ou falhou
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS remind_at     timestamptz; -- quando o lembrete saiu
+-- Sessão do WhatsApp dos lembretes (fica no banco para sobreviver aos reinícios do servidor)
+CREATE TABLE IF NOT EXISTS wa_auth (
+  key   text PRIMARY KEY,
+  value text NOT NULL
+);

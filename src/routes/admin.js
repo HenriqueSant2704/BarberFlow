@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const repo = require('../repo');
 const notify = require('../notify');
+const wa = require('../whatsapp');
+const lembretes = require('../lembretes');
 const { setAdminCookie, clearAdminCookie, requireAdmin } = require('../auth');
 const { createAppointment, findOrCreateClient } = require('../booking');
 const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, cleanId } = require('../util');
@@ -56,6 +58,7 @@ r.get('/dados', ah(async (req, res) => {
     expenses: expenses.rows.map(repo.mapExpense),
     barber: { name: b.name, email: b.email, user: b.username },
     notifications: notifs,
+    whats: wa.info(),
     today: today(), nowMin: nowMin(),
   });
 }));
@@ -213,6 +216,14 @@ const FIELDS = {
   lunchEnd: ['lunch_end', (v) => { if (!Agenda.isTime(v)) fail(400, 'Horário inválido.'); return v; }],
   closed: ['closed_days', (v) => { if (!Array.isArray(v) || v.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) fail(400, 'Dias inválidos.'); if (v.length >= 7) fail(400, 'A barbearia precisa abrir pelo menos um dia na semana.'); return [...new Set(v)]; }],
   phone: ['phone', (v) => { const d = Agenda.phoneDigits(v); if (!d) return ''; if (d.length < 10 || d.length > 11) fail(400, 'Digite o WhatsApp da barbearia com DDD.'); return d; }],
+  remindOn: ['remind_on', (v) => !!v],
+  remindMin: ['remind_min', (v) => { const n = Number(v); if (![30, 60, 90, 120, 180].includes(n)) fail(400, 'Escolha quanto tempo antes manda o lembrete.'); return n; }],
+  remindMsg: ['remind_msg', (v) => {
+    const s = String(v || '').trim();
+    if (s.length > 500) fail(400, 'A mensagem do lembrete pode ter até 500 letras.');
+    if (s && !/\{hora\}/i.test(s)) fail(400, 'Deixe o {hora} na mensagem para o cliente saber o horário.');
+    return s;
+  }],
   hours: ['day_hours', (v) => {
     if (!v || typeof v !== 'object' || Array.isArray(v)) fail(400, 'Horários inválidos.');
     const out = {};
@@ -255,6 +266,20 @@ r.put('/configuracoes', ah(async (req, res) => {
   if (next.bookFrom > next.bookTo) fail(400, 'A data final precisa ser depois da inicial.');
   await db.query(`UPDATE settings SET ${sets.join(', ')} WHERE id = 1`, vals);
   res.json({ settings: await repo.getSettings() });
+}));
+
+// ----- WhatsApp dos lembretes -----
+r.get('/whatsapp', (req, res) => res.json(wa.info()));
+r.post('/whatsapp/conectar', ah(async (req, res) => res.json(await wa.connect())));
+r.post('/whatsapp/desconectar', ah(async (req, res) => res.json(await wa.disconnect())));
+r.post('/whatsapp/teste', ah(async (req, res) => {
+  const phone = cleanPhone(req.body.phone);
+  try { await lembretes.sendTest(phone); } catch (err) { fail(400, err.message); }
+  res.json({ ok: true });
+}));
+r.post('/agendamentos/:id/lembrete', ah(async (req, res) => {
+  try { await lembretes.sendNow(cleanId(req.params.id)); } catch (err) { fail(err.status || 400, err.message); }
+  res.json({ ok: true });
 }));
 
 // ----- Serviços -----

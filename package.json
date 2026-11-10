@@ -12,13 +12,17 @@
     "db:login": "node src/reset-login.js",
     "db:limpar-demo": "node src/limpar-demo.js"
   },
-  "engines": { "node": ">=18.18" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "qrcode": "1.5.4"
   }
 }

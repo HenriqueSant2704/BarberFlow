@@ -1,5 +1,6 @@
 // Leitura do banco e conversão para o formato usado pelas telas.
 const db = require('./db');
+const { REMIND_MSG } = require('../public/shared/agenda');
 
 const mapSettings = (r) => ({
   shopName: r.shop_name, tagline: r.tagline, address: r.address, logo: r.logo,
@@ -8,6 +9,7 @@ const mapSettings = (r) => ({
   closed: (r.closed_days || []).map(Number), bookFrom: r.book_from, bookTo: r.book_to,
   phone: r.phone || '', hours: r.day_hours || {},
   maxActive: r.max_active, maxPerDay: r.max_per_day, maxDevice: r.max_device, autoBlock: r.auto_block,
+  remindOn: !!r.remind_on, remindMin: r.remind_min || 60, remindMsg: r.remind_msg || REMIND_MSG,
 });
 const mapService = (r) => ({ id: String(r.id), name: r.name, price: r.price, dur: r.duration });
 const mapClient = (r) => ({
@@ -18,6 +20,7 @@ const mapAppt = (r) => ({
   id: String(r.id), date: r.date, time: r.time, clientId: String(r.client_id),
   serviceId: r.service_id == null ? null : String(r.service_id), service: r.service_name,
   price: r.price, dur: r.duration, status: r.status, origin: r.origin,
+  remind: r.remind_status ? { status: r.remind_status, at: r.remind_at } : null,
 });
 const mapExpense = (r) => ({ id: String(r.id), desc: r.description, val: r.amount, date: r.date, cat: r.category || 'Outros' });
 const mapBlocked = (r) => ({ date: r.date, why: r.reason });

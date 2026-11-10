@@ -623,3 +623,57 @@ button.kpi:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42
 .ag-col.hoje .ag-col-topo{border-bottom-color:color-mix(in srgb,var(--ouro) 35%,var(--line))}
 .tl-card{position:relative;overflow:hidden}
 .tl-card::after{content:"";position:absolute;top:0;right:0;width:20px;height:20px;background:linear-gradient(225deg,var(--ouro) 0 48%,transparent 52%);opacity:.9;pointer-events:none}
+
+/* ---------- Lembrete no WhatsApp ---------- */
+.lembra{--k:var(--cinza);display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:12px;font-weight:700;color:var(--k);line-height:1.3}
+.lembra[data-k="verde"]{--k:var(--verde)}.lembra[data-k="vermelho"]{--k:var(--vermelho)}.lembra[data-k="laranja"]{--k:var(--laranja)}.lembra[data-k="azul"]{--k:var(--azul)}.lembra[data-k="cinza"]{--k:var(--muted)}
+.tl-card .lembra{display:flex}
+.ag .lembra{margin:0;padding:0 2px}
+.lado-lembra{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line)}
+.lado-lembra .ico-k{background:var(--k-soft);color:var(--k)}
+.lado-lembra b{display:block;font-size:13.5px;color:var(--k)}
+.lado-lembra[data-k="cinza"] b{color:var(--ink)}
+.lado-lembra small{display:block;color:var(--muted);font-size:12px;line-height:1.4}
+.wa-off{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+.wa-off p{margin:0;font-size:13.5px;line-height:1.5;color:var(--ink-soft)}
+.wa-off .faixa{width:100%}
+.wa-on{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border-radius:12px;background:var(--verde-soft);border:1.5px solid color-mix(in srgb,var(--verde) 35%,transparent)}
+.wa-on .ico-k{background:var(--verde);color:#fff}
+.wa-on b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.wa-on small{display:block;color:var(--ink-soft);font-size:12.5px}
+.wa-on .confirma{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;font-size:13px;font-weight:700;color:var(--vermelho)}
+.wa-on .confirma div{display:flex;gap:8px}
+.wa-qr{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 18px;align-items:center;padding:14px;border-radius:12px;border:1.5px dashed var(--line-strong)}
+.wa-qr img{grid-row:span 3;width:200px;height:200px;border-radius:10px;background:#fff;padding:6px;image-rendering:pixelated}
+.wa-qr ol{margin:0;padding-left:20px;display:grid;gap:8px;font-size:13.5px;line-height:1.45;color:var(--ink-soft)}
+.wa-qr p{margin:0;font-size:12.5px}
+.wa-qr .btn{justify-self:start}
+.giro{width:22px;height:22px;border-radius:50%;border:3px solid var(--line-strong);border-top-color:var(--ouro);animation:gira .8s linear infinite}
+@keyframes gira{to{transform:rotate(360deg)}}
+.wa-off:has(.giro){flex-direction:row;align-items:center}
+.wa-cfg{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.wa-liga{display:flex;align-items:center;gap:12px}
+.wa-liga b{display:block;font-size:14px}
+.wa-liga small{display:block;color:var(--muted);font-size:12.5px}
+.entrada.area{height:auto;padding:10px 14px;align-items:stretch}
+.entrada textarea{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:14.5px;line-height:1.5;color:var(--ink);resize:vertical;min-height:96px}
+.wa-vars{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12.5px}
+.wa-vars .chip{padding:5px 11px;font-size:12.5px}
+.wa-balao{background:#e7ffdb;color:#111b21;border-radius:12px 12px 12px 3px;padding:10px 12px 6px;max-width:420px;box-shadow:0 1px 1px rgba(0,0,0,.08);position:relative}
+.wa-balao p{margin:0;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.wa-balao small{display:block;text-align:right;font-size:11px;color:#667781;margin-top:2px}
+:root[data-theme="dark"] .wa-balao{background:#144d37;color:#e9edef}
+:root[data-theme="dark"] .wa-balao small{color:#8696a0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .wa-balao{background:#144d37;color:#e9edef}:root:not([data-theme="light"]) .wa-balao small{color:#8696a0}}
+.wa-teste{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}
+.wa-teste .btn{height:50px}
+@media (max-width:560px){
+  .wa-qr{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:left}
+  .wa-qr img{grid-row:auto;width:220px;height:220px}
+  .wa-qr .btn{justify-self:stretch}
+  .wa-on{grid-template-columns:auto minmax(0,1fr)}
+  .wa-on>.btn{grid-column:1/-1}
+  .wa-teste{grid-template-columns:minmax(0,1fr)}
+  .lado-lembra{grid-template-columns:auto minmax(0,1fr)}
+  .lado-lembra .btn{grid-column:1/-1}
+}

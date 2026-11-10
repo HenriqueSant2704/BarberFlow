@@ -11,6 +11,12 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '2.5mb' }));
 app.use(cookieParser());
 
+// Toda mudança no banco (agendar, cancelar, configurações) atualiza a lista de lembretes do dia
+const lembretes = require('./lembretes');
+app.use('/api', (req, res, next) => {
+  if (req.method !== 'GET') res.on('finish', () => { if (res.statusCode < 400) lembretes.schedule(); });
+  next();
+});
 app.use('/api/public', require('./routes/public'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
@@ -43,6 +49,8 @@ async function migrate() {
 }
 
 migrate().then(() => app.listen(PORT, () => {
+  require('./whatsapp').init();
+  lembretes.start();
   console.log(`\n  Barbearia rodando:`);
   console.log(`  Site do cliente:   http://localhost:${PORT}`);
   console.log(`  Painel do barbeiro: http://localhost:${PORT}/painel\n`);

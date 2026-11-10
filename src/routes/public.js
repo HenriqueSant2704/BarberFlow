@@ -5,6 +5,7 @@ const repo = require('../repo');
 const { signClient, readClient, requireClient } = require('../auth');
 const { createAppointment, findOrCreateClient } = require('../booking');
 const notify = require('../notify');
+const wa = require('../whatsapp');
 const guard = require('../guard');
 const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, lookupPhone, cleanId } = require('../util');
 
@@ -14,7 +15,11 @@ const r = express.Router();
 r.get('/info', ah(async (req, res) => {
   const t = today();
   const [settings, services, blocked] = await Promise.all([repo.getSettings(), repo.getServices(), repo.getBlocked(db, t)]);
-  res.json({ settings, services, blocked, today: t, nowMin: nowMin() });
+  // Lembrete: o site avisa o cliente e mostra o número que vai mandar (para ele salvar)
+  const w = wa.info();
+  const remind = { on: settings.remindOn && w.state === 'on', min: settings.remindMin, phone: w.state === 'on' ? w.number : '' };
+  delete settings.remindMsg;
+  res.json({ settings, services, blocked, remind, today: t, nowMin: nowMin() });
 }));
 
 // Horários ocupados (sem nenhum dado dos clientes) entre duas datas

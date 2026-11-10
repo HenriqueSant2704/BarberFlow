@@ -93,7 +93,7 @@
   // ----- carregar -----
   async function loadInfo() {
     const d = await api('GET', '/api/public/info');
-    S.settings = d.settings; S.services = d.services; S.blocked = d.blocked; TODAY = d.today;
+    S.settings = d.settings; S.services = d.services; S.blocked = d.blocked; S.remind = d.remind || { on: false }; TODAY = d.today;
     applyTheme(S.settings);
     document.title = `${S.settings.shopName} · Agendar horário`;
   }
@@ -313,7 +313,7 @@
       t = 'Primeira vez aqui? Bem-vindo!'; sub = 'Só precisamos do seu nome e WhatsApp.';
       body = `<form class="form-g" data-f="novo" novalidate>${field('n-name', 'Nome e sobrenome', 'user', V.newName, V.errs.name, 'autocomplete="name" placeholder="Ex.: João Silva" data-in="n-name"')}
         ${field('n-phone', 'WhatsApp com DDD', 'phone', maskPhone(V.newPhone), V.errs.phone, 'inputmode="tel" autocomplete="tel" placeholder="(11) 97425-8136" data-in="n-phone"')}
-        <div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários.</div>
+        <div class="muted" style="font-size:12.5px">Usamos seu WhatsApp só para falar sobre seus horários${S.remind && S.remind.on ? ' e mandar o lembrete no dia' : ''}.</div>
         <button type="submit" class="btn verde bloco-btn" ${wait ? 'disabled' : ''}>${wait ? 'Agendando…' : `${ic('check', 18)}Cadastrar e confirmar`}</button></form>`;
     } else {
       t = 'Tudo certo?'; sub = 'Confira e confirme o seu horário.';
@@ -328,6 +328,13 @@
       ${mini}${body}${back}</div>`;
   }
 
+  /** Texto do lembrete: "1 hora antes", "30 minutos antes"… */
+  const antes = (m) => (m < 60 ? `${m} minutos antes` : m === 60 ? '1 hora antes' : m % 60 ? `${Math.floor(m / 60)}h${m % 60} antes` : `${m / 60} horas antes`);
+  function avisoLembrete() {
+    if (!S.remind || !S.remind.on) return '';
+    return `<div class="faixa lembrete" data-t="ok"><span class="f-ico">${ic('whats', 18)}</span><div><strong>Você vai receber um lembrete no WhatsApp</strong><p>No dia do horário, ${antes(S.remind.min)}.${S.remind.phone ? ` Salve nosso número <b>${maskPhone(S.remind.phone)}</b> para a mensagem chegar certinho.` : ''}</p></div></div>`;
+  }
+
   // ===== Agendado! =====
   function vOk() {
     const a = MYAP.find((x) => String(x.id) === String(V.lastBooking)); if (!a) return vHome();
@@ -335,6 +342,7 @@
     return `<div class="sucesso"><div class="check-grande">${ic('check', 52)}</div>
       <div><h1>Horário confirmado!</h1><p>Te esperamos, ${esc(first(ME.name))}. Se não puder vir, cancele em <b>Meus horários</b> para liberar a vaga.</p></div>
       <div class="ticket">${ln('cal', 'Dia', cap(longDate(a.date)))}${ln('clock', 'Horário', `${a.time} às ${endOf(a.time, a.dur)}`)}${ln('scissors', 'Serviço', esc(a.service))}${ln('money', 'Valor (pago na barbearia)', money(a.price))}</div>
+      ${avisoLembrete()}
       <div class="acoes"><button type="button" class="btn pri" data-a="tab" data-t="horarios">${ic('clock', 17)}Ver meus horários</button><button type="button" class="btn" data-a="again">${ic('plus', 17)}Agendar outro</button></div></div>`;
   }
 
@@ -358,7 +366,8 @@
         : a.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : '<span class="pilula" data-k="cinza">Já passou</span>';
       let extra = '';
       if (fut) {
-        extra = `<div class="faixa p"><span class="f-ico">${ic('clock', 15)}</span><p>${dd === 0 ? '<b>É hoje!</b>' : dd === 1 ? '<b>É amanhã!</b>' : `Faltam <b>${dd} dias</b>`} · ${money(a.price)} na barbearia</p></div>
+        const lemb = S.remind && S.remind.on ? (a.remind && a.remind.status === 'enviado' ? ' · lembrete enviado no WhatsApp' : ` · lembrete no WhatsApp ${antes(S.remind.min)}`) : '';
+        extra = `<div class="faixa p"><span class="f-ico">${ic('clock', 15)}</span><p>${dd === 0 ? '<b>É hoje!</b>' : dd === 1 ? '<b>É amanhã!</b>' : `Faltam <b>${dd} dias</b>`} · ${money(a.price)} na barbearia${lemb}</p></div>
           ${String(V.cancelAsk) === String(a.id) ? `<div class="faixa pisca" data-t="erro"><span class="f-ico">${ic('alert', 18)}</span><div><strong>Cancelar esse horário?</strong><p>A vaga fica livre para outra pessoa.</p><div class="acoes" style="margin-top:10px"><button type="button" class="btn p" style="background:var(--vermelho);border-color:var(--vermelho);color:#fff" data-a="cancel-yes" data-id="${a.id}" ${V.busyAction ? 'disabled' : ''}>Sim, cancelar</button><button type="button" class="btn p" data-a="cancel-no">Manter horário</button></div></div></div>`
             : `<div class="acoes"><button type="button" class="btn verm p" data-a="cancel" data-id="${a.id}">${ic('x', 16)}Cancelar horário</button></div>`}`;
       }
