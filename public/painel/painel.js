@@ -11,7 +11,7 @@
   const V = {
     logged: false, sec: 'inicio', menu: false, sino: false, nClearAsk: false, live: false, saving: false, pg: {},
     ab: 'hoje', agDia: null, vista: 'lista', calMonth: null, cancel: null,
-    cliF: 'todos', cliQ: '',
+    cliF: 'todos', cliQ: '', cliOrd: 'nome', rk: 'gasto', rkPer: 'tudo', svcOrd: 'vezes', fecha: null, ladoPrev: null,
     per: 'mes', de: null, ate: null, despForm: false, despAsk: null,
     nv: null, lado: null, ladoAsk: null, draft: null, loginUser: '',
   };
@@ -37,6 +37,15 @@
   const waLink = (phone, txt) => `https://wa.me/55${digits(phone)}${txt ? `?text=${encodeURIComponent(txt)}` : ''}`;
   const hm = (at) => new Date(at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const waOn = () => S.whats && S.whats.state === 'on';
+  // Um atendimento pode ter vários serviços (o barbeiro ajusta na hora de fechar) e desconto.
+  const itensDe = (x) => (x.items && x.items.length ? x.items : [{ serviceId: x.serviceId, name: x.service, price: x.price }]);
+  const subDe = (x) => itensDe(x).reduce((s, it) => s + Number(it.price || 0), 0);
+  /** Quanto daquele serviço entrou no caixa (o desconto é dividido entre os serviços). */
+  const valorItem = (x, it) => { const sub = subDe(x); return sub ? (Number(it.price) * x.price) / sub : 0; };
+  const pf = (v) => { const n = parseFloat(String(v ?? '').replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+  const num2 = (v) => Number(v || 0).toFixed(2).replace('.', ',');
+  const diasDesde = (ds) => Math.round((NOW - A.parse(ds)) / 864e5);
+  const haDias = (ds) => { const n = diasDesde(ds); return n <= 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`; };
   /** Situação do lembrete no WhatsApp de um agendamento: [cor, texto, falhou?] ou null. */
   function lembrete(x) {
     const r = x.remind;
@@ -156,6 +165,7 @@
     if (V.sino) cam += vSino();
     if (V.lado) cam += vLado();
     if (V.nv) cam += vNovo();
+    if (V.fecha) cam += vFecha();
     $('#overlay').innerHTML = cam;
     updateTitle();
     paintSave();
@@ -368,16 +378,25 @@
     const by = {}; for (const x of S.appts) (by[x.clientId] = by[x.clientId] || []).push(x);
     const arr = S.clients.map((c) => {
       const ap = by[c.id] || []; const done = ap.filter((x) => x.status === 'realizado');
-      return { c, visits: done.length, spent: done.reduce((s, x) => s + x.price, 0), last: done.map((x) => x.date).sort().pop() || null, next: ap.filter((x) => x.status === 'agendado' && x.date >= TODAY).map((x) => x.date).sort()[0] || null, faltas: ap.filter((x) => x.status === 'faltou').length, thisMonth: done.some((x) => x.date >= ms) };
+      const datas = done.map((x) => x.date).sort();
+      const spent = done.reduce((s, x) => s + x.price, 0);
+      const cont = {}; done.forEach((x) => itensDe(x).forEach((it) => { cont[it.name] = (cont[it.name] || 0) + 1; }));
+      const fav = Object.entries(cont).sort((p, q) => q[1] - p[1])[0];
+      const cada = datas.length >= 2 ? Math.max(1, Math.round((A.parse(datas[datas.length - 1]) - A.parse(datas[0])) / 864e5 / (datas.length - 1))) : 0;
+      return {
+        c, visits: done.length, spent, ticket: done.length ? spent / done.length : 0, last: datas[datas.length - 1] || null, cada, fav: fav ? fav[0] : '',
+        next: ap.filter((x) => x.status === 'agendado' && x.date >= TODAY).map((x) => x.date).sort()[0] || null,
+        faltas: ap.filter((x) => x.status === 'faltou').length, thisMonth: done.some((x) => x.date >= ms),
+      };
     });
     const top = arr.filter((x) => x.spent > 0).sort((p, q) => q.spent - p.spent).slice(0, 5);
+    const posGasto = {}; arr.filter((x) => x.spent > 0).sort((p, q) => q.spent - p.spent).slice(0, 3).forEach((x, i) => { posGasto[x.c.id] = i + 1; });
     arr.forEach((x) => {
+      x.pos = posGasto[x.c.id] || 0;
+      // Nível principal (um só, para o card ficar limpo)
+      x.nivel = x.c.blocked ? ['vermelho', 'ban', 'Bloqueado'] : top.includes(x) ? ['ouro', 'crown', 'VIP'] : x.visits >= 4 ? ['verde', 'repeat', 'Fiel'] : sumido(x) ? ['laranja', 'clock', 'Sumido'] : x.visits <= 1 ? ['azul', 'spark', 'Novo'] : ['cinza', 'user', 'Cliente'];
       const t = [];
-      if (x.c.blocked) t.push(['vermelho', 'Bloqueado']);
-      if (top.includes(x)) t.push(['roxo', 'Top gasto']);
-      if (x.visits >= 4) t.push(['verde', 'Fiel']);
-      if (!x.thisMonth && x.visits && !x.next) t.push(['laranja', 'Sumido no mês']);
-      if (x.visits <= 1 && !x.c.blocked) t.push(['azul', 'Novo']);
+      if (sumido(x) && x.nivel[2] !== 'Sumido') t.push(['laranja', 'Sumido no mês']);
       if (x.faltas >= 2) t.push(['vermelho', `${x.faltas} faltas`]);
       if (x.next) t.push(['cinza', `Volta ${shortDate(x.next)}`]);
       x.tags = t;
@@ -385,34 +404,112 @@
     return { arr, top };
   }
   const sumido = (x) => !x.thisMonth && x.visits > 0 && !x.next;
+  const ORD = {
+    nome: ['Nome (A a Z)', (p, q) => p.c.name.localeCompare(q.c.name)],
+    gasto: ['Quem mais gasta', (p, q) => q.spent - p.spent],
+    visitas: ['Mais visitas', (p, q) => q.visits - p.visits || q.spent - p.spent],
+    recente: ['Veio por último', (p, q) => (q.last || '').localeCompare(p.last || '')],
+    sumido: ['Mais tempo sem vir', (p, q) => (p.last || '9').localeCompare(q.last || '9')],
+  };
+  const FILTROS = [
+    ['todos', 'Todos', 'users', () => true],
+    ['vip', 'VIP', 'crown', (x, top) => top.includes(x)],
+    ['fieis', 'Fiéis', 'repeat', (x) => x.visits >= 4],
+    ['novos', 'Novos', 'spark', (x) => x.visits <= 1 && !x.c.blocked],
+    ['sumidos', 'Sumidos no mês', 'clock', sumido],
+    ['bloq', 'Bloqueados', 'ban', (x) => x.c.blocked],
+  ];
   function listaClientes() {
-    const { arr, top } = clientStats(); let l = arr;
-    if (V.cliF === 'top') l = top;
-    else if (V.cliF === 'fieis') l = arr.filter((x) => x.visits >= 4);
-    else if (V.cliF === 'sumidos') l = arr.filter(sumido).sort((p, q) => (p.last || '').localeCompare(q.last || ''));
-    else if (V.cliF === 'bloq') l = arr.filter((x) => x.c.blocked);
-    if (!['top', 'sumidos'].includes(V.cliF)) l = l.slice().sort((p, q) => p.c.name.localeCompare(q.c.name));
-    const q = V.cliQ.trim().toLowerCase(); const qd = digits(q);
-    if (q) l = l.filter((x) => x.c.name.toLowerCase().includes(q) || (qd && x.c.phone.includes(qd)));
+    const { arr, top } = clientStats();
+    const f = FILTROS.find((y) => y[0] === V.cliF) || FILTROS[0];
+    let l = arr.filter((x) => f[3](x, top));
+    const ord = V.cliF === 'sumidos' && V.cliOrd === 'nome' ? 'sumido' : V.cliOrd;
+    l = l.slice().sort(ORD[ord] ? ORD[ord][1] : ORD.nome[1]);
+    const q = norm(V.cliQ.trim()); const qd = digits(q);
+    if (q) l = l.filter((x) => norm(x.c.name).includes(q) || (qd && x.c.phone.includes(qd)));
     return { l, arr, top };
   }
+
+  // ----- Ranking: pódio com 1º, 2º e 3º lugar -----
+  const RK = { gasto: ['Quem mais gasta', 'wallet'], freq: ['Mais frequentes', 'repeat'], sumidos: ['Quem sumiu', 'clock'] };
+  const RK_PER = { mes: 'Este mês', '3m': '3 meses', tudo: 'Desde sempre' };
+  function rankDados() {
+    const ini = V.rkPer === 'mes' ? TODAY.slice(0, 8) + '01' : V.rkPer === '3m' ? A.iso(A.addDays(NOW, -90)) : '0000';
+    const por = {};
+    S.appts.filter((x) => x.status === 'realizado' && x.date >= ini && x.date <= TODAY).forEach((x) => {
+      const p = (por[x.clientId] = por[x.clientId] || { c: cById(x.clientId), n: 0, val: 0, last: '' });
+      p.n++; p.val += x.price; if (x.date > p.last) p.last = x.date;
+    });
+    const l = Object.values(por).filter((p) => p.c.id !== '0');
+    return V.rk === 'freq' ? l.sort((p, q) => q.n - p.n || q.val - p.val) : l.sort((p, q) => q.val - p.val || q.n - p.n);
+  }
+  function vRank() {
+    const tabs = `<div class="rk-tabs" role="tablist">${Object.entries(RK).map(([k, [r, i]]) => `<button type="button" role="tab" aria-selected="${V.rk === k}" class="${V.rk === k ? 'on' : ''}" data-a="rk" data-v="${k}">${ic(i, 16)}${r}</button>`).join('')}</div>`;
+    const per = V.rk === 'sumidos' ? '' : `<div class="rk-per">${Object.entries(RK_PER).map(([k, r]) => `<button type="button" class="${V.rkPer === k ? 'on' : ''}" data-a="rk-per" data-v="${k}">${r}</button>`).join('')}</div>`;
+    let corpo;
+    if (V.rk === 'sumidos') {
+      const { arr } = clientStats();
+      const l = arr.filter(sumido).sort(ORD.sumido[1]);
+      corpo = l.length ? `<div class="rk-sumidos">${l.slice(0, 6).map((x, i) => {
+        const d = diasDesde(x.last); const atraso = x.cada ? d - x.cada : 0;
+        const msg = `Olá, ${first(x.c.name)}! Aqui é da ${S.settings.shopName}. Faz um tempinho que você não aparece. Bora dar aquele trato? É só marcar pelo nosso site.`;
+        return `<div class="rk-sum ${i === 0 ? 'pior' : ''}"><button type="button" class="rk-sum-q" data-a="cli" data-id="${x.c.id}">${avk(x.c, 42)}<div><b>${esc(x.c.name)}</b><small>${x.visits} visita${x.visits > 1 ? 's' : ''} · ${esc(x.fav || 'Corte')}</small></div></button>
+          <div class="rk-dias"><b class="num">${d}</b><span>dias sem vir</span></div>
+          <p>${x.cada ? (atraso > 0 ? `Costumava vir a cada <b>${x.cada} dias</b>. Está <b>${atraso} dias</b> atrasado.` : `Costuma vir a cada <b>${x.cada} dias</b>.`) : `Veio só uma vez, em ${shortDate(x.last)}.`}</p>
+          ${x.c.phone ? `<a class="btn p" href="${waLink(x.c.phone, msg)}" target="_blank" rel="noopener">${ic('whats', 15)}Chamar de volta</a>` : ''}</div>`;
+      }).join('')}</div>${l.length > 6 ? `<button type="button" class="link rk-mais" data-a="cli-f" data-v="sumidos" data-rola="1">Ver os ${l.length} sumidos${ic('right', 15)}</button>` : ''}`
+        : `<div class="rk-vazio">${ic('check', 22)}<b>Ninguém sumido</b><span>Todo mundo que costuma vir já voltou este mês ou tem horário marcado.</span></div>`;
+    } else {
+      const l = rankDados();
+      const val = (p) => (V.rk === 'freq' ? `${p.n} ${p.n === 1 ? 'visita' : 'visitas'}` : money0(p.val));
+      const sub = (p) => (V.rk === 'freq' ? `${money0(p.val)} no total` : `${p.n} ${p.n === 1 ? 'visita' : 'visitas'}`);
+      const lugar = (p, pos) => !p ? `<div class="pd vazio pd-${pos}"><div class="pd-base"><span>${pos}º</span></div></div>` : `<button type="button" class="pd pd-${pos}" data-a="cli" data-id="${p.c.id}" style="--d:${[0, 0.25, 0.1, 0.4][pos]}s">
+          ${pos === 1 ? `<span class="pd-coroa">${ic('crown', 26)}</span>` : ''}
+          <span class="pd-av">${esc(initials(p.c.name))}<i>${pos}</i></span>
+          <b class="pd-nome">${esc(p.c.name)}</b><span class="pd-val num">${val(p)}</span><small>${sub(p)}</small>
+          <div class="pd-base"><span>${pos}º</span></div></button>`;
+      const resto = l.slice(3, 10); const max = l[0] ? (V.rk === 'freq' ? l[0].n : l[0].val) : 1;
+      corpo = l.length ? `<div class="podio">${lugar(l[1], 2)}${lugar(l[0], 1)}${lugar(l[2], 3)}</div>
+        ${resto.length ? `<div class="rk-lista">${resto.map((p, i) => `<button type="button" class="rk-l" data-a="cli" data-id="${p.c.id}"><span class="n">${i + 4}º</span>${avk(p.c, 34)}<b>${esc(p.c.name)}</b><span class="barra"><i style="width:${((V.rk === 'freq' ? p.n : p.val) / max) * 100}%"></i></span><span class="v num">${val(p)}</span></button>`).join('')}</div>` : ''}`
+        : `<div class="rk-vazio">${ic('star', 22)}<b>Ninguém no ranking ainda</b><span>Quando você marcar atendimentos como atendidos, o pódio aparece aqui.</span></div>`;
+    }
+    return `<section class="rk-hero">
+      <div class="rk-topo"><div><small>Ranking dos clientes</small><h2>${V.rk === 'sumidos' ? 'Chame de volta quem sumiu' : V.rk === 'freq' ? 'Quem mais aparece por aqui' : 'Quem mais movimenta o caixa'}</h2></div>${per}</div>
+      ${tabs}${corpo}</section>`;
+  }
+
   function vCli() {
     const { arr, top } = listaClientes();
-    const fs = [['todos', 'Todos', 'azul', arr.length], ['top', 'Quem mais gasta', 'roxo', top.length], ['fieis', 'Fiéis', 'verde', arr.filter((x) => x.visits >= 4).length], ['sumidos', 'Sumidos no mês', 'laranja', arr.filter(sumido).length], ['bloq', 'Bloqueados', 'vermelho', arr.filter((x) => x.c.blocked).length]];
-    return `<div class="barra-filtros"><div class="entrada busca">${ic('search', 18)}<input id="cli-q" data-in="cli-q" placeholder="Buscar por nome ou WhatsApp" value="${esc(V.cliQ)}" aria-label="Buscar cliente"></div>
-      <div class="chips">${fs.map(([k, r, c, n]) => `<button type="button" class="chip ${V.cliF === k ? 'on' : ''}" data-k="${c}" data-a="cli-f" data-v="${k}">${r}<b>${n}</b></button>`).join('')}</div></div>
-      <div id="cliLista">${cliLista()}</div>`;
+    const n = (f) => arr.filter((x) => f[3](x, top)).length;
+    return `${vRank()}
+      <section class="cli-sec" id="cliSec"><div class="cli-sec-topo"><h3>Todos os clientes</h3><span class="muted" id="cliCont"></span></div>
+      <div class="cli-filtros">
+        <div class="entrada busca">${ic('search', 18)}<input id="cli-q" data-in="cli-q" placeholder="Buscar por nome ou WhatsApp" value="${esc(V.cliQ)}" aria-label="Buscar cliente">${V.cliQ ? `<button type="button" class="olho" data-a="cli-q-x" aria-label="Limpar busca">${ic('x', 16)}</button>` : ''}</div>
+        <div class="entrada ordem">${ic('sort', 17)}<select data-ch="cli-ord" aria-label="Ordenar">${Object.entries(ORD).map(([k, [r]]) => `<option value="${k}" ${V.cliOrd === k ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+      </div>
+      <div class="cli-chips">${FILTROS.map((f) => `<button type="button" class="cchip ${V.cliF === f[0] ? 'on' : ''}" data-a="cli-f" data-v="${f[0]}">${ic(f[2], 15)}${f[1]}<b>${n(f)}</b></button>`).join('')}</div>
+      <div id="cliLista">${cliLista()}</div></section>`;
+  }
+  function cliCard(x) {
+    const [k, i, r] = x.nivel;
+    const ult = x.last ? haDias(x.last) : 'nunca veio';
+    return `<div class="cli ${x.c.blocked ? 'bloq' : ''} ${x.pos ? 'top' + x.pos : ''}" role="button" tabindex="0" data-a="cli" data-id="${x.c.id}">
+      <div class="topo"><span class="cli-av" data-k="${k}">${esc(initials(x.c.name))}${x.pos ? `<i title="${x.pos}º que mais gasta">${x.pos}</i>` : ''}</span>
+        <div><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div>
+        <span class="nivel" data-k="${k}">${ic(i, 13)}${r}</span></div>
+      <div class="nums"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div><div><small>Ticket</small><b>${x.visits ? money0(x.ticket) : '—'}</b></div></div>
+      <div class="cli-rodape"><span>${ic('clock', 14)}${x.last ? `Última visita ${ult}` : 'Ainda não veio'}</span>${x.fav ? `<span>${svcIcon(x.fav).replace('<svg', '<svg width="14" height="14"')}${esc(x.fav)}</span>` : ''}${x.cada ? `<span>${ic('repeat', 14)}Vem a cada ${x.cada} dias</span>` : ''}</div>
+      ${x.tags.length ? `<div class="tags">${x.tags.map(([k2, t]) => `<span class="tag" data-k="${k2}">${t}</span>`).join('')}</div>` : ''}
+      ${x.c.blocked ? `<button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${x.c.id}">${ic('check', 15)}Desbloquear</button>` : ''}</div>`;
   }
   function cliLista() {
     const { l } = listaClientes(); const { itens, html } = pagina(l, 'cli');
+    setTimeout(() => { const e = $('#cliCont'); if (e) e.textContent = `${l.length} ${l.length === 1 ? 'cliente' : 'clientes'}`; });
     if (!itens.length) {
       const msg = !S.clients.length ? ['Nenhum cliente ainda', 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'] : V.cliQ ? ['Nenhum cliente encontrado', 'Confira o nome ou tente buscar pelo WhatsApp.'] : V.cliF === 'sumidos' ? ['Ninguém sumido', 'Todo mundo que costuma vir já voltou este mês ou tem horário marcado.'] : V.cliF === 'bloq' ? ['Ninguém bloqueado', 'Para bloquear alguém, abra a ficha do cliente.'] : ['Ninguém nesta lista', 'Assim que tiver atendimentos, a lista enche.'];
       return `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="laranja">${ic('search', 26)}</span><h4>${msg[0]}</h4><p>${msg[1]}</p></div></div>`;
     }
-    return `<div class="cli-grid">${itens.map((x) => `<div class="cli ${x.c.blocked ? 'bloq' : ''}" role="button" tabindex="0" data-a="cli" data-id="${x.c.id}"><div class="topo">${avk(x.c)}<div><b>${esc(x.c.name)}</b><small>${maskPhone(x.c.phone)}</small></div></div>
-      <div class="tags">${x.tags.map(([k, t]) => `<span class="tag" data-k="${k}">${t}</span>`).join('')}</div>
-      <div class="nums"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Última</small><b>${x.last ? shortDate(x.last) : '—'}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div></div>
-      ${x.c.blocked ? `<button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${x.c.id}">${ic('check', 15)}Desbloquear</button>` : ''}</div>`).join('')}</div>${html}`;
+    return `<div class="cli-grid">${itens.map(cliCard).join('')}</div>${html}`;
   }
 
   // ===== Financeiro =====
@@ -423,6 +520,10 @@
     if (V.per === 'mes') return [TODAY.slice(0, 8) + '01', TODAY];
     if (V.per === '30') return [A.iso(A.addDays(NOW, -29)), TODAY];
     return V.de <= V.ate ? [V.de, V.ate] : [V.ate, V.de];
+  }
+  function perTxt() {
+    const [de, ate] = faixaPer();
+    return de === ate ? cap(longDate(de)) : `${DOW[A.parse(de).getDay()]}, ${shortDate(de)} a ${DOW[A.parse(ate).getDay()]}, ${shortDate(ate)}`;
   }
   function vFin() {
     const [de, ate] = faixaPer(); const n = Math.round((A.parse(ate) - A.parse(de)) / 864e5) + 1;
@@ -444,10 +545,10 @@
     const rotEvery = barras.length > 16 ? Math.ceil(barras.length / 8) : 1;
     const pers = [['hoje', 'Hoje'], ['7', '7 dias'], ['mes', 'Este mês'], ['30', '30 dias'], ['per', 'Personalizado']];
     const kpi = (k, i, v, t, sub) => `<div class="kpi" data-k="${k}"><div class="kpi-topo"><span class="ico-k">${ic(i, 22)}</span></div><b class="num">${v}</b><p>${t}</p><span class="sub">${sub}</span></div>`;
-    const porSvc = {}; done.forEach((x) => { porSvc[x.service] = (porSvc[x.service] || 0) + 1; });
+    const porSvc = {}; done.forEach((x) => itensDe(x).forEach((it) => { porSvc[it.name] = (porSvc[it.name] || 0) + 1; }));
     const ranking = Object.entries(porSvc).sort((p, q) => q[1] - p[1]); const rmax = ranking.length ? ranking[0][1] : 1;
     const { itens, html } = pagina(desp, 'desp');
-    const periodoTxt = de === ate ? cap(longDate(de)) : `${DOW[A.parse(de).getDay()]}, ${shortDate(de)} a ${DOW[A.parse(ate).getDay()]}, ${shortDate(ate)}`;
+    const periodoTxt = perTxt();
     const grafico = n === 1
       ? `<div class="vazio" style="padding:24px 10px"><span class="ico-k" data-k="verde">${ic('trend', 26)}</span><h4>${money(fat)} hoje</h4><p>${atend ? `${atend} atendimento${atend > 1 ? 's' : ''} até agora. Para ver o gráfico, escolha 7 dias ou o mês.` : 'Nenhum atendimento marcado como atendido hoje ainda.'}</p></div>`
       : `<div class="grafico"><div class="g-eixo"><span>${money0(maxV)}</span><span>${money0(maxV / 2)}</span><span>R$ 0</span></div>
@@ -464,8 +565,8 @@
       </div>
       <div class="duas-col">
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('trend', 17)}</span>Faturamento por ${n <= 62 ? 'dia' : 'mês'}</h3>${n > 1 ? '<small>Passe o mouse ou toque nas barras</small>' : ''}</div>${grafico}</section>
-        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('star', 17)}</span>Serviços mais feitos</h3></div>
-          <div class="rank">${ranking.length ? ranking.map(([nome, q]) => `<div class="rank-i"><span class="ico-k p">${svcIcon(nome).replace('<svg', '<svg width="16" height="16"')}</span><b>${esc(nome)}</b><span>${q}×</span><div class="barra"><i style="width:${(q / rmax) * 100}%"></i></div></div>`).join('') : '<div class="muted" style="font-size:13.5px">Nenhum atendimento no período.</div>'}</div></section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('star', 17)}</span>Serviços mais feitos</h3>${ranking.length ? '<small>Toque para ver quem fez</small>' : ''}</div>
+          <div class="rank">${ranking.length ? ranking.map(([nome, q]) => `<button type="button" class="rank-i" data-a="svc-ver" data-v="${esc(nome)}" aria-label="${esc(nome)}: ${q} vezes. Ver os clientes"><span class="ico-k p">${svcIcon(nome).replace('<svg', '<svg width="16" height="16"')}</span><b>${esc(nome)}</b><span>${q}×${ic('right', 15)}</span><div class="barra"><i style="width:${(q / rmax) * 100}%"></i></div></button>`).join('') : '<div class="muted" style="font-size:13.5px">Nenhum atendimento no período.</div>'}</div></section>
       </div>
       <section class="cartao" id="cartaoDesp"><div class="cartao-topo"><h3><span class="ico-k p">${ic('receipt', 17)}</span>Despesas do período</h3><button type="button" class="btn ${V.despForm ? '' : 'pri'} p" data-a="desp-form">${ic(V.despForm ? 'x' : 'plus', 16)}${V.despForm ? 'Fechar' : 'Adicionar despesa'}</button></div>
         ${V.despForm ? `<form class="form-desp" id="despForm" novalidate>
@@ -690,10 +791,40 @@
   }
 
   // ===== Ficha lateral: agendamento ou cliente =====
-  function openLado(type, id) { V.lado = { type, id }; V.ladoAsk = null; V.sino = false; V.menu = false; render(); }
+  function openLado(type, id) {
+    // Saindo da lista de um serviço para a ficha do cliente: guarda o caminho de volta
+    V.ladoPrev = V.lado && V.lado.type === 'svc' && type !== 'svc' ? V.lado : null;
+    V.lado = { type, id }; V.ladoAsk = null; V.sino = false; V.menu = false; render();
+    const l = $('.lado'); if (l) l.scrollTop = 0;
+  }
+  /** Lista de quem fez um serviço no período do financeiro. */
+  function ladoSvc(nome) {
+    const [de, ate] = faixaPer();
+    const por = {}; let vezes = 0, total = 0;
+    S.appts.filter((x) => x.status === 'realizado' && x.date >= de && x.date <= ate).forEach((x) => itensDe(x).forEach((it) => {
+      if (it.name !== nome) return;
+      const v = valorItem(x, it); vezes++; total += v;
+      const p = (por[x.clientId] = por[x.clientId] || { c: cById(x.clientId), n: 0, val: 0, last: '', junto: {} });
+      p.n++; p.val += v; if (x.date > p.last) p.last = x.date;
+      itensDe(x).forEach((o) => { if (o.name !== nome) p.junto[o.name] = 1; });
+    }));
+    const ords = { vezes: (p, q) => q.n - p.n || q.last.localeCompare(p.last), recente: (p, q) => q.last.localeCompare(p.last), valor: (p, q) => q.val - p.val };
+    const l = Object.values(por).sort(ords[V.svcOrd] || ords.vezes);
+    const { itens, html } = pagina(l, 'svc');
+    const h = `<div style="display:flex;gap:14px;align-items:center;min-width:0"><span class="ico-k" style="width:52px;height:52px;border-radius:14px">${svcIcon(nome).replace('<svg', '<svg width="24" height="24"')}</span><div style="min-width:0"><small class="muted" style="font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">Quem fez</small><h3 style="font-size:22px">${esc(nome)}</h3></div></div>`;
+    const b = `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('cal', 15)}</span><div><strong>${perTxt()}</strong><p>Mesmo período escolhido no financeiro.</p></div></div>
+      <div class="kv"><div><small>Vezes</small><b>${vezes}</b></div><div><small>Clientes</small><b>${l.length}</b></div><div><small>Entrou</small><b class="num">${money0(total)}</b></div></div>
+      <div class="seg seg-cheio">${[['vezes', 'Mais vezes'], ['recente', 'Mais recente'], ['valor', 'Mais gastou']].map(([k, r]) => `<button type="button" class="${V.svcOrd === k ? 'on' : ''}" data-a="svc-ord" data-v="${k}">${r}</button>`).join('')}</div>
+      <div class="svc-clis">${itens.map((p, i) => { const pos = ((V.pg.svc || 1) - 1) * PER + i + 1; return `<button type="button" class="svc-cli" data-a="cli" data-id="${p.c.id}">
+        <span class="pos ${pos <= 3 && V.svcOrd !== 'recente' ? 'm' + pos : ''}">${pos}</span>${avk(p.c, 40)}
+        <div><b>${esc(p.c.name)}</b><small>${p.n}× · última ${haDias(p.last)}${Object.keys(p.junto).length ? ` · junto com ${esc(Object.keys(p.junto).join(', ').toLowerCase())}` : ''}</small></div>
+        <span class="v num">${money0(p.val)}</span></button>`; }).join('') || '<div class="vazio"><p>Ninguém fez esse serviço no período.</p></div>'}</div>${html}`;
+    return { h, b };
+  }
   function vLado() {
     const d = V.lado; let h = '', b = '';
-    if (d.type === 'ap') {
+    if (d.type === 'svc') ({ h, b } = ladoSvc(d.id));
+    else if (d.type === 'ap') {
       const x = S.appts.find((y) => y.id === d.id);
       if (!x) { V.lado = null; return ''; }
       const c = cById(x.clientId);
@@ -701,7 +832,10 @@
       h = `<div><small class="muted" style="font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase">${cap(longDate(x.date))}</small><h3 style="font-size:28px;font-family:var(--f-body);font-weight:800;letter-spacing:-.02em">${x.time} às ${endOf(x.time, x.dur)}</h3></div>`;
       b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
         <button type="button" class="quem-l" data-a="cli" data-id="${c.id}">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>
-        <div class="kv"><div><small>Serviço</small><b>${esc(x.service)}</b></div><div><small>Duração</small><b>${tempo(x.dur)}</b></div><div><small>Valor</small><b class="num">${money(x.price)}</b></div></div>
+        <div class="kv"><div><small>Serviço</small><b>${esc(x.service)}</b></div><div><small>Duração</small><b>${tempo(x.dur)}</b></div><div><small>${x.status === 'realizado' ? 'Pagou' : 'Valor'}</small><b class="num">${money(x.price)}</b></div></div>
+        ${x.status === 'realizado' ? `<div class="conta"><div class="conta-topo"><span>${ic('receipt', 16)}O que foi cobrado</span><button type="button" class="link" data-a="fecha-edit" data-id="${x.id}">${ic('tag', 15)}Editar valores</button></div>
+          ${itensDe(x).map((it) => `<div class="l"><span>${esc(it.name)}</span><b class="num">${money(it.price)}</b></div>`).join('')}
+          ${x.discount ? `<div class="l desc"><span>Desconto</span><b class="num">− ${money(x.discount)}</b></div>` : ''}<div class="l tot"><span>Total</span><b class="num">${money(x.price)}</b></div></div>` : ''}
         ${ladoLembrete(x, c)}
         ${x.status === 'agendado' ? `<div class="acoes"><button type="button" class="btn ok-soft" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 16)}Atendido</button><button type="button" class="btn verm" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 16)}Não veio</button></div>
           ${V.ladoAsk === 'cancel' ? `<div class="confirma"><span>Cancelar o horário de ${esc(first(c.name))}? A vaga fica livre no site.</span><div><button type="button" class="btn p sim" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>` : `<button type="button" class="btn" data-a="lado-ask" data-v="cancel">${ic('ban', 16)}Cancelar agendamento</button>`}`
@@ -712,15 +846,16 @@
       if (!x) { V.lado = null; return ''; }
       const hist = sortAp(live().filter((y) => y.clientId === x.c.id)).reverse().slice(0, 12);
       const fut = live().filter((y) => y.clientId === x.c.id && y.status === 'agendado' && y.date >= TODAY).length;
-      h = `<div style="display:flex;gap:14px;align-items:center;min-width:0">${avk(x.c, 52)}<div style="min-width:0"><h3 style="font-size:22px">${esc(x.c.name)}</h3><span class="muted" style="font-size:13px">Cliente desde ${shortDate(x.c.since)}/${A.parse(x.c.since).getFullYear()}</span></div></div>`;
+      h = `<div style="display:flex;flex-direction:column;gap:12px;min-width:0">${V.ladoPrev ? `<button type="button" class="link" data-a="lado-volta" style="align-self:flex-start">${ic('left', 15)}Voltar para ${esc(V.ladoPrev.id)}</button>` : ''}<div style="display:flex;gap:14px;align-items:center;min-width:0">${avk(x.c, 52)}<div style="min-width:0"><h3 style="font-size:22px">${esc(x.c.name)}</h3><span class="muted" style="font-size:13px">Cliente desde ${shortDate(x.c.since)}/${A.parse(x.c.since).getFullYear()}</span></div></div></div>`;
       const pilHist = { agendado: ['azul', 'Marcado'], realizado: ['verde', 'Atendido'], faltou: ['vermelho', 'Não veio'] };
       b = `${x.c.blocked ? `<div class="faixa" data-t="erro"><span class="f-ico">${ic('ban', 17)}</span><div><strong>Bloqueado no site</strong><p>${esc(x.c.blockedReason || 'Bloqueado pelo barbeiro')}. Pelo painel você ainda consegue agendar.</p></div><button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${x.c.id}">Desbloquear</button></div>` : ''}
         ${x.tags.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${x.tags.map(([k, t]) => `<span class="tag" data-k="${k}">${t}</span>`).join('')}</div>` : ''}
         <div class="kv"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div><div><small>Faltas</small><b>${x.faltas}</b></div></div>
+        ${x.visits ? `<div class="kv"><div><small>Ticket médio</small><b>${money0(x.ticket)}</b></div><div><small>Vem a cada</small><b>${x.cada ? `${x.cada} dias` : '—'}</b></div><div><small>Favorito</small><b>${esc(x.fav || '—')}</b></div></div>` : ''}
         <form id="cliForm" data-id="${x.c.id}" class="form-g" novalidate><div class="campo"><label for="cd-n">Nome</label><div class="entrada" id="e-cdn"><input id="cd-n" value="${esc(x.c.name)}"></div></div>
           <div class="campo"><label for="cd-p">WhatsApp</label><div class="entrada" id="e-cdp">${ic('whats', 18)}<input id="cd-p" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"></div></div>
           <div class="acoes"><button type="submit" class="btn pri">${ic('check', 16)}Salvar dados</button>${x.c.phone ? `<a class="btn" href="${waLink(x.c.phone)}" target="_blank" rel="noopener">${ic('whats', 16)}WhatsApp</a>` : ''}</div></form>
-        <div><span class="lab" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div></div>
+        <div><span class="lab" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}${y.discount ? ' com desconto' : ''}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div></div>
         ${x.c.blocked ? '' : V.ladoAsk === 'block' ? `<div class="confirma"><span>Bloquear ${esc(first(x.c.name))}? Não vai conseguir mais marcar pelo site${fut ? ` e ${fut === 1 ? 'o horário já marcado será cancelado' : `os ${fut} horários já marcados serão cancelados`}` : ''}.</span><div><button type="button" class="btn p sim" data-a="bloq" data-id="${x.c.id}">Sim, bloquear</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>`
           : `<button type="button" class="btn verm" data-a="lado-ask" data-v="block">${ic('ban', 16)}Bloquear cliente</button>`}`;
     }
@@ -781,6 +916,75 @@
       <button type="submit" class="btn pri bloco">${ic('check', 18)}Agendar</button></form>`;
   }
 
+  // ===== Fechar atendimento: confere o que foi feito, troca/adiciona serviço, desconto =====
+  function abrirFecha(id, edit) {
+    const x = S.appts.find((y) => y.id === id); if (!x) return;
+    V.fecha = {
+      id, edit: !!edit, outro: false,
+      items: itensDe(x).map((it) => ({ sid: it.serviceId || '', name: it.name, price: num2(it.price) })),
+      dTipo: 'R$', dVal: x.discount ? num2(x.discount) : '',
+    };
+    V.menu = false; V.sino = false; V.cancel = null; render();
+  }
+  function contaFecha() {
+    const f = V.fecha; const sub = f.items.reduce((s, it) => s + pf(it.price), 0);
+    const dv = pf(f.dVal);
+    const desc = Math.round(Math.min(sub, Math.max(0, f.dTipo === '%' ? (sub * Math.min(dv, 100)) / 100 : dv)) * 100) / 100;
+    return { sub, desc, total: Math.round((sub - desc) * 100) / 100 };
+  }
+  function fechaTotal() {
+    const f = V.fecha; const x = S.appts.find((y) => y.id === f.id); const { sub, desc, total } = contaFecha();
+    const base = f.edit ? x.price : subDe(x); const dif = Math.round((total - base) * 100) / 100;
+    const difTxt = !dif ? '' : f.edit ? `${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que estava no financeiro` : `${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que o cliente marcou`;
+    return `<div class="l"><span>Serviços (${f.items.length})</span><b class="num">${money(sub)}</b></div>
+      ${desc ? `<div class="l desc"><span>Desconto${f.dTipo === '%' && pf(f.dVal) ? ` de ${String(Math.min(pf(f.dVal), 100)).replace('.', ',')}%` : ''}</span><b class="num">− ${money(desc)}</b></div>` : ''}
+      <div class="l tot"><span>Total que entra no caixa</span><b class="num">${money(total)}</b></div>
+      ${difTxt ? `<span class="dif" data-k="${dif > 0 ? 'verde' : 'laranja'}">${ic(dif > 0 ? 'trend' : 'down', 14)}${difTxt}</span>` : ''}`;
+  }
+  function paintFecha() {
+    const t = $('#fechaTotal'); if (t) t.innerHTML = fechaTotal();
+    const b = $('#fechaOk'); if (b) b.innerHTML = `${ic('check', 18)}${V.fecha.edit ? 'Salvar valores' : 'Confirmar atendimento'} · ${money(contaFecha().total)}`;
+  }
+  function vFecha() {
+    const f = V.fecha; const x = S.appts.find((y) => y.id === f.id);
+    if (!x) { V.fecha = null; return ''; }
+    const c = cById(x.clientId);
+    const usados = new Set(f.items.map((it) => it.sid).filter(Boolean));
+    const faltam = S.services.filter((sv) => !usados.has(sv.id));
+    const itens = f.items.map((it, i) => `<div class="fecha-it">
+        <span class="ico-k p">${svcIcon(it.name || 'outro').replace('<svg', '<svg width="16" height="16"')}</span>
+        ${it.sid ? `<div class="entrada mini sel"><select data-fi="${i}" data-k="sid" aria-label="Serviço ${i + 1}">${S.services.filter((sv) => sv.id === it.sid || !usados.has(sv.id)).map((sv) => `<option value="${sv.id}" ${sv.id === it.sid ? 'selected' : ''}>${esc(sv.name)}</option>`).join('')}${S.services.some((sv) => sv.id === it.sid) ? '' : `<option value="${esc(it.sid)}" selected>${esc(it.name)}</option>`}</select></div>`
+          : `<div class="entrada mini"><input data-fi="${i}" data-k="name" value="${esc(it.name)}" placeholder="Ex.: Pomada, hidratação" maxlength="60" aria-label="O que foi feito"></div>`}
+        <div class="entrada mini preco"><span class="muted">R$</span><input data-fi="${i}" data-k="price" value="${esc(it.price)}" inputmode="decimal" aria-label="Valor de ${esc(it.name || 'item')}"></div>
+        <button type="button" class="btn-icone" data-a="fi-del" data-v="${i}" ${f.items.length < 2 ? 'disabled' : ''} aria-label="Tirar ${esc(it.name || 'item')}" title="Tirar">${ic('trash', 16)}</button></div>`).join('');
+    const rap = [['%', '5', '5%'], ['%', '10', '10%'], ['R$', '5', 'R$ 5'], ['R$', '10', 'R$ 10']];
+    return `<div class="overlay" data-a="fecha-x"></div><form class="janela fecha" id="fechaForm" novalidate role="dialog" aria-modal="true" aria-label="${f.edit ? 'Editar valores' : 'Fechar atendimento'}">
+      <div class="folha-topo"><div><h3>${f.edit ? 'Editar valores' : 'Fechar atendimento'}</h3><p>${f.edit ? 'Corrija o que foi cobrado. O financeiro muda junto.' : 'Confira o que foi feito. O financeiro usa o valor final.'}</p></div><button type="button" class="btn-icone" data-a="fecha-x" aria-label="Fechar">${ic('x', 18)}</button></div>
+      <div class="fecha-cli">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${cap(diaTxt(x.date))} às ${x.time} · marcou ${esc(x.items && x.items.length ? x.items[0].name : x.service)}</small></div></div>
+      <div class="campo"><span class="lab">O que foi feito</span><div class="fecha-itens">${itens}</div>
+        <div class="fecha-add">${faltam.map((sv) => `<button type="button" class="chip" data-a="fi-add" data-id="${sv.id}">${ic('plus', 14)}${esc(sv.name)}<b>${money0(sv.price)}</b></button>`).join('')}<button type="button" class="chip tracejado" data-a="fi-outro">${ic('plus', 14)}Outro (produto, extra)</button></div></div>
+      <div class="campo"><span class="lab">Desconto</span><div class="fecha-desc">
+        <div class="seg"><button type="button" class="${f.dTipo === 'R$' ? 'on' : ''}" data-a="fd-tipo" data-v="R$">R$</button><button type="button" class="${f.dTipo === '%' ? 'on' : ''}" data-a="fd-tipo" data-v="%">%</button></div>
+        <div class="entrada mini" id="e-fd"><span class="muted">${f.dTipo === '%' ? '%' : 'R$'}</span><input id="fd-val" data-fd="1" value="${esc(f.dVal)}" inputmode="decimal" placeholder="${f.dTipo === '%' ? '0' : '0,00'}" aria-label="Valor do desconto"></div>
+        <div class="chips fecha-rap">${rap.map(([t, v, r]) => `<button type="button" class="chip ${f.dTipo === t && pf(f.dVal) === Number(v) ? 'on' : ''}" data-a="fd-rap" data-t="${t}" data-v="${v}">${r}</button>`).join('')}${pf(f.dVal) ? '<button type="button" class="link" data-a="fd-rap" data-t="R$" data-v="">Tirar desconto</button>' : ''}</div></div></div>
+      <div class="conta fecha-total" id="fechaTotal" aria-live="polite">${fechaTotal()}</div>
+      <div class="fecha-bts"><button type="button" class="btn" data-a="fecha-x">Voltar</button><button type="submit" class="btn verde" id="fechaOk">${ic('check', 18)}${f.edit ? 'Salvar valores' : 'Confirmar atendimento'} · ${money(contaFecha().total)}</button></div></form>`;
+  }
+  function salvarFecha() {
+    const f = V.fecha; const x = S.appts.find((y) => y.id === f.id); if (!x) return;
+    const ruim = f.items.findIndex((it) => !String(it.name).trim());
+    if (ruim >= 0) { alerta('erro', 'Falta o nome do item', 'Escreva o que foi feito ou vendido. Ex.: Pomada.'); const i = document.querySelector(`[data-fi="${ruim}"][data-k="name"]`); if (i) { marcar(i.closest('.entrada')); i.focus(); } return; }
+    const { desc, total } = contaFecha();
+    const items = f.items.map((it) => ({ serviceId: it.sid || null, name: String(it.name).trim(), price: Math.round(pf(it.price) * 100) / 100 }));
+    const c = cById(x.clientId); const edit = f.edit; const antes = { items: itensDe(x), discount: x.discount || 0, status: x.status };
+    act(() => api('PATCH', '/api/admin/agendamentos/' + x.id, { status: 'realizado', items, discount: desc }), () => {
+      V.fecha = null;
+      const nomes = items.map((it) => it.name).join(' + ');
+      if (edit) alerta('ok', 'Valores atualizados', `${first(c.name)} · ${nomes} · ${money(total)}. O financeiro já mudou.`);
+      else alerta('ok', `${first(c.name)} atendido!`, `${nomes} · ${money(total)} entrou no ${x.date === TODAY ? 'caixa de hoje' : 'financeiro'}.`, [{ r: 'Desfazer', fn: () => act(() => api('PATCH', '/api/admin/agendamentos/' + x.id, { status: antes.status, items: antes.items, discount: antes.discount }), () => alerta('info', 'Pronto, desfeito', 'O horário voltou para aguardando.')) }], 6000);
+    });
+  }
+
   // ===== Ações =====
   const put = (path, body) => api('PUT', path, body);
   function setStatus(id, s, quiet) {
@@ -826,6 +1030,7 @@
         })
         .catch((err) => { alerta('erro', err.status === 429 ? 'Muitas tentativas' : 'Não deu para entrar', err.message); marcar('#e-lpass'); });
     }
+    if (f.id === 'fechaForm') salvarFecha();
     if (f.id === 'despForm') {
       const t = $('#d-t').value.trim(); const v = parseFloat($('#d-v').value.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3})/g, '').replace(',', '.'));
       const date = $('#d-d').value; const cat = $('#d-c').value;
@@ -913,7 +1118,17 @@
       case 'mes-n': { const n = Number(el.dataset.n); const m = A.parse(V.calMonth); V.calMonth = n === 0 ? TODAY.slice(0, 8) + '01' : A.iso(new Date(m.getFullYear(), m.getMonth() + n, 1)); render(); break; }
       case 'cancel-ask': V.cancel = id; render(); break;
       case 'cancel-no': V.cancel = null; render(); break;
-      case 'st': e.stopPropagation(); setStatus(id, el.dataset.s); break;
+      case 'st': e.stopPropagation(); if (el.dataset.s === 'realizado') abrirFecha(id); else setStatus(id, el.dataset.s); break;
+      case 'fecha-edit': abrirFecha(id, true); break;
+      case 'fecha-x': V.fecha = null; render(); break;
+      case 'fi-add': { const sv = S.services.find((y) => y.id === id); if (!sv) break; V.fecha.items.push({ sid: sv.id, name: sv.name, price: num2(sv.price) }); render(); break; }
+      case 'fi-outro': V.fecha.items.push({ sid: '', name: '', price: '' }); render(); { const l = document.querySelectorAll('[data-fi][data-k="name"]'); const i = l[l.length - 1]; if (i) i.focus(); } break;
+      case 'fi-del': if (V.fecha.items.length > 1) { V.fecha.items.splice(Number(v), 1); render(); } break;
+      case 'fd-tipo': V.fecha.dTipo = v; V.fecha.dVal = ''; render(); { const i = $('#fd-val'); if (i) i.focus(); } break;
+      case 'fd-rap': V.fecha.dTipo = el.dataset.t; V.fecha.dVal = v; render(); break;
+      case 'svc-ver': V.pg.svc = 1; openLado('svc', v); break;
+      case 'svc-ord': V.svcOrd = v; V.pg.svc = 1; render(); break;
+      case 'lado-volta': { const p = V.ladoPrev; V.ladoPrev = null; V.lado = p; render(); break; }
       case 'ap': openLado('ap', id); break;
       case 'cli': openLado('cli', id); break;
       case 'lado-x': V.lado = null; V.ladoAsk = null; render(); break;
@@ -923,7 +1138,10 @@
         act(() => api('POST', `/api/admin/clientes/${id}/bloquear`, {}), (r) => alerta('aviso', 'Cliente bloqueado no site', `${first(cById(id).name)} não consegue mais marcar pelo site.${r && r.cancelled && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`, [{ r: 'Desfazer', fn: () => act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('info', 'Bloqueio desfeito', 'O cliente já pode marcar pelo site de novo.')) }]));
         break;
       case 'desbloq': e.stopPropagation(); act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('ok', `${first(cById(id).name)} desbloqueado`, 'Já pode agendar pelo site de novo.')); break;
-      case 'cli-f': V.cliF = v; V.pg.cli = 1; render(); break;
+      case 'cli-f': V.cliF = v; V.pg.cli = 1; render(); if (el.dataset.rola) { const c = $('#cliSec'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); } break;
+      case 'cli-q-x': V.cliQ = ''; V.pg.cli = 1; render(); break;
+      case 'rk': V.rk = v; render(); break;
+      case 'rk-per': V.rkPer = v; render(); break;
       case 'per': V.per = v; V.pg.desp = 1; render(); break;
       case 'desp-form': V.despForm = !V.despForm; render(); if (V.despForm) setTimeout(() => { const i = $('#d-t'); if (i) i.focus(); }, 30); break;
       case 'desp-ask': V.despAsk = id; render(); break;
@@ -1006,13 +1224,15 @@
     if (e.target.id === 'nv-q' && (e.key === 'Enter' || e.key === 'ArrowDown')) { e.preventDefault(); const f = $('#nvSug button'); if (f) { if (e.key === 'Enter') f.click(); else f.focus(); } }
     if (e.target.matches('#nvSug button') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); const n = e.key === 'ArrowDown' ? e.target.nextElementSibling : e.target.previousElementSibling || $('#nv-q'); if (n) n.focus(); }
     if (e.key === 'Escape') {
-      if (V.nv) V.nv = null; else if (V.lado) V.lado = null; else if (V.sino) V.sino = false; else if (V.menu) V.menu = false; else return;
+      if (V.fecha) V.fecha = null; else if (V.nv) V.nv = null; else if (V.lado) V.lado = null; else if (V.sino) V.sino = false; else if (V.menu) V.menu = false; else return;
       render();
     }
   });
 
   document.addEventListener('input', (e) => {
     const el = e.target;
+    if (V.fecha && el.dataset.fi) { const it = V.fecha.items[Number(el.dataset.fi)]; if (it && el.dataset.k !== 'sid') { it[el.dataset.k] = el.value; paintFecha(); } return; }
+    if (V.fecha && el.dataset.fd) { V.fecha.dVal = el.value; paintFecha(); document.querySelectorAll('.fecha-rap .chip').forEach((b) => b.classList.toggle('on', b.dataset.t === V.fecha.dTipo && pf(el.value) === Number(b.dataset.v))); return; }
     if (el.dataset.in) {
       const k = el.dataset.in;
       if (['mask', 'nv-phone'].includes(k)) el.value = maskPhone(el.value);
@@ -1030,6 +1250,11 @@
 
   document.addEventListener('change', (e) => {
     const el = e.target;
+    if (V.fecha && el.dataset.fi && el.dataset.k === 'sid') {
+      const it = V.fecha.items[Number(el.dataset.fi)]; const sv = S.services.find((y) => y.id === el.value);
+      if (it && sv) { it.sid = sv.id; it.name = sv.name; it.price = num2(sv.price); render(); }
+      return;
+    }
     if (el.dataset.nv) {
       V.nv[el.dataset.nv] = el.value;
       if (el.dataset.nv === 'date') { V.nv.time = ''; render(); return; }
@@ -1038,6 +1263,7 @@
     }
     if (V.draft && (el.dataset.d === 'shopName' || el.dataset.d === 'tagline' || el.dataset.svc)) { const p = document.querySelector('.previa-cel'); if (p) p.outerHTML = previa(V.draft); }
     const k = el.dataset.ch; if (!k) return;
+    if (k === 'cli-ord') { V.cliOrd = el.value; V.pg.cli = 1; $('#cliLista').innerHTML = cliLista(); return; }
     if (k === 'per-de') { V.de = el.value || V.de; V.pg.desp = 1; render(); }
     if (k === 'per-ate') { V.ate = el.value || V.ate; V.pg.desp = 1; render(); }
     if (k === 'cor-custom') render();
@@ -1052,7 +1278,7 @@
 
   // Atualiza a tela a cada minuto (horários que passaram, "próximo cliente")
   setInterval(() => {
-    if (!V.logged || !S || V.lado || V.nv || document.activeElement?.matches('input,select')) return;
+    if (!V.logged || !S || V.lado || V.nv || V.fecha || document.activeElement?.matches('input,select')) return;
     if (A.todayIn() !== TODAY) reload().then(render).catch(() => {}); else render();
   }, 60000);
 
