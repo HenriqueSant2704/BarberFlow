@@ -489,11 +489,16 @@
     return {
       shopName: st.shopName, tagline: st.tagline, address: st.address, phone: maskPhone(st.phone), color: st.color, custom: st.custom, logo: st.logo,
       days: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ on: !st.closed.includes(i), ...A.dayHours(st, i) })),
-      lunchStart: st.lunchStart, lunchEnd: st.lunchEnd, bookFrom: st.bookFrom, bookTo: st.bookTo,
+      lunchStart: st.lunchStart, lunchEnd: st.lunchEnd, bookFrom: st.bookFrom, bookTo: st.bookTo, step: st.step === 60 ? 60 : 30,
       maxActive: st.maxActive, maxPerDay: st.maxPerDay, maxDevice: st.maxDevice, autoBlock: st.autoBlock,
       remindOn: st.remindOn, remindMin: st.remindMin, remindMsg: st.remindMsg,
       svcs: S.services.map((s) => ({ id: s.id, name: s.name, price: String(s.price).replace('.', ','), dur: s.dur })),
     };
+  }
+  /** Exemplo dos horários do site com o intervalo escolhido: "9:00, 10:00, 11:00...". */
+  function exStep(d) {
+    const i = [1, 2, 3, 4, 5, 6, 0].find((k) => d.days[k].on); const x = i == null ? { open: '09:00' } : d.days[i];
+    const m = A.toMin(x.open); return [0, 1, 2].map((k) => A.fromMin(m + k * d.step)).join(', ') + '...';
   }
   const dirty = () => !!V.draft && JSON.stringify(V.draft) !== JSON.stringify(mkDraft());
   function paintWaPrevia() { const p = $('#waPrevia p'); if (p && V.draft) p.textContent = waPrevia(V.draft); }
@@ -538,7 +543,10 @@
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('clock', 17)}</span>Horário de funcionamento</h3></div>
           <div class="lista-v">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const x = d.days[i]; return `<div class="dia-func ${x.on ? '' : 'off'}" id="e-dia${i}"><button type="button" class="chave ${x.on ? 'on' : ''}" data-a="dia-on" data-v="${i}" aria-label="${cap(DOWL[i])}: ${x.on ? 'aberto' : 'fechado'}" aria-pressed="${x.on}"></button><b>${cap(DOWL[i])}</b><div class="hs">${x.on ? `<div class="entrada"><input type="time" step="1800" value="${x.open}" data-dia="${i}" data-k="open" aria-label="Abre"></div>às<div class="entrada"><input type="time" step="1800" value="${x.close}" data-dia="${i}" data-k="close" aria-label="Fecha"></div>` : '<span class="tag" data-k="cinza">Fechado</span>'}</div></div>`; }).join('')}
             <div class="dia-func almoco" id="e-almoco"><span class="ico-k p" data-k="laranja">${ic('coffee', 16)}</span><b>Almoço</b><div class="hs"><div class="entrada"><input type="time" step="1800" value="${d.lunchStart}" data-d="lunchStart" aria-label="Início do almoço"></div>às<div class="entrada"><input type="time" step="1800" value="${d.lunchEnd}" data-d="lunchEnd" aria-label="Fim do almoço"></div></div></div>
-            <span class="ajuda muted" style="font-size:12px">Sem pausa para almoço? Coloque o mesmo horário nos dois campos.</span></div></section>
+            <span class="ajuda muted" style="font-size:12px">Sem pausa para almoço? Coloque o mesmo horário nos dois campos.</span></div>
+          <div class="campo intervalo" id="e-step"><label>Horários que o cliente pode escolher</label>
+            <div class="seg"><button type="button" class="${d.step === 30 ? 'on' : ''}" data-a="step" data-v="30" aria-pressed="${d.step === 30}">De 30 em 30 min</button><button type="button" class="${d.step === 60 ? 'on' : ''}" data-a="step" data-v="60" aria-pressed="${d.step === 60}">De 1 em 1 hora</button></div>
+            <span class="ajuda">No site aparece: <b>${exStep(d)}</b> Quanto tempo cada corte ocupa você ajusta em <b>Serviços e preços</b>.</span></div></section>
       </div>
       <div class="col">
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('scissors', 17)}</span>Serviços e preços</h3><button type="button" class="btn p" data-a="svc-add">${ic('plus', 16)}Adicionar</button></div>
@@ -647,7 +655,7 @@
       shopName: d.shopName.trim(), tagline: d.tagline.trim(), address: d.address.trim(), phone: fone, color: d.color, custom: d.custom, hours,
       closed: [0, 1, 2, 3, 4, 5, 6].filter((i) => !d.days[i].on),
       open: abertos.map((i) => d.days[i].open).sort()[0], close: abertos.map((i) => d.days[i].close).sort().pop(),
-      lunchStart: d.lunchStart, lunchEnd: d.lunchEnd, bookFrom: d.bookFrom, bookTo: d.bookTo,
+      lunchStart: d.lunchStart, lunchEnd: d.lunchEnd, bookFrom: d.bookFrom, bookTo: d.bookTo, step: d.step,
       maxActive: Number(d.maxActive), maxPerDay: Number(d.maxPerDay), maxDevice: Number(d.maxDevice), autoBlock: Number(d.autoBlock),
       remindOn: !!d.remindOn, remindMin: Number(d.remindMin), remindMsg: d.remindMsg.trim() === A.REMIND_MSG ? '' : d.remindMsg.trim(),
     };
@@ -935,6 +943,7 @@
       case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; render(); { const f = $('#nv-q'); if (f) f.focus(); } break;
       // configurações
       case 'cor': V.draft.color = v; render(); break;
+      case 'step': V.draft.step = Number(v) === 60 ? 60 : 30; render(); break;
       case 'dia-on': { const x = V.draft.days[Number(v)]; x.on = !x.on; render(); break; }
       case 'bk-quick': {
         const n = Number(el.dataset.n); V.draft.bookTo = A.iso(new Date(NOW.getFullYear(), NOW.getMonth() + n + 1, 0));

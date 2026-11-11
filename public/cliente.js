@@ -32,8 +32,9 @@
   }
 
   // ----- regras da agenda com os dados carregados -----
-  const daySlots = (ds) => A.daySlots(S.settings, S.blocked, ds);
-  const busy = (ds) => A.busySet(S.busy, ds);
+  // daySlots/busy = horários de início que o cliente vê (de 30 em 30 ou de 1 em 1 hora, como o barbeiro escolheu)
+  const daySlots = (ds) => A.startSlots(S.settings, S.blocked, ds);
+  const busy = (ds) => A.startBusy(S.settings, S.busy, ds);
   const isPast = (ds, t) => A.isPast(ds, t, TODAY, nowMin());
   const fits = (ds, t, dur) => A.fits(S.settings, S.blocked, S.busy, ds, t, dur);
   const blockedOf = (ds) => S.blocked.find((b) => b.date === ds);
@@ -60,7 +61,7 @@
   }
   /** Por que um serviço de "dur" minutos não cabe começando em "t". */
   function whyNot(ds, t, dur) {
-    const st = S.settings; const slots = new Set(daySlots(ds)); const bz = busy(ds);
+    const st = S.settings; const slots = new Set(A.daySlots(st, S.blocked, ds)); const bz = A.busySet(S.busy, ds);
     const n = Math.ceil(dur / A.STEP);
     for (let i = 0; i < n; i++) {
       const m = A.toMin(t) + A.STEP * i; const s = A.fromMin(m);

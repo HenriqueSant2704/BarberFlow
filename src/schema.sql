@@ -112,3 +112,6 @@ CREATE TABLE IF NOT EXISTS wa_auth (
   key   text PRIMARY KEY,
   value text NOT NULL
 );
+
+-- ----- Intervalo dos horários (v1.6) -----
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS slot_step smallint NOT NULL DEFAULT 30; -- horários do site de 30 em 30 ou de 60 em 60 minutos

@@ -30,6 +30,8 @@ async function createAppointment(c, { clientId, date, time, serviceId, origin, e
   const blocked = await repo.getBlocked(c, date);
   const appts = await repo.getApptsOn(c, date);
   if (!Agenda.daySlots(settings, blocked, date).length) fail(400, 'A barbearia não atende nesse dia.');
+  // Pelo site o cliente só começa nos horários da lista (de 30 em 30 ou de 1 em 1 hora). O barbeiro, pelo painel, pode encaixar em qualquer meia hora.
+  if (origin === 'site' && !Agenda.startSlots(settings, blocked, date).includes(time)) fail(400, 'Esse horário não está na lista. Escolha outro.');
   if (!Agenda.fits(settings, blocked, appts, date, time, svc.duration)) {
     fail(409, 'Esse horário acabou de ser ocupado. Escolha outro.');
   }
