@@ -11,9 +11,9 @@ if (!validTz(TZ)) {
 }
 
 class HttpError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
+  constructor(status, message, code) { super(message); this.status = status; if (code) this.code = code; }
 }
-const fail = (status, message) => { throw new HttpError(status, message); };
+const fail = (status, message, code) => { throw new HttpError(status, message, code); };
 
 /** Deixa usar async/await nas rotas do Express sem try/catch em todo lugar. */
 const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);

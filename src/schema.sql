@@ -121,3 +121,8 @@ ALTER TABLE settings ADD COLUMN IF NOT EXISTS slot_step smallint NOT NULL DEFAUL
 -- items guarda a lista [{serviceId, name, price}] (vazio = só o serviço marcado); price passa a ser o total cobrado.
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS items    jsonb;
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS discount numeric(10,2) NOT NULL DEFAULT 0;
+
+-- ----- Agendar para a família (v1.8) -----
+-- O barbeiro libera, só para alguns clientes, mais horários no mesmo dia (ex.: pai que marca para ele e os filhos).
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS per_day smallint CHECK (per_day IS NULL OR per_day BETWEEN 2 AND 10); -- vazio = regra geral
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS for_name text; -- para quem é o horário, quando não é o próprio cliente

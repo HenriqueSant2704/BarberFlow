@@ -27,6 +27,11 @@
   const cById = (id) => S.clients.find((c) => c.id === id) || { id: '0', name: 'Cliente removido', phone: '' };
   const sortAp = (l) => l.sort((p, q) => (p.date + p.time).localeCompare(q.date + q.time));
   const live = () => S.appts.filter((x) => x.status !== 'cancelado');
+  // Agendar para a família: o barbeiro libera mais horários no mesmo dia só para alguns clientes
+  const famDe = (c) => (c && c.perDay > 1 ? c.perDay : 0);
+  const baseDia = () => S.settings.maxPerDay || 0;
+  const ativosDe = (n) => { const st = S.settings; return st.maxActive ? Math.max(st.maxActive, Math.ceil(st.maxActive * n / Math.max(1, baseDia()))) : 0; };
+  const paraQuem = (x) => (x.forName ? `<span class="para-quem">${ic('users', 12)}para ${esc(x.forName)}</span>` : '');
   const endOf = (t, dur) => A.fromMin(A.toMin(t) + dur);
   const first = (n) => String(n || '').split(' ')[0];
   const hasLunch = () => A.toMin(S.settings.lunchEnd) > A.toMin(S.settings.lunchStart);
@@ -273,7 +278,7 @@
       if (!agoraFeito && A.toMin(x.time) >= nm) { agoraFeito = true; pre = '<div class="agora-linha"><span>Agora</span><i></i><hr></div>'; }
       const pil = x.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : x.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>' : '';
       return `${pre}<div class="tl-item ${x === prox ? 'agora' : ''} ${x.status !== 'agendado' ? 'feito' : ''}" data-k="${k}"><div class="tl-h">${x.time}<small>${endOf(x.time, x.dur)}</small></div><div class="tl-linha"><i></i></div>
-        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b><small>${esc(x.service)}</small>${lembreteTag(x)}</div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
+        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b>${paraQuem(x)}<small>${esc(x.service)}</small>${lembreteTag(x)}</div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
     }).join('') + (mostra.length && !agoraFeito && aberto && nm < A.toMin(hh.close) ? '<div class="agora-linha"><span>Agora</span><i></i><hr></div>' : '');
     const nAt = feitos.filter((x) => x.status === 'realizado').length; const nFal = feitos.length - nAt;
     const linhaFeitos = feitos.length ? `<button type="button" class="tl-feitos" data-a="ver-feitos" aria-expanded="${!!V.verFeitos}"><span class="ico-k p" data-k="verde">${ic('check', 15)}</span><span>${nAt ? `<b>${nAt}</b> atendido${nAt > 1 ? 's' : ''}` : ''}${nAt && nFal ? ' · ' : ''}${nFal ? `<b>${nFal}</b> não ${nFal > 1 ? 'vieram' : 'veio'}` : ''}</span><span class="link">${V.verFeitos ? 'Esconder' : 'Mostrar'}</span></button>` : '';
@@ -353,7 +358,7 @@
       else acoes = `<div class="acoes">${c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}WhatsApp</a>` : ''}<button type="button" class="btn verm p" data-a="cancel-ask" data-id="${x.id}">${ic('x', 15)}Cancelar</button></div>`;
     }
     return `<div class="ag"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
-      <button type="button" class="quem" data-a="ap" data-id="${x.id}">${avk(c)}<div><b>${esc(c.name)}</b><small>${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}</small></div></button>
+      <button type="button" class="quem" data-a="ap" data-id="${x.id}">${avk(c)}<div><b>${esc(c.name)}</b>${paraQuem(x)}<small>${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}</small></div></button>
       <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${lembreteTag(x)}${acoes}</div>`;
   }
   function vMes() {
@@ -397,6 +402,7 @@
       x.nivel = x.c.blocked ? ['vermelho', 'ban', 'Bloqueado'] : top.includes(x) ? ['ouro', 'crown', 'VIP'] : x.visits >= 4 ? ['verde', 'repeat', 'Fiel'] : sumido(x) ? ['laranja', 'clock', 'Sumido'] : x.visits <= 1 ? ['azul', 'spark', 'Novo'] : ['cinza', 'user', 'Cliente'];
       const t = [];
       if (sumido(x) && x.nivel[2] !== 'Sumido') t.push(['laranja', 'Sumido no mês']);
+      if (famDe(x.c)) t.push(['ouro', `Família · ${x.c.perDay} por dia`]);
       if (x.faltas >= 2) t.push(['vermelho', `${x.faltas} faltas`]);
       if (x.next) t.push(['cinza', `Volta ${shortDate(x.next)}`]);
       x.tags = t;
@@ -417,6 +423,7 @@
     ['fieis', 'Fiéis', 'repeat', (x) => x.visits >= 4],
     ['novos', 'Novos', 'spark', (x) => x.visits <= 1 && !x.c.blocked],
     ['sumidos', 'Sumidos no mês', 'clock', sumido],
+    ['familia', 'Família', 'users', (x) => famDe(x.c) > 0],
     ['bloq', 'Bloqueados', 'ban', (x) => x.c.blocked],
   ];
   function listaClientes() {
@@ -643,6 +650,7 @@
     const nOpt = (a, one, many) => a.map((v) => [v, `${v} ${v === 1 ? one : many}`]);
     const folgas = S.blocked.filter((b) => b.date >= TODAY);
     const bl = S.clients.filter((c) => c.blocked);
+    const fam = S.clients.filter((c) => famDe(c));
     const extra = !CORES.includes(d.color) && d.color !== 'custom' ? [d.color] : [];
     return `<div class="cfg-grid">
       <div class="col">
@@ -686,7 +694,8 @@
             ${sel('maxPerDay', 'cfg-md', 'Máximo por cliente no dia', [[0, 'Sem limite'], ...nOpt([1, 2, 3], 'por dia', 'por dia')], 'Evita a mesma pessoa pegar a tarde inteira.')}</div>
             <div class="duas">${sel('maxDevice', 'cfg-mv', 'Agendamentos por celular em 24 h', [[0, 'Sem limite'], ...nOpt([2, 3, 4, 5, 8, 10], 'agendamento', 'agendamentos')], 'Pega quem inventa vários nomes no mesmo celular.')}
             ${sel('autoBlock', 'cfg-ab', 'Bloquear depois de', [[0, 'Nunca bloquear sozinho'], ...[1, 2, 3, 4, 5].map((v) => [v, `${v} falta${v > 1 ? 's' : ''}`])], 'Conta quando você toca em "Não veio".')}</div>
-            <div class="campo"><span class="lab">Clientes bloqueados${bl.length ? ` (${bl.length})` : ''}</span><div class="bloq-l">${bl.map((c) => `<div class="bloq-i"><span class="ico-k p">${ic('ban', 16)}</span><div style="min-width:0"><b>${esc(c.name)}</b><small>${esc(c.blockedReason || 'Bloqueado pelo barbeiro')}</small></div><button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${c.id}">Desbloquear</button></div>`).join('') || '<span class="muted" style="font-size:13px">Ninguém bloqueado. Para bloquear, abra a ficha do cliente.</span>'}</div></div></div></section>
+            <div class="campo"><span class="lab">Clientes bloqueados${bl.length ? ` (${bl.length})` : ''}</span><div class="bloq-l">${bl.map((c) => `<div class="bloq-i"><span class="ico-k p">${ic('ban', 16)}</span><div style="min-width:0"><b>${esc(c.name)}</b><small>${esc(c.blockedReason || 'Bloqueado pelo barbeiro')}</small></div><button type="button" class="btn p ok-soft" data-a="desbloq" data-id="${c.id}">Desbloquear</button></div>`).join('') || '<span class="muted" style="font-size:13px">Ninguém bloqueado. Para bloquear, abra a ficha do cliente.</span>'}</div></div>
+            <div class="campo"><span class="lab">Liberados para marcar para a família${fam.length ? ` (${fam.length})` : ''}</span><div class="bloq-l">${fam.map((c) => `<div class="bloq-i fam"><span class="ico-k p">${ic('users', 16)}</span><div style="min-width:0"><b>${esc(c.name)}</b><small>Até ${c.perDay} horários no mesmo dia</small></div><button type="button" class="btn p" data-a="fam" data-id="${c.id}" data-v="0">Voltar ao normal</button></div>`).join('') || '<span class="muted" style="font-size:13px">Ninguém liberado. Para liberar, abra a ficha do cliente em <b>Clientes</b>.</span>'}</div></div></div></section>
       </div></div>
       <div class="salvar-barra" id="salvarBarra"><span></span><button type="button" class="btn pri" data-a="salvar">${ic('check', 17)}Salvar alterações</button></div>`;
   }
@@ -852,7 +861,7 @@
       const pil = { agendado: x.date <= TODAY ? ['laranja', 'Aguardando'] : ['azul', 'Confirmado'], realizado: ['verde', 'Atendido'], faltou: ['vermelho', 'Não veio'], cancelado: ['cinza', 'Cancelado'] }[x.status];
       h = `<div><small class="muted" style="font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase">${cap(longDate(x.date))}</small><h3 style="font-size:28px;font-family:var(--f-body);font-weight:800;letter-spacing:-.02em">${x.time} às ${endOf(x.time, x.dur)}</h3></div>`;
       b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
-        <button type="button" class="quem-l" data-a="cli" data-id="${c.id}">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>
+        <button type="button" class="quem-l" data-a="cli" data-id="${c.id}">${avk(c, 44)}<div><b>${esc(c.name)}</b>${paraQuem(x)}<small>${maskPhone(c.phone)} · ver ficha</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>
         <div class="kv"><div><small>Serviço</small><b>${esc(x.service)}</b></div><div><small>Duração</small><b>${tempo(x.dur)}</b></div><div><small>${x.status === 'realizado' ? 'Pagou' : 'Valor'}</small><b class="num">${money(x.price)}</b></div></div>
         ${x.status === 'realizado' ? `<div class="conta"><div class="conta-topo"><span>${ic('receipt', 16)}O que foi cobrado</span><button type="button" class="link" data-a="fecha-edit" data-id="${x.id}">${ic('tag', 15)}Editar valores</button></div>
           ${itensDe(x).map((it) => `<div class="l"><span>${esc(it.name)}</span><b class="num">${money(it.price)}</b></div>`).join('')}
@@ -875,6 +884,7 @@
         ${x.tags.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${x.tags.map(([k, t]) => `<span class="tag" data-k="${k}">${t}</span>`).join('')}</div>` : ''}
         <div class="kv"><div><small>Visitas</small><b>${x.visits}</b></div><div><small>Gastou</small><b>${money0(x.spent)}</b></div><div><small>Faltas</small><b>${x.faltas}</b></div></div>
         ${x.visits ? `<div class="kv"><div><small>Ticket médio</small><b>${money0(x.ticket)}</b></div><div><small>Vem a cada</small><b>${x.cada ? `${x.cada} dias` : '—'}</b></div><div><small>Favorito</small><b>${esc(x.fav || '—')}</b></div></div>` : ''}
+        ${fichaFamilia(x.c)}
         <form id="cliForm" data-id="${x.c.id}" class="form-g" novalidate><div class="campo"><label for="cd-n">Nome</label><div class="entrada" id="e-cdn"><input id="cd-n" value="${esc(x.c.name)}"></div></div>
           <div class="campo"><label for="cd-p">WhatsApp</label><div class="entrada" id="e-cdp">${ic('whats', 18)}<input id="cd-p" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"></div></div>
           <div class="acoes"><button type="submit" class="btn pri">${ic('check', 16)}Salvar dados</button>${x.c.phone ? `<a class="btn" href="${waLink(x.c.phone)}" target="_blank" rel="noopener">${ic('whats', 16)}WhatsApp</a>` : ''}</div></form>
@@ -883,6 +893,19 @@
           : `<button type="button" class="btn verm" data-a="lado-ask" data-v="block">${ic('ban', 16)}Bloquear cliente</button>`}`;
     }
     return `<div class="overlay" data-a="lado-x"></div><aside class="lado" role="dialog" aria-modal="true"><div class="folha-topo">${h}<button type="button" class="btn-icone" data-a="lado-x" aria-label="Fechar">${ic('x', 18)}</button></div>${b}</aside>`;
+  }
+
+  // Ficha do cliente: quantos horários ele pode marcar no mesmo dia pelo site
+  function fichaFamilia(c) {
+    const base = baseDia(); const n = famDe(c);
+    const opc = [[0, `Normal (${base || 'sem limite'})`], ...[2, 3, 4, 5].filter((v) => !base || v > base).map((v) => [v, String(v)])];
+    const at = ativosDe(n);
+    const txt = !base ? 'Hoje não tem limite de horários por dia em <b>Proteção contra trote</b>, então todos já podem marcar mais de um.'
+      : n ? `<b>${esc(first(c.name))}</b> pode marcar até <b>${n} horários no mesmo dia</b>${at ? ` e ter até <b>${at} marcados ao mesmo tempo</b>` : ''}. No site aparece a pergunta <b>"Para quem é esse horário?"</b>.`
+      : `Segue a regra geral: ${base === 1 ? '1 horário' : `${base} horários`} por dia. Libere mais para quem marca para si e para os filhos.`;
+    return `<div class="fam-cfg ${n ? 'on' : ''}" id="e-fam"><div class="fam-topo"><span class="ico-k p">${ic('users', 17)}</span><div><b>Agendar para a família</b><small>Horários no mesmo dia pelo site</small></div>${n ? `<span class="tag" data-k="ouro">Liberado</span>` : ''}</div>
+      ${base ? `<div class="seg seg-cheio" role="group" aria-label="Horários por dia">${opc.map(([v, l]) => `<button type="button" class="${n === v ? 'on' : ''}" data-a="fam" data-id="${c.id}" data-v="${v}" aria-pressed="${n === v}">${l}</button>`).join('')}</div>` : ''}
+      <p>${txt}</p></div>`;
   }
 
   function ladoLembrete(x, c) {
@@ -1163,6 +1186,15 @@
         act(() => api('POST', `/api/admin/clientes/${id}/bloquear`, {}), (r) => alerta('aviso', 'Cliente bloqueado no site', `${first(cById(id).name)} não consegue mais marcar pelo site.${r && r.cancelled && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`, [{ r: 'Desfazer', fn: () => act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('info', 'Bloqueio desfeito', 'O cliente já pode marcar pelo site de novo.')) }]));
         break;
       case 'desbloq': e.stopPropagation(); act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('ok', `${first(cById(id).name)} desbloqueado`, 'Já pode agendar pelo site de novo.')); break;
+      case 'fam': {
+        e.stopPropagation(); const n = Number(v) || 0; const c = cById(id); const antes = famDe(c);
+        if (n === antes) break;
+        act(() => api('PUT', `/api/admin/clientes/${id}/limite`, { perDay: n || null }), () => alerta(n ? 'ok' : 'info',
+          n ? `${first(c.name)} liberado para a família` : `${first(c.name)} voltou ao normal`,
+          n ? `Pode marcar até ${n} horários no mesmo dia pelo site.` : `Segue a regra geral de ${baseDia()} por dia.`,
+          [{ r: 'Desfazer', fn: () => act(() => api('PUT', `/api/admin/clientes/${id}/limite`, { perDay: antes || null }), () => alerta('info', 'Pronto, desfeito', 'Voltou como estava.')) }]));
+        break;
+      }
       case 'cli-f': V.cliF = v; V.pg.cli = 1; render(); if (el.dataset.rola) { const c = $('#cliSec'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); } break;
       case 'cli-q-x': V.cliQ = ''; V.pg.cli = 1; render(); break;
       case 'rk': V.rk = v; render(); break;

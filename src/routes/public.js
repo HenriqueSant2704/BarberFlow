@@ -49,7 +49,6 @@ r.post('/agendar', ah(async (req, res) => {
   const ipHash = guard.ipHashOf(req);
   const result = await db.tx(async (c) => {
     const settings = await repo.getSettings(c);
-    await guard.checkDevice(c, settings, device, ipHash);
     let client;
     if (tokenClientId) {
       const { rows } = await c.query('SELECT * FROM clients WHERE id = $1', [tokenClientId]);
@@ -58,8 +57,11 @@ r.post('/agendar', ah(async (req, res) => {
     } else {
       client = await findOrCreateClient(c, cleanName(req.body.name), cleanPhone(req.body.phone));
     }
+    await guard.checkDevice(c, settings, device, ipHash, client);
     if (Agenda.isDate(date)) await guard.checkClient(c, settings, client, date);
-    const appt = await createAppointment(c, { clientId: Number(client.id), date, time, serviceId, origin: 'site', enforceWindow: true, device, ipHash });
+    // "Para quem é esse horário?": só para quem o barbeiro liberou para a família
+    const forName = client.perDay > 1 ? String(req.body.forName || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) || null : null;
+    const appt = await createAppointment(c, { clientId: Number(client.id), date, time, serviceId, origin: 'site', enforceWindow: true, device, ipHash, forName });
     const { rows: n } = await c.query("INSERT INTO notifications (type, appointment_id) VALUES ('novo', $1) RETURNING id, created_at", [appt.id]);
     return { client, appt, notif: n[0] };
   });
