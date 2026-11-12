@@ -11,6 +11,7 @@ const mapSettings = (r) => ({
   maxActive: r.max_active, maxPerDay: r.max_per_day, maxDevice: r.max_device, autoBlock: r.auto_block,
   remindOn: !!r.remind_on, remindMin: r.remind_min || 60, remindMsg: r.remind_msg || REMIND_MSG,
   step: Number(r.slot_step) === 60 ? 60 : 30,
+  waitOn: r.wait_on !== false, waitMin: Number(r.wait_min) || 60,
 });
 const mapService = (r) => ({ id: String(r.id), name: r.name, price: r.price, dur: r.duration });
 const mapClient = (r) => ({
@@ -24,7 +25,13 @@ const mapAppt = (r) => ({
   price: r.price, dur: r.duration, status: r.status, origin: r.origin,
   remind: r.remind_status ? { status: r.remind_status, at: r.remind_at } : null,
   items: Array.isArray(r.items) && r.items.length ? r.items : null, discount: Number(r.discount) || 0,
-  forName: r.for_name || null,
+  forName: r.for_name || null, movedFrom: r.moved_from || null,
+});
+/** Pedido na lista de espera. */
+const mapEspera = (r) => ({
+  id: String(r.id), clientId: String(r.client_id), date: r.date, period: r.period,
+  items: Array.isArray(r.items) ? r.items : [], dur: r.duration, at: r.created_at,
+  ...(r.pos != null ? { pos: Number(r.pos) } : {}),
 });
 const mapExpense = (r) => ({ id: String(r.id), desc: r.description, val: r.amount, date: r.date, cat: r.category || 'Outros' });
 const mapBlocked = (r) => ({ date: r.date, why: r.reason });
@@ -49,4 +56,4 @@ async function getApptsOn(c, date) {
   return rows.map(mapAppt);
 }
 
-module.exports = { mapSettings, mapService, mapClient, mapAppt, mapExpense, mapBlocked, getSettings, getServices, getBlocked, getApptsOn };
+module.exports = { mapSettings, mapService, mapClient, mapAppt, mapEspera, mapExpense, mapBlocked, getSettings, getServices, getBlocked, getApptsOn };

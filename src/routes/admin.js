@@ -7,6 +7,7 @@ const marca = require('../marca');
 const notify = require('../notify');
 const wa = require('../whatsapp');
 const lembretes = require('../lembretes');
+const espera = require('../espera');
 const { setAdminCookie, clearAdminCookie, requireAdmin } = require('../auth');
 const { createAppointment, findOrCreateClient } = require('../booking');
 const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, cleanId } = require('../util');
@@ -40,7 +41,7 @@ r.use(requireAdmin);
 
 // ----- Tudo que o painel precisa, numa chamada só -----
 r.get('/dados', ah(async (req, res) => {
-  const [settings, services, blocked, clients, appts, expenses, barber, notifs] = await Promise.all([
+  const [settings, services, blocked, clients, appts, expenses, barber, notifs, fila] = await Promise.all([
     repo.getSettings(),
     repo.getServices(),
     repo.getBlocked(),
@@ -49,6 +50,7 @@ r.get('/dados', ah(async (req, res) => {
     db.query('SELECT * FROM expenses ORDER BY date DESC, id DESC'),
     db.query('SELECT id, name, email, username FROM barbers WHERE id = $1', [req.barberId]),
     notificationsList(),
+    db.query("SELECT * FROM waitlist WHERE status = 'aguardando' AND date >= $1 ORDER BY date, created_at, id", [today()]),
   ]);
   if (!barber.rows[0]) { clearAdminCookie(res); fail(401, 'Faça login de novo.'); }
   const b = barber.rows[0];
@@ -59,6 +61,7 @@ r.get('/dados', ah(async (req, res) => {
     expenses: expenses.rows.map(repo.mapExpense),
     barber: { name: b.name, email: b.email, user: b.username },
     notifications: notifs,
+    espera: fila.rows.map(repo.mapEspera),
     whats: wa.info(),
     today: today(), nowMin: nowMin(),
   });
@@ -67,7 +70,7 @@ r.get('/dados', ah(async (req, res) => {
 // ----- Avisos (sino) -----
 async function notificationsList() {
   const { rows } = await db.query(`
-    SELECT n.id, n.type, n.read, n.created_at, a.id AS appointment_id, a.date, a.time, a.service_name, c.name AS client_name
+    SELECT n.id, n.type, n.read, n.created_at, n.info, a.id AS appointment_id, a.date, a.time, a.service_name, c.name AS client_name
       FROM notifications n
       JOIN appointments a ON a.id = n.appointment_id
       JOIN clients c ON c.id = a.client_id
@@ -75,6 +78,7 @@ async function notificationsList() {
   return rows.map((x) => ({
     id: String(x.id), type: x.type, read: x.read, at: x.created_at,
     appointmentId: String(x.appointment_id), date: x.date, time: x.time, service: x.service_name, clientName: x.client_name,
+    ...(x.info ? { info: x.info } : {}),
   }));
 }
 r.get('/avisos/stream', (req, res) => notify.subscribe(req, res));
@@ -150,9 +154,11 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
         }
       }
     }
-    return { appt: repo.mapAppt(up.rows[0]), blockedClient };
+    return { appt: repo.mapAppt(up.rows[0]), blockedClient, antes: a.status };
   });
   res.json({ appointment: appt.appt, blockedClient: appt.blockedClient });
+  // Cancelou um horário marcado: a vaga vai para o primeiro da lista de espera
+  if (status === 'cancelado' && appt.antes === 'agendado') espera.vagou(appt.appt.date);
 }));
 
 r.post('/agendamentos', ah(async (req, res) => {
@@ -170,6 +176,12 @@ r.post('/agendamentos', ah(async (req, res) => {
     return createAppointment(c, { clientId: cid, date, time, serviceId, origin: 'painel', enforceWindow: false });
   });
   res.status(201).json({ appointment: appt });
+}));
+
+// ----- Lista de espera -----
+r.delete('/espera/:id', ah(async (req, res) => {
+  await db.query("UPDATE waitlist SET status = 'saiu' WHERE id = $1 AND status = 'aguardando'", [cleanId(req.params.id)]);
+  res.json({ ok: true });
 }));
 
 // ----- Despesas -----
@@ -223,9 +235,11 @@ r.post('/clientes/:id/bloquear', ah(async (req, res) => {
     const { rows: cancel } = await c.query(
       "UPDATE appointments SET status = 'cancelado', updated_at = now() WHERE client_id = $1 AND status = 'agendado' AND date >= $2 RETURNING *",
       [id, today()]);
+    await c.query("UPDATE waitlist SET status = 'saiu' WHERE client_id = $1 AND status = 'aguardando'", [id]);
     return { client: repo.mapClient(rows[0]), cancelled: cancel.map(repo.mapAppt) };
   });
   res.json(out);
+  espera.vagou(...out.cancelled.map((x) => x.date));
 }));
 r.post('/clientes/:id/desbloquear', ah(async (req, res) => {
   const { rows } = await db.query("UPDATE clients SET blocked = false, blocked_reason = '' WHERE id = $1 RETURNING *", [cleanId(req.params.id)]);
@@ -256,6 +270,8 @@ const FIELDS = {
   step: ['slot_step', (v) => { const n = Number(v); if (![30, 60].includes(n)) fail(400, 'Escolha de 30 em 30 minutos ou de 1 em 1 hora.'); return n; }],
   remindOn: ['remind_on', (v) => !!v],
   remindMin: ['remind_min', (v) => { const n = Number(v); if (![30, 60, 90, 120, 180].includes(n)) fail(400, 'Escolha quanto tempo antes manda o lembrete.'); return n; }],
+  waitOn: ['wait_on', (v) => !!v],
+  waitMin: ['wait_min', (v) => { const n = Number(v); if (![30, 60, 120, 180].includes(n)) fail(400, 'Escolha com quanto tempo antes a vaga passa para a lista de espera.'); return n; }],
   remindMsg: ['remind_msg', (v) => {
     const s = String(v || '').trim();
     if (s.length > 500) fail(400, 'A mensagem do lembrete pode ter até 500 letras.');
