@@ -296,6 +296,17 @@
   function field(id, label, icon, value, err, extra = '') {
     return `<div class="campo"><label for="${id}">${label}</label><div class="entrada ${err ? 'erro' : ''}" id="e-${id}">${ic(icon, 18)}<input id="${id}" ${extra} value="${esc(value)}"></div>${err ? `<div class="erro-campo" role="alert">${ic('alert', 16)}${esc(err)}</div>` : ''}</div>`;
   }
+  // Cliente liberado pelo barbeiro para marcar para a família: pergunta para quem é o horário
+  const podeFamilia = () => ME && ME.perDay > 1;
+  const noDia = (ds) => MYAP.filter((a) => a.date === ds && a.status === 'agendado').length;
+  function paraQuem() {
+    if (!podeFamilia()) return '';
+    const n = noDia(V.date);
+    return `<div class="para-q"><span class="lab">Para quem é esse horário?</span>
+      <div class="para-op"><button type="button" class="${V.para === 'eu' ? 'on' : ''}" data-a="para" data-v="eu" aria-pressed="${V.para === 'eu'}">${ic('user', 16)}Para mim</button><button type="button" class="${V.para === 'outro' ? 'on' : ''}" data-a="para" data-v="outro" aria-pressed="${V.para === 'outro'}">${ic('users', 16)}Outra pessoa</button></div>
+      ${V.para === 'outro' ? field('para-n', 'Nome de quem vai cortar', 'user', V.paraNome || '', V.errs.para, 'placeholder="Ex.: Enzo" maxlength="40" autocomplete="off" data-in="para-n"') : ''}
+      <small>${ic('users', 13)}Você pode marcar até <b>${ME.perDay} horários</b> no mesmo dia${n ? ` · já tem ${n} em ${shortDate(V.date)}` : ''}.</small></div>`;
+  }
   function sheet(anim) {
     const s = svcById(V.svc);
     const mini = s && V.date && V.time ? `<div class="mini-resumo">${ic('cal', 16)}${shortDate(V.date)} · ${V.time} às ${endOf(V.time, s.dur)} · ${esc(s.name)} · ${money(s.price)}</div>` : '';
@@ -319,6 +330,7 @@
     } else {
       t = 'Tudo certo?'; sub = 'Confira e confirme o seu horário.';
       body = `<div class="achou"><span class="av">${esc(initials(ME.name))}</span><div><small>${V.justId ? 'Encontramos você!' : 'Agendando como'}</small><b>${esc(ME.name)}</b></div></div>
+        ${paraQuem()}
         <button type="button" class="btn pri bloco-btn" data-a="confirm" ${wait ? 'disabled' : ''}>${wait ? 'Agendando…' : `${ic('check', 18)}Confirmar agendamento`}</button>
         <div class="muted" style="font-size:12.5px;text-align:center">Pagamento na barbearia, no dia do atendimento.</div>
         <button type="button" class="link" style="align-self:center" data-a="notme">Não é ${esc(first(ME.name))}? Trocar</button>`;
@@ -342,7 +354,7 @@
     const ln = (i, rot, v) => `<div class="r-linha"><span class="ico-k">${ic(i, 17)}</span><div><small>${rot}</small><b>${v}</b></div></div>`;
     return `<div class="sucesso"><div class="check-grande">${ic('check', 52)}</div>
       <div><h1>Horário confirmado!</h1><p>Te esperamos, ${esc(first(ME.name))}. Se não puder vir, cancele em <b>Meus horários</b> para liberar a vaga.</p></div>
-      <div class="ticket">${ln('cal', 'Dia', cap(longDate(a.date)))}${ln('clock', 'Horário', `${a.time} às ${endOf(a.time, a.dur)}`)}${ln('scissors', 'Serviço', esc(a.service))}${ln('money', 'Valor (pago na barbearia)', money(a.price))}</div>
+      <div class="ticket">${ln('cal', 'Dia', cap(longDate(a.date)))}${ln('clock', 'Horário', `${a.time} às ${endOf(a.time, a.dur)}`)}${a.forName ? ln('users', 'Para quem', esc(a.forName)) : ''}${ln('scissors', 'Serviço', esc(a.service))}${ln('money', 'Valor (pago na barbearia)', money(a.price))}</div>
       ${avisoLembrete()}
       <div class="acoes"><button type="button" class="btn pri" data-a="tab" data-t="horarios">${ic('clock', 17)}Ver meus horários</button><button type="button" class="btn" data-a="again">${ic('plus', 17)}Agendar outro</button></div></div>`;
   }
@@ -372,7 +384,7 @@
           ${String(V.cancelAsk) === String(a.id) ? `<div class="faixa pisca" data-t="erro"><span class="f-ico">${ic('alert', 18)}</span><div><strong>Cancelar esse horário?</strong><p>A vaga fica livre para outra pessoa.</p><div class="acoes" style="margin-top:10px"><button type="button" class="btn p" style="background:var(--vermelho);border-color:var(--vermelho);color:#fff" data-a="cancel-yes" data-id="${a.id}" ${V.busyAction ? 'disabled' : ''}>Sim, cancelar</button><button type="button" class="btn p" data-a="cancel-no">Manter horário</button></div></div></div>`
             : `<div class="acoes"><button type="button" class="btn verm p" data-a="cancel" data-id="${a.id}">${ic('x', 16)}Cancelar horário</button></div>`}`;
       }
-      return `<div class="ag-c"><div class="topo"><div class="quando"><div class="cal ${fut ? '' : 'velho'}"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(a.service)}</h4><p>${cap(DOWL[d.getDay()])} · ${a.time} às ${endOf(a.time, a.dur)}</p></div></div>${pil}</div>${extra}</div>`;
+      return `<div class="ag-c"><div class="topo"><div class="quando"><div class="cal ${fut ? '' : 'velho'}"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(a.service)}${a.forName ? ` <span class="para-quem">para ${esc(a.forName)}</span>` : ''}</h4><p>${cap(DOWL[d.getDay()])} · ${a.time} às ${endOf(a.time, a.dur)}</p></div></div>${pil}</div>${extra}</div>`;
     };
     return `<div class="pagina-t"><h1>Meus horários</h1><p>Olá, ${esc(first(ME.name))}! Aqui ficam seus agendamentos.</p></div>
       <div class="secao-t">${ic('cal', 20)}Próximos <small>${next.length}</small></div>
@@ -451,6 +463,7 @@
     if (!V.time) { V.step = 2; render(true); alerta('aviso', 'Falta escolher o horário', 'Toque em um horário livre.'); marcar('#b-hora', 'aviso'); return; }
     if (!svcById(V.svc)) { V.step = 3; render(true); alerta('aviso', 'Falta escolher o serviço', 'Toque em um serviço da lista.'); marcar('#b-svc', 'aviso'); return; }
     V.errs = {}; V.notFound = false; V.justId = false;
+    V.para = ME && noDia(V.date) ? 'outro' : 'eu';
     V.sheet = ME ? 'confirma' : 'quem'; render(true);
   }
   function focusSheet() { setTimeout(() => { const i = document.querySelector('.folha input'); if (i && !MOBILE.matches) i.focus(); }, 60); }
@@ -458,12 +471,17 @@
   async function book() {
     const body = { date: V.date, time: V.time, serviceId: V.svc };
     if (!ME) { body.name = A.tidyName(V.newName); body.phone = digits(V.newPhone); }
+    if (podeFamilia() && V.para === 'outro') {
+      const nome = String(V.paraNome || '').trim().replace(/\s+/g, ' ');
+      if (nome.length < 2) { V.errs = { para: 'Digite o nome de quem vai cortar.' }; render(true); alerta('aviso', 'Para quem é o horário?', 'Digite o nome de quem vai cortar, ou escolha "Para mim".'); marcar('#e-para-n', 'aviso'); return; }
+      body.forName = nome;
+    }
     const dev = deviceId();
     try {
       const d = await api('POST', '/api/public/agendar', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
       store.set(TOKEN_KEY, d.token);
       await Promise.all([loadMe(), loadBusy()]);
-      Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', done: true, errs: {} });
+      Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', paraNome: '', done: true, errs: {} });
       setTimeout(() => alerta('ok', 'Agendado com sucesso!', `${cap(longDate(d.appointment.date))} às ${d.appointment.time}. Te esperamos!`), 50);
     } catch (err) {
       if (err.status === 409) {
@@ -477,6 +495,13 @@
         return;
       }
       if (err.status === 401) { store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.sheet = 'quem'; setTimeout(() => alerta('aviso', 'Entre de novo', err.message), 50); return; }
+      if (err.code === 'limite_dia' && S.settings.phone) {
+        // Quer marcar para os filhos também? O barbeiro libera na ficha dele.
+        const msg = `Olá! Sou ${ME ? ME.name : 'cliente'} e quero marcar mais de um horário no mesmo dia (para mim e para minha família). Pode liberar para mim?`;
+        V.sheet = null;
+        setTimeout(() => alerta('aviso', 'Você já tem horário nesse dia', `${err.message} Vai marcar para outra pessoa da família? Peça para a barbearia liberar.`, [{ r: 'Pedir pelo WhatsApp', fn: () => window.open(waLink(msg), '_blank', 'noopener') }], 9000), 50);
+        return;
+      }
       setTimeout(() => alerta('erro', 'Não foi possível agendar', err.message), 50);
     }
   }
@@ -565,6 +590,7 @@
       case 'who': V.sheet = el.dataset.w || 'quem'; V.errs = {}; V.notFound = false; render(true); focusSheet(); break;
       case 'to-new': toNew(); break;
       case 'confirm': run(book); break;
+      case 'para': V.para = el.dataset.v; V.errs = {}; render(true); if (V.para === 'outro') setTimeout(() => { const i = $('#para-n'); if (i) i.focus(); }, 30); break;
       case 'logout': store.set(TOKEN_KEY, null); ME = null; MYAP = []; V.phone = ''; V.tab = 'inicio'; render(); alerta('info', 'Você saiu', 'Para ver seus horários, entre de novo com seu WhatsApp.'); break;
       case 'cancel': V.cancelAsk = el.dataset.id; render(true); break;
       case 'cancel-no': V.cancelAsk = null; render(true); break;
@@ -588,6 +614,7 @@
     if (['c-phone', 'n-phone', 'p-wa'].includes(k)) el.value = maskPhone(el.value);
     if (k === 'c-phone') { V.phone = el.value; V.notFound = false; }
     if (k === 'n-name') V.newName = el.value;
+    if (k === 'para-n') V.paraNome = el.value;
     if (k === 'n-phone') V.newPhone = el.value;
     if (k === 'p-name') V.pName = el.value;
     if (k === 'p-wa') V.pPhone = el.value;

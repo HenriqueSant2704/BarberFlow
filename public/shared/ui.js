@@ -188,7 +188,7 @@
       throw Object.assign(new Error('Sem conexão com a internet. Tente de novo.'), { status: 0 });
     }
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(data.error || 'Algo deu errado. Tente de novo.'), { status: res.status });
+    if (!res.ok) throw Object.assign(new Error(data.error || 'Algo deu errado. Tente de novo.'), { status: res.status, code: data.code });
     return data;
   }
 
