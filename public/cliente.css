@@ -474,3 +474,102 @@ a.info-cab{border-top:1px solid var(--line)}
 .para-q small{display:block;color:var(--muted);font-size:12.5px;line-height:1.45}
 .para-q small svg{color:var(--ouro);vertical-align:-2px;margin-right:5px}
 .para-quem{display:inline-flex;align-items:center;padding:1px 7px;border-radius:6px;background:var(--ouro-soft);color:var(--ouro);font-family:var(--f-body, inherit);font-size:11px;font-weight:700;vertical-align:3px;white-space:nowrap;letter-spacing:0}
+
+/* ----- Vários serviços no mesmo horário ----- */
+.svc-soma{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding:14px 16px;border-radius:12px;background:var(--bloco);color:var(--bloco-ink);animation:entra .3s var(--spring) both}
+.svc-soma>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.svc-soma small{color:var(--ouro-d);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.svc-soma>div>b{font-size:15px;overflow:hidden;text-overflow:ellipsis}
+.svc-soma span{display:inline-flex;align-items:center;gap:5px;color:var(--bloco-muted);font-size:12.5px;font-weight:600}
+.svc-soma .preco{font-size:22px;color:#fff;flex:none}
+.servicos.multi .svc small svg{flex:none}
+.servicos.multi .svc.sel .svc-t small{color:var(--verde);font-weight:700}
+.servicos.multi+.wiz-nota{margin-top:12px}
+.r-itens{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:10px;border:1px dashed var(--line-strong);font-size:13px}
+.r-itens div{display:flex;justify-content:space-between;gap:10px}
+.r-itens span{color:var(--ink-soft);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ----- Mudar o horário ----- */
+.rem-faixa{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--ouro-soft);border:1.5px solid color-mix(in srgb,var(--ouro) 40%,transparent)}
+.rem-faixa .ico-k{width:38px;height:38px;border-radius:10px;background:var(--ouro);color:var(--on-ouro);flex:none}
+.rem-faixa>div{flex:1;min-width:0}
+.rem-faixa small{display:block;color:var(--ouro);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.rem-faixa b{display:block;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rem-faixa .link{flex:none}
+.mes button.meu{box-shadow:inset 0 0 0 2px var(--ouro)}
+.mes button.meu:not(.hoje) small{color:var(--ouro)}
+.legenda .meu i{background:transparent;box-shadow:inset 0 0 0 2px var(--ouro)}
+.hora.atual{box-shadow:inset 0 0 0 2px var(--ouro)}
+.hora small{position:absolute;bottom:2px;left:0;right:0;font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--ouro);line-height:1}
+.hora.sel small{color:var(--ouro-d)}
+.rem-troca{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:stretch}
+.rem-troca>div{display:flex;flex-direction:column;gap:3px;padding:14px;border-radius:12px;min-width:0}
+.rem-troca small{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.rem-troca b{font-size:14.5px}
+.rem-troca span{font-size:12.5px;color:var(--muted)}
+.rem-de{background:var(--surface-2);border:1px dashed var(--line-strong)}
+.rem-de small{color:var(--muted)}
+.rem-de b{text-decoration:line-through;text-decoration-thickness:1.5px;color:var(--muted)}
+.rem-para{background:var(--verde-soft);border:1.5px solid color-mix(in srgb,var(--verde) 40%,transparent)}
+.rem-para small{color:var(--verde)}
+.rem-seta{align-self:center;color:var(--ouro)}
+.sucesso p s{color:var(--ink-soft)}
+
+/* ----- Detalhes de um horário (Meus horários) ----- */
+.ag-c-abre{width:100%;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer}
+.ag-c-abre:hover h4{text-decoration:underline;text-underline-offset:3px}
+.ag-c.velho .ag-c-abre{opacity:.92}
+.ag-c-acoes .btn{flex:1;justify-content:center}
+.para-quem.esp{gap:4px;background:var(--verde-soft);color:var(--verde)}
+.det-quando{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line)}
+.det-quando>div:nth-child(2){display:flex;flex-direction:column;gap:4px}
+.det-quando b{font-size:16px}
+.det-quando span{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13.5px;font-weight:600}
+.det-l{display:flex;align-items:center;gap:10px;padding:2px 2px;color:var(--ink-soft);font-size:13.5px;text-decoration:none}
+.det-l svg:first-child{color:var(--ouro)}
+.det-l.link-l span{flex:1;min-width:0}
+.det-l.link-l:hover span{text-decoration:underline}
+.det-conta{display:flex;flex-direction:column;gap:7px;padding:14px;border-radius:12px;border:1px solid var(--line)}
+.det-conta>small{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.det-conta div{display:flex;justify-content:space-between;gap:10px;font-size:14px}
+.det-conta .desc{color:var(--verde)}
+.det-conta .tot{margin-top:4px;padding-top:10px;border-top:1px dashed var(--line-strong);align-items:baseline}
+.det-conta .tot span{color:var(--muted);font-size:13px;font-weight:600}
+.det-conta .tot b{font-size:22px}
+.det-acoes{display:flex;flex-direction:column;gap:10px}
+.duas-b{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.duas-b .btn{justify-content:center}
+
+/* ----- Lista de espera ----- */
+.espera-link{width:100%;display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;border:1.5px dashed color-mix(in srgb,var(--ouro) 55%,var(--line));background:var(--ouro-soft);color:var(--ink);text-align:left;transition:border-color .2s,transform .25s var(--spring)}
+.espera-link:hover{border-style:solid;transform:translateY(-2px)}
+.espera-link .ico-k{width:38px;height:38px;border-radius:10px;background:var(--ouro);color:var(--on-ouro);flex:none}
+.espera-link>span:nth-child(2){flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.espera-link b{font-size:14.5px}
+.espera-link small{color:var(--ink-soft);font-size:12.5px;line-height:1.45}
+.campo .lab{font-size:13px;font-weight:700;color:var(--ink-soft)}
+.esp-chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:99px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;font-size:13.5px}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.esp-svcs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.esp-svc{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);text-align:left;font-size:13.5px;font-weight:700}
+.esp-svc small{display:block;color:var(--muted);font-weight:600;font-size:11.5px}
+.esp-svc .ck{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line-strong);display:grid;place-items:center}
+.esp-svc.on{border-color:var(--ink);background:var(--surface-2)}
+.esp-svc.on .ck{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.esp-tot{display:flex;justify-content:space-between;align-items:baseline;margin-top:4px;padding-top:10px;border-top:1px dashed var(--line-strong);color:var(--muted);font-size:13px;font-weight:600}
+.esp-tot b{font-size:20px}
+.ag-c .cal.esp small{background:var(--ouro);color:var(--on-ouro)}
+.esp-c{border-style:dashed;border-color:color-mix(in srgb,var(--ouro) 50%,var(--line))}
+.confirma-l{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:10px;background:var(--vermelho-soft)}
+.confirma-l>span{font-weight:700;font-size:14px;color:var(--vermelho)}
+@media (max-width:760px){
+  .rem-troca{grid-template-columns:minmax(0,1fr)}
+  .rem-seta{justify-self:center;transform:rotate(90deg)}
+  .esp-svcs{grid-template-columns:minmax(0,1fr)}
+  .det-quando{grid-template-columns:auto minmax(0,1fr)}
+  .det-quando .pilula{grid-column:2;justify-self:start}
+  .svc-soma .preco{font-size:19px}
+}
+.ticket .r-linha.largo{grid-column:1/-1}
+.ticket .r-linha.largo b{white-space:normal}

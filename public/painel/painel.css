@@ -914,3 +914,28 @@ button.g-bar:focus-visible{outline:2px solid var(--ouro);outline-offset:2px;bord
 .bloq-i.fam{background:var(--ouro-soft)}
 .bloq-i.fam .ico-k{color:var(--ouro)}
 .para-quem{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:1px 7px;border-radius:6px;background:var(--ouro-soft);color:var(--ouro);font-size:11px;font-weight:700;vertical-align:2px;white-space:nowrap}
+
+/* ----- Remarcar, vários serviços e lista de espera ----- */
+.origem{display:inline-flex;align-items:center;gap:5px;align-self:flex-start;margin-top:5px;padding:2px 8px;border-radius:6px;background:var(--k-soft);color:var(--k);font-size:11.5px;font-weight:800;line-height:1.5;white-space:nowrap}
+.tl-card .origem{display:flex;width:max-content}
+.ag .origem{margin:0}
+.esp-dias{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;align-items:start}
+.esp-col{border-style:dashed;border-color:color-mix(in srgb,var(--ouro) 45%,var(--line))}
+.esp-i{position:relative;display:flex;flex-direction:column;gap:10px;padding:14px 14px 14px 46px;border-radius:14px;background:var(--surface);border:1px solid var(--line);animation:entra .35s var(--ease) both}
+.esp-i .pos{position:absolute;left:12px;top:14px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--ouro);color:var(--on-ouro, #fff);font-size:12px;font-weight:800}
+.esp-i .quem{display:flex;align-items:center;gap:10px;min-width:0;border:0;background:none;padding:0;color:inherit;text-align:left;width:100%}
+.esp-i .quem>div{min-width:0}
+.esp-i .quem b{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.esp-i .quem small{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px}
+.esp-i .det{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:9px 11px;border-radius:10px;background:var(--surface-2);font-size:12.5px}
+.esp-i .det .tag{background:transparent;color:var(--ink);padding:0}
+.esp-i .acoes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.esp-i .confirma{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:10px;background:var(--vermelho-soft);color:var(--vermelho);font-size:13px;font-weight:700}
+.esp-i .confirma div{display:flex;gap:8px}
+.esp-i .confirma .sim{background:var(--vermelho);border-color:var(--vermelho);color:#fff}
+.esp-passos{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+.esp-passos div{display:flex;gap:10px;align-items:flex-start}
+.esp-passos span{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--ouro);color:var(--on-ouro, #fff);font-size:11.5px;font-weight:800}
+.esp-passos p{margin:0;font-size:13px;line-height:1.5;color:var(--ink-soft)}
+@media (max-width:560px){.esp-dias{grid-template-columns:minmax(0,1fr)}}
+.esp-i .det b{margin-left:auto}

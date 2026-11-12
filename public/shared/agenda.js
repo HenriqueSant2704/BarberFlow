@@ -167,6 +167,15 @@
     return String(tpl || REMIND_MSG).replace(/\{(nome|hora|servico|serviço|barbearia)\}/gi, (m, k) => map[k.toLowerCase().replace('ç', 'c')]);
   }
 
+  // ----- Lista de espera: mensagem de quando vaga um horário e ele já é marcado para o primeiro da fila -----
+  const ESPERA_MSG = 'Boa notícia, {nome}! 🎉\n\nAbriu uma vaga na {barbearia} e, como você estava na lista de espera, o horário já é seu:\n\n📅 {dia}\n⏰ {hora}\n✂️ {servico} · {valor}\n\nNão precisa responder. Se não puder vir, entre no site de agendamento, em "Meus horários", e cancele ou mude o horário para liberar a vaga para o próximo da fila. Te esperamos!';
+  /** Troca {nome}, {dia}, {hora}, {servico}, {valor} e {barbearia} na mensagem da lista de espera. */
+  function esperaText(d) {
+    const first = String(d.nome || '').trim().split(/\s+/)[0] || '';
+    const map = { nome: first, dia: d.dia || '', hora: d.hora || '', servico: d.servico || '', valor: d.valor || '', barbearia: d.barbearia || '' };
+    return ESPERA_MSG.replace(/\{(nome|dia|hora|servico|valor|barbearia)\}/g, (m, k) => map[k]);
+  }
+
   // ----- Marca: cor e iniciais (usadas no site, no painel e no servidor, que monta a tela de carregamento e o ícone da aba) -----
   const PRESETS = {
     latao: ['Dourado', '#8c6a2b', '#d2b06b'], verde: ['Verde garrafa', '#1f5f4a', '#6cc8a1'], bordo: ['Bordô', '#7a2433', '#e3909b'],
@@ -188,5 +197,5 @@
     return base.split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'B';
   }
 
-  return { PRESETS, accent, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText };
+  return { PRESETS, accent, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText, ESPERA_MSG, esperaText };
 });
