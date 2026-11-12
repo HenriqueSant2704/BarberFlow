@@ -27,7 +27,7 @@ app.get('/', (req, res) => res.sendFile(path.join(PUBLIC, 'index.html')));
 
 // Erros: mensagens claras para quem usa, detalhes técnicos só no terminal
 app.use((err, req, res, next) => {
-  if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
+  if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message, ...(err.code ? { code: err.code } : {}) });
   if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Arquivo muito grande.' });
   console.error(err);
   res.status(500).json({ error: 'Algo deu errado no servidor. Tente de novo.' });

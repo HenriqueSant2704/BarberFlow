@@ -16,6 +16,7 @@ const mapService = (r) => ({ id: String(r.id), name: r.name, price: r.price, dur
 const mapClient = (r) => ({
   id: String(r.id), name: r.name, phone: r.phone, since: r.created_at,
   blocked: !!r.blocked, blockedReason: r.blocked_reason || '',
+  perDay: r.per_day > 1 ? Number(r.per_day) : null,
 });
 const mapAppt = (r) => ({
   id: String(r.id), date: r.date, time: r.time, clientId: String(r.client_id),
@@ -23,6 +24,7 @@ const mapAppt = (r) => ({
   price: r.price, dur: r.duration, status: r.status, origin: r.origin,
   remind: r.remind_status ? { status: r.remind_status, at: r.remind_at } : null,
   items: Array.isArray(r.items) && r.items.length ? r.items : null, discount: Number(r.discount) || 0,
+  forName: r.for_name || null,
 });
 const mapExpense = (r) => ({ id: String(r.id), desc: r.description, val: r.amount, date: r.date, cat: r.category || 'Outros' });
 const mapBlocked = (r) => ({ date: r.date, why: r.reason });

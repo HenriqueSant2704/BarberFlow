@@ -4,9 +4,9 @@ const { Agenda, fail, today, nowMin, cleanId } = require('./util');
 
 /**
  * @param c        conexão dentro de uma transação
- * @param opts     { clientId, date, time, serviceId, origin, enforceWindow, device?, ipHash? }
+ * @param opts     { clientId, date, time, serviceId, origin, enforceWindow, device?, ipHash?, forName? }
  */
-async function createAppointment(c, { clientId, date, time, serviceId, origin, enforceWindow, device = null, ipHash = null }) {
+async function createAppointment(c, { clientId, date, time, serviceId, origin, enforceWindow, device = null, ipHash = null, forName = null }) {
   if (!Agenda.isDate(date)) fail(400, 'Escolha um dia válido.');
   if (!Agenda.isTime(time)) fail(400, 'Escolha um horário válido.');
   const sid = cleanId(serviceId);
@@ -37,9 +37,9 @@ async function createAppointment(c, { clientId, date, time, serviceId, origin, e
   }
 
   const { rows } = await c.query(
-    `INSERT INTO appointments (client_id, service_id, service_name, price, duration, date, time, origin, device, ip_hash)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [clientId, svc.id, svc.name, svc.price, svc.duration, date, time, origin, device, ipHash]
+    `INSERT INTO appointments (client_id, service_id, service_name, price, duration, date, time, origin, device, ip_hash, for_name)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [clientId, svc.id, svc.name, svc.price, svc.duration, date, time, origin, device, ipHash, forName]
   );
   return repo.mapAppt(rows[0]);
 }

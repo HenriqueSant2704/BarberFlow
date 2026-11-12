@@ -202,6 +202,16 @@ r.put('/clientes/:id', ah(async (req, res) => {
   res.json({ client: repo.mapClient(rows[0]) });
 }));
 
+// Agendar para a família: quantos horários no mesmo dia este cliente pode marcar pelo site (vazio = regra geral)
+r.put('/clientes/:id/limite', ah(async (req, res) => {
+  const id = cleanId(req.params.id);
+  const v = req.body.perDay == null || req.body.perDay === '' ? null : Number(req.body.perDay);
+  if (v !== null && v !== 0 && (!Number.isInteger(v) || v < 2 || v > 10)) fail(400, 'Escolha de 2 a 10 horários por dia.');
+  const { rows } = await db.query('UPDATE clients SET per_day = $2 WHERE id = $1 RETURNING *', [id, v || null]);
+  if (!rows[0]) fail(404, 'Cliente não encontrado.');
+  res.json({ client: repo.mapClient(rows[0]) });
+}));
+
 // Bloquear: o cliente não consegue mais marcar pelo site, e os horários futuros dele são liberados.
 r.post('/clientes/:id/bloquear', ah(async (req, res) => {
   const id = cleanId(req.params.id);
