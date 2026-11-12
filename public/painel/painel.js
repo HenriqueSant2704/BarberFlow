@@ -151,6 +151,8 @@
       try { await reload(); } catch { /* ignora */ }
       render();
       if (n.type === 'novo') alerta('ok', 'Novo agendamento!', `${first(n.clientName)} marcou ${String(a.service || 'um horário').toLowerCase()} para ${diaTxt(a.date)} às ${a.time}.`, [{ r: 'Ver agendamento', fn: () => openLado('ap', a.id) }]);
+      else if (n.type === 'remarcado') alerta('info', 'Cliente mudou o horário', `${first(n.clientName)} passou ${n.info && n.info.from ? `de ${diaTxt(n.info.from.date)} às ${n.info.from.time} ` : ''}para ${diaTxt(a.date)} às ${a.time}.`, [{ r: 'Ver agendamento', fn: () => openLado('ap', a.id) }]);
+      else if (n.type === 'espera') alerta('ok', 'Vaga preenchida pela lista de espera', `${first(n.clientName)} estava na fila e ganhou ${diaTxt(a.date)} às ${a.time}. A mensagem saiu pelo WhatsApp.`, [{ r: 'Ver agendamento', fn: () => openLado('ap', a.id) }]);
       else alerta('aviso', 'Horário cancelado pelo cliente', `${first(n.clientName)} cancelou ${diaTxt(a.date)} às ${a.time}. A vaga ficou livre no site.`);
       const b = $('#sinoBtn'); if (b) { b.classList.remove('toca'); void b.offsetWidth; b.classList.add('toca'); }
     });
@@ -242,9 +244,12 @@
     const h = Math.round(m / 60); if (h < 24) return `há ${h} h`;
     const d = Math.round(h / 24); return `há ${d} dia${d > 1 ? 's' : ''}`;
   }
+  // Tipos de aviso: [cor, ícone, título]
+  const AVISO = { novo: ['verde', 'cal', 'Novo agendamento'], cancelado: ['vermelho', 'x', 'Horário cancelado'], remarcado: ['azul', 'repeat', 'Mudou o horário'], espera: ['ouro', 'bell', 'Vaga da lista de espera'] };
   function rAviso(n, del) {
-    const novo = n.type === 'novo';
-    const item = `<button type="button" class="aviso-i ${n.read ? '' : 'novo'}" data-k="${novo ? 'verde' : 'vermelho'}" data-a="ap" data-id="${n.appointmentId}"><span class="ico-k p">${ic(novo ? 'cal' : 'x', 17)}</span><div style="min-width:0"><b>${novo ? 'Novo agendamento' : 'Horário cancelado'}</b><small>${esc(n.clientName)} · ${diaTxt(n.date)} às ${n.time}</small></div><time>${timeAgo(n.at)}</time></button>`;
+    const [k, i, t] = AVISO[n.type] || AVISO.novo;
+    const de = n.type === 'remarcado' && n.info && n.info.from ? `${diaTxt(n.info.from.date)} ${n.info.from.time} → ` : '';
+    const item = `<button type="button" class="aviso-i ${n.read ? '' : 'novo'}" data-k="${k}" data-a="ap" data-id="${n.appointmentId}"><span class="ico-k p">${ic(i, 17)}</span><div style="min-width:0"><b>${t}</b><small>${esc(n.clientName)} · ${de}${diaTxt(n.date)} às ${n.time}</small></div><time>${timeAgo(n.at)}</time></button>`;
     return del ? `<div class="aviso-l">${item}<button type="button" class="aviso-del" data-a="n-del" data-id="${n.id}" aria-label="Apagar este aviso" title="Apagar aviso">${ic('trash', 16)}</button></div>` : item;
   }
   function vSino() {
@@ -252,7 +257,7 @@
     return `<div class="overlay limpo" data-a="sino"></div><div class="sino-p" role="dialog" aria-label="Avisos">
       <div class="cartao-topo"><h3>Avisos</h3><div class="bts"><button type="button" class="link" data-a="som-toggle">${ic(Som.enabled() ? 'sound' : 'mute', 16)}${Som.enabled() ? 'Som ligado' : 'Som desligado'}</button>${l.length ? `<button type="button" class="link" data-a="n-clear-ask">${ic('trash', 15)}Limpar</button>` : ''}</div></div>
       ${V.nClearAsk ? `<div class="faixa" data-t="erro"><span class="f-ico">${ic('trash', 16)}</span><div><strong>Apagar todos os avisos?</strong><p>Os agendamentos continuam na agenda.</p><div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn p verm" data-a="n-clear">Apagar</button><button type="button" class="btn p" data-a="n-clear-no">Voltar</button></div></div></div>` : ''}
-      <div class="avisos-l">${l.length ? l.map((x) => rAviso(x, true)).join('') : '<div class="vazio" style="padding:18px 8px"><p>Quando um cliente marcar ou cancelar pelo site, o aviso aparece aqui.</p></div>'}</div></div>`;
+      <div class="avisos-l">${l.length ? l.map((x) => rAviso(x, true)).join('') : '<div class="vazio" style="padding:18px 8px"><p>Quando um cliente marcar, mudar ou cancelar pelo site, o aviso aparece aqui.</p></div>'}</div></div>`;
   }
 
   // ===== Início (sem valores em dinheiro: a tela pode ficar à vista dos clientes) =====
@@ -287,7 +292,7 @@
       if (!agoraFeito && A.toMin(x.time) >= nm) { agoraFeito = true; pre = '<div class="agora-linha"><span>Agora</span><i></i><hr></div>'; }
       const pil = x.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : x.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>' : '';
       return `${pre}<div class="tl-item ${x === prox ? 'agora' : ''} ${x.status !== 'agendado' ? 'feito' : ''}" data-k="${k}"><div class="tl-h">${x.time}<small>${endOf(x.time, x.dur)}</small></div><div class="tl-linha"><i></i></div>
-        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(c.name)}</b>${paraQuem(x)}<small>${esc(x.service)}</small>${lembreteTag(x)}</div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
+        <div class="tl-card" role="button" tabindex="0" data-a="ap" data-id="${x.id}"><div><b>${esc(x.forName || c.name)}</b>${x.forName ? `<span class="por">${ic('users', 12)}pedido de ${esc(first(c.name))}</span>` : ''}<small>${ic('scissors', 12)}${esc(x.service)} · ${tempo(x.dur)}</small>${origemTag(x)}${lembreteTag(x)}</div>${pil || `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`}</div></div>`;
     }).join('') + (mostra.length && !agoraFeito && aberto && nm < A.toMin(hh.close) ? '<div class="agora-linha"><span>Agora</span><i></i><hr></div>' : '');
     const nAt = feitos.filter((x) => x.status === 'realizado').length; const nFal = feitos.length - nAt;
     const linhaFeitos = feitos.length ? `<button type="button" class="tl-feitos" data-a="ver-feitos" aria-expanded="${!!V.verFeitos}"><span class="ico-k p" data-k="verde">${ic('check', 15)}</span><span>${nAt ? `<b>${nAt}</b> atendido${nAt > 1 ? 's' : ''}` : ''}${nAt && nFal ? ' · ' : ''}${nFal ? `<b>${nFal}</b> não ${nFal > 1 ? 'vieram' : 'veio'}` : ''}</span><span class="link">${V.verFeitos ? 'Esconder' : 'Mostrar'}</span></button>` : '';
@@ -321,6 +326,38 @@
     </div>`;
   }
 
+  // ----- Lista de espera -----
+  const PER_TXT = { qualquer: 'Qualquer horário', manha: 'Manhã', tarde: 'Tarde', noite: 'Noite' };
+  const esperaVivos = () => (S.espera || []).filter((e) => e.date >= TODAY).sort((p, q) => p.date.localeCompare(q.date) || new Date(p.at) - new Date(q.at));
+  /** Selo pequeno no card: veio da lista de espera ou o cliente mudou o horário. */
+  const origemTag = (x) => (x.status !== 'agendado' ? '' : x.origin === 'espera' ? `<span class="origem" data-k="ouro">${ic('bell', 12)}Da lista de espera</span>`
+    : x.movedFrom ? `<span class="origem" data-k="azul">${ic('repeat', 12)}Mudou de ${x.movedFrom.slice(0, 10) === x.date ? '' : `${shortDate(x.movedFrom.slice(0, 10))} `}${x.movedFrom.slice(11, 16)}</span>` : '');
+  function vEspera() {
+    const l = esperaVivos();
+    if (!l.length) return `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="ouro">${ic('bell', 26)}</span><h4>Ninguém na lista de espera</h4><p>${S.settings.waitOn ? 'Quando um dia lotar, o cliente pode entrar na fila pelo site. Se alguém cancelar, o sistema marca o primeiro da fila e avisa no WhatsApp.' : 'A lista de espera está desligada. Ligue em Configurações.'}</p></div></div>`;
+    const grupos = []; l.forEach((e) => { const g = grupos[grupos.length - 1]; if (g && g.date === e.date) g.l.push(e); else grupos.push({ date: e.date, l: [e] }); });
+    const waOk = waOn();
+    return `${!waOk ? `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('whats', 18)}</span><div><strong>O WhatsApp dos lembretes está desconectado</strong><p>Sem ele a fila fica parada: ninguém ganha a vaga sozinho até você conectar de novo.</p></div><button type="button" class="btn p" data-a="ir-wa">Conectar</button></div>` : ''}
+      <div class="esp-dias">${grupos.map((g) => { const d = A.parse(g.date); return `<section class="ag-col esp-col"><header class="ag-col-topo"><div class="ag-col-cal"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b></div><div class="tx"><h4>${g.date === TODAY ? 'Hoje' : g.date === TOMORROW ? 'Amanhã' : cap(DOWL[d.getDay()])}</h4><p>${d.getDate()} de ${MESES[d.getMonth()]} · ${freeCount(g.date) ? `${freeCount(g.date)} vaga${freeCount(g.date) > 1 ? 's' : ''} livre${freeCount(g.date) > 1 ? 's' : ''}` : 'lotado'}</p></div><span class="qtd">${g.l.length} na fila</span></header>
+        <div class="ag-col-corpo">${g.l.map((e, i) => { const c = cById(e.clientId); const it = e.items || []; return `<div class="esp-i"><span class="pos">${i + 1}º</span>
+          <button type="button" class="quem" data-a="cli" data-id="${c.id}">${avk(c)}<div><b>${esc(c.name)}</b><small>${ic('clock', 12)}${PER_TXT[e.period] || 'Qualquer horário'} · entrou ${timeAgo(e.at)}</small></div></button>
+          <div class="det"><span class="tag">${ic('scissors', 13)}${esc(it.map((x) => x.name).join(' + '))} · ${tempo(e.dur)}</span><b class="num">${money(it.reduce((s2, x) => s2 + Number(x.price || 0), 0))}</b></div>
+          ${V.espDel === e.id ? `<div class="confirma"><span>Tirar ${esc(first(c.name))} da fila?</span><div><button type="button" class="btn p sim" data-a="esp-del" data-id="${e.id}">Tirar</button><button type="button" class="btn p" data-a="esp-del-no">Voltar</button></div></div>`
+            : `<div class="acoes">${c.phone ? `<a class="btn p" href="${waLink(c.phone, `Olá, ${first(c.name)}! Aqui é da ${S.settings.shopName}. Vi que você está na lista de espera de ${diaTxt(e.date)}.`)}" target="_blank" rel="noopener">${ic('whats', 15)}WhatsApp</a>` : ''}<button type="button" class="btn p" data-a="esp-del-ask" data-id="${e.id}">${ic('x', 15)}Tirar da fila</button></div>`}</div>`; }).join('')}</div></section>`; }).join('')}</div>`;
+  }
+  function cartaoEspera(d) {
+    const ok = waOn(); const st = S.settings; const ex = S.services[0] || { name: 'Corte', price: 40, dur: 30 };
+    const txt = A.esperaText({ nome: S.barber.name || 'João Silva', dia: cap(longDate(TOMORROW)), hora: `15:00 às ${A.fromMin(900 + ex.dur)}`, servico: ex.name, valor: money(ex.price), barbearia: d.shopName || st.shopName });
+    return `<section class="cartao" id="cartaoEspera"><div class="cartao-topo"><h3><span class="ico-k p">${ic('bell', 17)}</span>Lista de espera</h3><span class="pilula" data-k="${d.waitOn && ok ? 'verde' : d.waitOn ? 'laranja' : 'cinza'}">${d.waitOn ? (ok ? 'Ligada' : 'Parada: WhatsApp desconectado') : 'Desligada'}</span></div>
+      <div class="form-g">
+        <div class="wa-liga"><button type="button" class="chave ${d.waitOn ? 'on' : ''}" data-a="esp-liga" aria-pressed="${!!d.waitOn}" aria-label="Lista de espera no site"></button><div><b>Deixar o cliente entrar na fila</b><small>${d.waitOn ? 'Quando um dia lota, aparece "Entrar na lista de espera" no site.' : 'Desligada. Dia lotado só mostra outros dias com vaga.'}</small></div></div>
+        ${d.waitOn ? `<div class="esp-passos"><div><span>1</span><p>Dia lotado: o cliente entra na fila pelo site, dizendo o período e os serviços.</p></div><div><span>2</span><p>Alguém cancela ou muda o horário: o sistema marca a vaga para o <b>primeiro da fila</b> em que o serviço cabe.</p></div><div><span>3</span><p>Ele recebe a mensagem abaixo pelo WhatsApp dos lembretes e você recebe um aviso no sino.</p></div></div>
+        <div class="campo"><label for="cfg-espmin">Só passa a vaga se faltar pelo menos</label><div class="entrada"><select id="cfg-espmin" data-d="waitMin" data-num="1">${[[30, '30 minutos para o horário'], [60, '1 hora para o horário'], [120, '2 horas para o horário'], [180, '3 horas para o horário']].map(([v, l]) => `<option value="${v}" ${Number(d.waitMin) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div><span class="ajuda">Se vagar mais em cima da hora, o horário fica livre no site para quem quiser pegar.</span></div>
+        ${!ok ? `<div class="faixa fina" data-t="aviso"><span class="f-ico">${ic('whats', 15)}</span><div><strong>Precisa do WhatsApp dos lembretes conectado</strong><p>Sem ele ninguém ficaria sabendo do horário, então a fila não anda e o site esconde a lista de espera.</p></div></div>` : ''}
+        <div class="campo"><span class="lab">Mensagem que o cliente recebe</span><div class="wa-balao"><p>${esc(txt)}</p><small>${A.fromMin(nowMin())} ✓✓</small></div></div>` : ''}
+      </div></section>`;
+  }
+
   // ===== Agenda =====
   function listaAgenda(ab) {
     if (ab === 'hoje') return sortAp(S.appts.filter((x) => x.date === TODAY && x.status === 'agendado'));
@@ -328,20 +365,23 @@
     if (ab === 'proximos') return sortAp(S.appts.filter((x) => x.date > TOMORROW && x.status === 'agendado'));
     if (ab === 'realizados') return sortAp(S.appts.filter((x) => x.status === 'realizado')).reverse();
     if (ab === 'faltas') return sortAp(S.appts.filter((x) => x.status === 'faltou')).reverse();
+    if (ab === 'espera') return esperaVivos();
     return sortAp(live().filter((x) => x.date === V.agDia));
   }
   function vAgenda() {
     const abas = [['hoje', 'Hoje', 'azul'], ['amanha', 'Amanhã', 'roxo'], ['proximos', 'Próximos', 'ciano']];
-    const filtros = [['realizados', 'Realizados', 'verde'], ['faltas', 'Não compareceu', 'vermelho']];
+    const filtros = [['realizados', 'Realizados', 'verde'], ['faltas', 'Não compareceu', 'vermelho'], ...(S.settings.waitOn || esperaVivos().length ? [['espera', 'Lista de espera', 'ouro']] : [])];
     const chip = ([k, r, c]) => `<button type="button" class="chip ${V.vista === 'lista' && V.ab === k ? 'on' : ''}" data-k="${c}" data-a="ag-ab" data-v="${k}">${r}<b>${listaAgenda(k).length}</b></button>`;
     let corpo;
     if (V.vista === 'mes') corpo = vMes();
+    else if (V.ab === 'espera') corpo = vEspera();
     else {
       const lista = listaAgenda(V.ab); const porDia = !['hoje', 'amanha', 'dia'].includes(V.ab);
       const grupos = []; lista.forEach((x) => { const g = grupos[grupos.length - 1]; if (g && g.date === x.date) g.l.push(x); else grupos.push({ date: x.date, l: [x] }); });
       const pg = porDia ? pagina(grupos, 'ag', 7, ' dias') : pagina(lista, 'ag'); const html = pg.html;
       const itens = porDia ? pg.itens.flatMap((g) => g.l) : pg.itens;
-      const titulo = V.ab === 'dia' ? `<div class="faixa" data-t="info"><span class="f-ico">${ic('cal', 18)}</span><div><strong>${cap(longDate(V.agDia))}</strong><p>${lista.length ? `${lista.length} atendimento${lista.length > 1 ? 's' : ''} neste dia.` : !daySlots(V.agDia).length ? 'A barbearia está fechada neste dia.' : 'Nenhum agendamento neste dia ainda.'}</p></div><button type="button" class="btn p" data-a="vista" data-v="mes">${ic('left', 15)}Voltar ao mês</button></div>` : '';
+      const nEsp = V.ab === 'dia' ? esperaVivos().filter((e) => e.date === V.agDia).length : 0;
+      const titulo = V.ab === 'dia' ? `<div class="faixa" data-t="info"><span class="f-ico">${ic('cal', 18)}</span><div><strong>${cap(longDate(V.agDia))}</strong><p>${lista.length ? `${lista.length} atendimento${lista.length > 1 ? 's' : ''} neste dia.` : !daySlots(V.agDia).length ? 'A barbearia está fechada neste dia.' : 'Nenhum agendamento neste dia ainda.'}${nEsp ? ` <b>${nEsp} na lista de espera.</b>` : ''}</p></div>${nEsp ? `<button type="button" class="btn p" data-a="ag-ab" data-v="espera">${ic('bell', 15)}Ver fila</button>` : ''}<button type="button" class="btn p" data-a="vista" data-v="mes">${ic('left', 15)}Voltar ao mês</button></div>` : '';
       const col = (g, unico) => { const d = A.parse(g.date); const n = g.l.length; return `<section class="ag-col ${unico ? 'unico' : ''} ${g.date === TODAY ? 'hoje' : ''}"><header class="ag-col-topo"><div class="ag-col-cal"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b></div><div class="tx"><h4>${g.date === TODAY ? 'Hoje' : g.date === TOMORROW ? 'Amanhã' : cap(DOWL[d.getDay()])}</h4><p>${d.getDate()} de ${MESES[d.getMonth()]}${d.getFullYear() !== A.parse(TODAY).getFullYear() ? ' de ' + d.getFullYear() : ''}</p></div><span class="qtd">${n} ${n === 1 ? 'horário' : 'horários'}</span></header><div class="ag-col-corpo">${g.l.map(agCard).join('')}</div></section>`; };
       const dias = porDia ? pg.itens : itens.length ? [{ date: itens[0].date, l: itens }] : [];
       const cards = !porDia ? dias.map((g) => col(g, true)).join('')
@@ -367,8 +407,8 @@
       else acoes = `<div class="acoes">${c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}WhatsApp</a>` : ''}<button type="button" class="btn verm p" data-a="cancel-ask" data-id="${x.id}">${ic('x', 15)}Cancelar</button></div>`;
     }
     return `<div class="ag"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
-      <button type="button" class="quem" data-a="ap" data-id="${x.id}">${avk(c)}<div><b>${esc(c.name)}</b>${paraQuem(x)}<small>${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}</small></div></button>
-      <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${lembreteTag(x)}${acoes}</div>`;
+      <button type="button" class="quem" data-a="ap" data-id="${x.id}">${x.forName ? `<span class="av-k">${esc(initials(x.forName))}</span>` : avk(c)}<div><b>${esc(x.forName || c.name)}</b><small>${x.forName ? `${ic('users', 13)}pedido de ${esc(first(c.name))}` : `${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}`}</small></div></button>
+      <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${origemTag(x)}${lembreteTag(x)}${acoes}</div>`;
   }
   function vMes() {
     if (!V.calMonth) V.calMonth = TODAY.slice(0, 8) + '01';
@@ -628,7 +668,7 @@
       days: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ on: !st.closed.includes(i), ...A.dayHours(st, i) })),
       lunchStart: st.lunchStart, lunchEnd: st.lunchEnd, bookFrom: st.bookFrom, bookTo: st.bookTo, step: st.step === 60 ? 60 : 30,
       maxActive: st.maxActive, maxPerDay: st.maxPerDay, maxDevice: st.maxDevice, autoBlock: st.autoBlock,
-      remindOn: st.remindOn, remindMin: st.remindMin, remindMsg: st.remindMsg,
+      remindOn: st.remindOn, remindMin: st.remindMin, remindMsg: st.remindMsg, waitOn: !!st.waitOn, waitMin: st.waitMin || 60,
       svcs: S.services.map((s) => ({ id: s.id, name: s.name, price: String(s.price).replace('.', ','), dur: s.dur })),
     };
   }
@@ -678,6 +718,7 @@
             <div class="campo"><label for="cfg-end">Endereço</label><div class="entrada">${ic('pin', 18)}<input id="cfg-end" data-d="address" value="${esc(d.address)}" maxlength="140" placeholder="Rua, número - bairro, cidade"></div><span class="ajuda">Usado no mapa do site.</span></div>
           </div></section>
         ${cartaoWa(d)}
+        ${cartaoEspera(d)}
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('clock', 17)}</span>Horário de funcionamento</h3></div>
           <div class="lista-v">${[1, 2, 3, 4, 5, 6, 0].map((i) => { const x = d.days[i]; return `<div class="dia-func ${x.on ? '' : 'off'}" id="e-dia${i}"><button type="button" class="chave ${x.on ? 'on' : ''}" data-a="dia-on" data-v="${i}" aria-label="${cap(DOWL[i])}: ${x.on ? 'aberto' : 'fechado'}" aria-pressed="${x.on}"></button><b>${cap(DOWL[i])}</b><div class="hs">${x.on ? `<div class="entrada"><input type="time" step="1800" value="${x.open}" data-dia="${i}" data-k="open" aria-label="Abre"></div>às<div class="entrada"><input type="time" step="1800" value="${x.close}" data-dia="${i}" data-k="close" aria-label="Fecha"></div>` : '<span class="tag" data-k="cinza">Fechado</span>'}</div></div>`; }).join('')}
             <div class="dia-func almoco" id="e-almoco"><span class="ico-k p" data-k="laranja">${ic('coffee', 16)}</span><b>Almoço</b><div class="hs"><div class="entrada"><input type="time" step="1800" value="${d.lunchStart}" data-d="lunchStart" aria-label="Início do almoço"></div>às<div class="entrada"><input type="time" step="1800" value="${d.lunchEnd}" data-d="lunchEnd" aria-label="Fim do almoço"></div></div></div>
@@ -797,6 +838,7 @@
       lunchStart: d.lunchStart, lunchEnd: d.lunchEnd, bookFrom: d.bookFrom, bookTo: d.bookTo, step: d.step,
       maxActive: Number(d.maxActive), maxPerDay: Number(d.maxPerDay), maxDevice: Number(d.maxDevice), autoBlock: Number(d.autoBlock),
       remindOn: !!d.remindOn, remindMin: Number(d.remindMin), remindMsg: d.remindMsg.trim() === A.REMIND_MSG ? '' : d.remindMsg.trim(),
+      waitOn: !!d.waitOn, waitMin: Number(d.waitMin),
     };
     const mudouSvc = d.svcs.filter((s) => { const o = S.services.find((x) => x.id === s.id); return o && (o.name !== s.name.trim() || o.dur !== s.dur || o.price !== parseFloat(String(s.price).replace(',', '.'))); });
     V.saving = true;
@@ -868,18 +910,25 @@
       if (!x) { V.lado = null; return ''; }
       const c = cById(x.clientId);
       const pil = { agendado: x.date <= TODAY ? ['laranja', 'Aguardando'] : ['azul', 'Confirmado'], realizado: ['verde', 'Atendido'], faltou: ['vermelho', 'Não veio'], cancelado: ['cinza', 'Cancelado'] }[x.status];
-      h = `<div><small class="muted" style="font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase">${cap(longDate(x.date))}</small><h3 style="font-size:28px;font-family:var(--f-body);font-weight:800;letter-spacing:-.02em">${x.time} às ${endOf(x.time, x.dur)}</h3></div>`;
-      b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : 'Marcado no painel'}</span></div>
-        <button type="button" class="quem-l" data-a="cli" data-id="${c.id}">${avk(c, 44)}<div><b>${esc(c.name)}</b>${paraQuem(x)}<small>${maskPhone(c.phone)} · ver ficha</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>
-        <div class="kv"><div><small>Serviço</small><b>${esc(x.service)}</b></div><div><small>Duração</small><b>${tempo(x.dur)}</b></div><div><small>${x.status === 'realizado' ? 'Pagou' : 'Valor'}</small><b class="num">${money(x.price)}</b></div></div>
-        ${x.status === 'realizado' ? `<div class="conta"><div class="conta-topo"><span>${ic('receipt', 16)}O que foi cobrado</span><button type="button" class="link" data-a="fecha-edit" data-id="${x.id}">${ic('tag', 15)}Editar valores</button></div>
-          ${itensDe(x).map((it) => `<div class="l"><span>${esc(it.name)}</span><b class="num">${money(it.price)}</b></div>`).join('')}
-          ${x.discount ? `<div class="l desc"><span>Desconto</span><b class="num">− ${money(x.discount)}</b></div>` : ''}<div class="l tot"><span>Total</span><b class="num">${money(x.price)}</b></div></div>` : ''}
+      h = `<div><small class="muted" style="font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase">Pedido · ${cap(longDate(x.date))}</small><h3 style="font-size:28px;font-family:var(--f-body);font-weight:800;letter-spacing:-.02em">${x.time} às ${endOf(x.time, x.dur)}</h3></div>`;
+      const it = itensDe(x); const quem = x.forName || c.name;
+      b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : x.origin === 'espera' ? 'Veio da lista de espera' : 'Marcado no painel'} · ${tempo(x.dur)}</span></div>
+        <div class="pedido">
+          <div class="pedido-quem"><span class="av-k">${esc(initials(quem))}</span><div><small>${x.forName ? 'Quem vai cortar' : 'Cliente'}</small><b>${esc(quem)}</b>${x.forName ? `<span>Pedido feito por ${esc(c.name)}</span>` : ''}</div></div>
+          <div class="pedido-itens"><small>${x.status === 'realizado' ? 'O que foi cobrado' : it.length > 1 ? 'Serviços pedidos' : 'Serviço pedido'}</small>
+            ${it.map((y) => `<div class="l"><span class="ico-k p">${svcIcon(y.name).replace('<svg', '<svg width="15" height="15"')}</span><span>${esc(y.name)}</span><b class="num">${money(y.price)}</b></div>`).join('')}
+            ${x.discount ? `<div class="l desc"><span></span><span>Desconto</span><b class="num">− ${money(x.discount)}</b></div>` : ''}
+            <div class="l tot"><span>${x.status === 'realizado' ? 'Pagou' : 'Total, pago na barbearia'}</span><b class="num">${money(x.price)}</b></div>
+            ${x.status === 'realizado' ? `<button type="button" class="link" data-a="fecha-edit" data-id="${x.id}" style="align-self:flex-start">${ic('tag', 15)}Editar valores</button>` : ''}</div>
+        </div>
+        ${x.movedFrom && x.status === 'agendado' ? `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('repeat', 15)}</span><div><strong>Mudou de ${diaTxt(x.movedFrom.slice(0, 10))} às ${x.movedFrom.slice(11, 16)}</strong><p>O cliente trocou o horário pelo site.</p></div></div>` : ''}
+        ${x.origin === 'espera' && x.status === 'agendado' ? `<div class="faixa fina" data-t="ok"><span class="f-ico">${ic('bell', 15)}</span><div><strong>Vaga preenchida pela lista de espera</strong><p>Alguém cancelou e o sistema marcou para ${esc(first(c.name))}, que era o primeiro da fila. Ele recebeu a mensagem no WhatsApp.</p></div></div>` : ''}
         ${ladoLembrete(x, c)}
         ${x.status === 'agendado' ? `<div class="acoes"><button type="button" class="btn ok-soft" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 16)}Atendido</button><button type="button" class="btn verm" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 16)}Não veio</button></div>
           ${V.ladoAsk === 'cancel' ? `<div class="confirma"><span>Cancelar o horário de ${esc(first(c.name))}? A vaga fica livre no site.</span><div><button type="button" class="btn p sim" data-a="st" data-id="${x.id}" data-s="cancelado">Sim, cancelar</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>` : `<button type="button" class="btn" data-a="lado-ask" data-v="cancel">${ic('ban', 16)}Cancelar agendamento</button>`}`
           : `<button type="button" class="btn" data-a="st" data-id="${x.id}" data-s="agendado">${ic('undo', 16)}Voltar para aguardando</button>`}
-        ${c.phone ? `<a class="btn" href="${waLink(c.phone, x.status === 'agendado' ? waMsg(x) : '')}" target="_blank" rel="noopener">${ic('whats', 16)}Chamar no WhatsApp</a>` : ''}`;
+        ${c.phone ? `<a class="btn" href="${waLink(c.phone, x.status === 'agendado' ? waMsg(x) : '')}" target="_blank" rel="noopener">${ic('whats', 16)}Chamar no WhatsApp</a>` : ''}
+        <button type="button" class="quem-l pedido-cli" data-a="cli" data-id="${c.id}">${avk(c, 36)}<div><small>Quem marcou</small><b>${esc(c.name)}</b><small>${maskPhone(c.phone)} · ver ficha do cliente</small></div>${c.blocked ? '<span class="tag" data-k="vermelho">Bloqueado</span>' : ic('right', 18)}</button>`;
     } else {
       const { arr } = clientStats(); const x = arr.find((y) => y.c.id === d.id);
       if (!x) { V.lado = null; return ''; }
@@ -1238,6 +1287,10 @@
       }
       case 'salvar': salvarCfg(); break;
       case 'wa-liga': V.draft.remindOn = !V.draft.remindOn; render(); break;
+      case 'esp-liga': V.draft.waitOn = !V.draft.waitOn; render(); break;
+      case 'esp-del-ask': V.espDel = id; render(); break;
+      case 'esp-del-no': V.espDel = null; render(); break;
+      case 'esp-del': V.espDel = null; act(() => api('DELETE', '/api/admin/espera/' + id), () => alerta('ok', 'Tirado da lista de espera', 'Ele não vai mais receber horário automático nesse dia.')); break;
       case 'wa-var': {
         const t = $('#cfg-wamsg'); if (!t) break;
         const a0 = t.selectionStart ?? t.value.length, b0 = t.selectionEnd ?? t.value.length;

@@ -126,3 +126,35 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS discount numeric(10,2) NOT NUL
 -- O barbeiro libera, só para alguns clientes, mais horários no mesmo dia (ex.: pai que marca para ele e os filhos).
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS per_day smallint CHECK (per_day IS NULL OR per_day BETWEEN 2 AND 10); -- vazio = regra geral
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS for_name text; -- para quem é o horário, quando não é o próprio cliente
+
+-- ----- Remarcar, vários serviços e lista de espera (v1.9) -----
+-- Remarcar: guarda de onde o horário saiu ("AAAA-MM-DD HH:MM") para o painel mostrar "Mudou de..."
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS moved_from text;
+-- Horário que a lista de espera marcou sozinha tem origem própria; o sino ganha "mudou o horário" e "vaga da lista de espera"
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'appointments_origin_check' AND pg_get_constraintdef(oid) LIKE '%espera%') THEN
+    ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_origin_check;
+    ALTER TABLE appointments ADD CONSTRAINT appointments_origin_check CHECK (origin IN ('site','painel','espera'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'notifications_type_check' AND pg_get_constraintdef(oid) LIKE '%espera%') THEN
+    ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+    ALTER TABLE notifications ADD CONSTRAINT notifications_type_check CHECK (type IN ('novo','cancelado','remarcado','espera'));
+  END IF;
+END $$;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS info jsonb; -- detalhes do aviso (ex.: horário antigo de quem remarcou)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS wait_on  boolean  NOT NULL DEFAULT true; -- lista de espera ligada (só aparece com o WhatsApp dos lembretes conectado)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS wait_min smallint NOT NULL DEFAULT 60;   -- só passa a vaga se faltar pelo menos isso para o horário
+-- Fila de quem quer um horário num dia lotado. items = [{serviceId, name, price, dur}]
+CREATE TABLE IF NOT EXISTS waitlist (
+  id             serial PRIMARY KEY,
+  client_id      integer NOT NULL REFERENCES clients(id),
+  date           date    NOT NULL,
+  period         text    NOT NULL DEFAULT 'qualquer' CHECK (period IN ('qualquer','manha','tarde','noite')),
+  items          jsonb   NOT NULL,
+  duration       integer NOT NULL,
+  status         text    NOT NULL DEFAULT 'aguardando' CHECK (status IN ('aguardando','marcado','saiu')),
+  appointment_id integer REFERENCES appointments(id) ON DELETE SET NULL,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS waitlist_date_idx   ON waitlist(date, status);
+CREATE INDEX IF NOT EXISTS waitlist_client_idx ON waitlist(client_id);

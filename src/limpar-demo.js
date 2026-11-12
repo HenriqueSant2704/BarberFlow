@@ -20,6 +20,7 @@ async function main() {
     // nome E telefone precisam bater, para não apagar um cliente real por engano
     const { rows } = await c.query('SELECT id FROM clients WHERE (name, phone) IN (SELECT * FROM unnest($1::text[], $2::text[]))', [list.map((x) => x.name), list.map((x) => x.phone)]);
     const ids = rows.map((x) => x.id);
+    if (ids.length) await c.query('DELETE FROM waitlist WHERE client_id = ANY($1::int[])', [ids]);
     const ap = ids.length ? await c.query('DELETE FROM appointments WHERE client_id = ANY($1::int[])', [ids]) : { rowCount: 0 };
     const cl = ids.length ? await c.query('DELETE FROM clients WHERE id = ANY($1::int[])', [ids]) : { rowCount: 0 };
     let ex = 0;
