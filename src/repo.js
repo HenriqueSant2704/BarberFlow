@@ -22,6 +22,7 @@ const mapAppt = (r) => ({
   serviceId: r.service_id == null ? null : String(r.service_id), service: r.service_name,
   price: r.price, dur: r.duration, status: r.status, origin: r.origin,
   remind: r.remind_status ? { status: r.remind_status, at: r.remind_at } : null,
+  items: Array.isArray(r.items) && r.items.length ? r.items : null, discount: Number(r.discount) || 0,
 });
 const mapExpense = (r) => ({ id: String(r.id), desc: r.description, val: r.amount, date: r.date, cat: r.category || 'Outros' });
 const mapBlocked = (r) => ({ date: r.date, why: r.reason });
