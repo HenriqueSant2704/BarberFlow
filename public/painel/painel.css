@@ -878,3 +878,24 @@ button.rank-i:hover>span svg{transform:translateX(3px);color:var(--ouro)}
   .fecha-bts .btn:first-child{order:2}
   .svc-cli{grid-template-columns:24px auto minmax(0,1fr) auto;gap:8px;padding:10px}
 }
+
+/* ---------- Financeiro: tocar numa barra mostra só aquele dia ---------- */
+button.g-bar{padding:0;border:0;background:none;cursor:pointer;color:inherit}
+button.g-bar:focus-visible{outline:2px solid var(--ouro);outline-offset:2px;border-radius:4px}
+.g-area.com-sel .g-bar i{opacity:.28}
+.g-area.com-sel .g-bar.sel i{opacity:1;background:var(--ouro)}
+
+.g-bar.sel::after{content:"";position:absolute;left:50%;bottom:-9px;width:6px;height:6px;border-radius:50%;background:var(--ouro);transform:translateX(-50%)}
+.fin-sel{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--bloco);color:#fff;border:1px solid #26262b;animation:entra .3s var(--ease) both}
+.fin-sel small{display:block;font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ouro-d)}
+.fin-sel b{display:block;font-family:var(--f-display);font-weight:600;font-size:19px}
+.fin-sel .btn-icone{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:#fff}
+.fin-sel .btn-icone:hover:not(:disabled){border-color:var(--ouro-d);color:var(--ouro-d)}
+.fin-sel .btn-icone:disabled{opacity:.3}
+.fin-sel .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:#fff}
+.fin-sel .btn:hover{border-color:#fff}
+@media (max-width:560px){
+  .fin-sel{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:12px}
+  .fin-sel b{font-size:16px}
+  .fin-sel>.btn{grid-column:1/-1}
+}

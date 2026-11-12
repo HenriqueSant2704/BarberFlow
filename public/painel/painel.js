@@ -521,24 +521,35 @@
     if (V.per === '30') return [A.iso(A.addDays(NOW, -29)), TODAY];
     return V.de <= V.ate ? [V.de, V.ate] : [V.ate, V.de];
   }
-  function perTxt() {
+  /** Dia (ou mês) escolhido tocando numa barra do gráfico; o resto da tela mostra só ele. */
+  function faixaSel() {
+    const k = V.finSel; if (!k) return null;
     const [de, ate] = faixaPer();
+    const r = k.length === 7 ? [k + '-01', A.iso(new Date(+k.slice(0, 4), +k.slice(5, 7), 0))] : [k, k];
+    if (r[1] < de || r[0] > ate) { V.finSel = null; return null; }
+    return [r[0] < de ? de : r[0], r[1] > ate ? ate : r[1]];
+  }
+  const faixaFin = () => faixaSel() || faixaPer();
+  function perTxt() {
+    const [de, ate] = faixaFin();
     return de === ate ? cap(longDate(de)) : `${DOW[A.parse(de).getDay()]}, ${shortDate(de)} a ${DOW[A.parse(ate).getDay()]}, ${shortDate(ate)}`;
   }
   function vFin() {
-    const [de, ate] = faixaPer(); const n = Math.round((A.parse(ate) - A.parse(de)) / 864e5) + 1;
-    const done = S.appts.filter((x) => x.status === 'realizado' && x.date >= de && x.date <= ate);
+    const [pde, pate] = faixaPer(); const n = Math.round((A.parse(pate) - A.parse(pde)) / 864e5) + 1;
+    const sel = faixaSel(); const [de, ate] = sel || [pde, pate];
+    const doneP = S.appts.filter((x) => x.status === 'realizado' && x.date >= pde && x.date <= pate);
+    const done = doneP.filter((x) => x.date >= de && x.date <= ate);
     const fat = done.reduce((s, x) => s + x.price, 0); const atend = done.length;
     const desp = S.expenses.filter((e) => e.date >= de && e.date <= ate).sort((p, q) => q.date.localeCompare(p.date) || Number(q.id) - Number(p.id));
     const totD = desp.reduce((s, e) => s + e.val, 0); const lucro = fat - totD;
     // barras: por dia até 2 meses; acima disso, por mês
     const barras = [];
-    if (n <= 62) for (let i = 0; i < n; i++) { const ds = A.iso(A.addDays(A.parse(de), i)); barras.push([ds, done.filter((x) => x.date === ds).reduce((s, x) => s + x.price, 0), shortDate(ds), String(A.parse(ds).getDate())]); }
+    if (n <= 62) for (let i = 0; i < n; i++) { const ds = A.iso(A.addDays(A.parse(pde), i)); barras.push([ds, doneP.filter((x) => x.date === ds).reduce((s, x) => s + x.price, 0), shortDate(ds), String(A.parse(ds).getDate())]); }
     else {
-      const a = A.parse(de); const z = A.parse(ate);
+      const a = A.parse(pde); const z = A.parse(pate);
       for (let d = new Date(a.getFullYear(), a.getMonth(), 1); d <= z; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
         const k = A.iso(d).slice(0, 7);
-        barras.push([k, done.filter((x) => x.date.startsWith(k)).reduce((s, x) => s + x.price, 0), `${cap(MESES[d.getMonth()])}/${String(d.getFullYear()).slice(2)}`, MESES[d.getMonth()].slice(0, 3)]);
+        barras.push([k, doneP.filter((x) => x.date.startsWith(k)).reduce((s, x) => s + x.price, 0), `${cap(MESES[d.getMonth()])}/${String(d.getFullYear()).slice(2)}`, MESES[d.getMonth()].slice(0, 3)]);
       }
     }
     const maxV = Math.max(100, Math.ceil(Math.max(0, ...barras.map((b) => b[1])) / 100) * 100);
@@ -552,11 +563,19 @@
     const grafico = n === 1
       ? `<div class="vazio" style="padding:24px 10px"><span class="ico-k" data-k="verde">${ic('trend', 26)}</span><h4>${money(fat)} hoje</h4><p>${atend ? `${atend} atendimento${atend > 1 ? 's' : ''} até agora. Para ver o gráfico, escolha 7 dias ou o mês.` : 'Nenhum atendimento marcado como atendido hoje ainda.'}</p></div>`
       : `<div class="grafico"><div class="g-eixo"><span>${money0(maxV)}</span><span>${money0(maxV / 2)}</span><span>R$ 0</span></div>
-        <div class="g-area">${barras.map(([k, v, tip], i) => `<div class="g-bar ${i === barras.length - 1 ? 'ultimo' : ''}" tabindex="0"><i style="height:${(v / maxV) * 100}%"></i><span class="tip">${tip} · ${money(v)}</span></div>`).join('')}</div></div>
+        <div class="g-area ${sel ? 'com-sel' : ''}">${barras.map(([k, v, tip], i) => `<button type="button" class="g-bar ${!sel && i === barras.length - 1 ? 'ultimo' : ''} ${V.finSel === k ? 'sel' : ''}" data-a="fin-sel" data-v="${k}" aria-pressed="${V.finSel === k}" aria-label="${tip}: ${money(v)}. Ver só ${k.length === 7 ? 'este mês' : 'este dia'}"><i style="height:${(v / maxV) * 100}%"></i><span class="tip">${tip} · ${money(v)}</span></button>`).join('')}</div></div>
         <div class="g-rot">${barras.map(([, , , r], i) => `<span>${i % rotEvery === 0 || i === barras.length - 1 ? r : ''}</span>`).join('')}</div>`;
     const cats = Object.keys(CAT);
     return `<div class="barra-filtros"><div class="chips">${pers.map(([k, r]) => `<button type="button" class="chip ${V.per === k ? 'on' : ''}" data-a="per" data-v="${k}">${r}</button>`).join('')}</div>
         ${V.per === 'per' ? `<div class="periodo-custom"><div class="entrada"><input type="date" id="per-de" data-ch="per-de" value="${V.de}" max="${TODAY}" aria-label="De"></div><span class="muted">até</span><div class="entrada"><input type="date" id="per-ate" data-ch="per-ate" value="${V.ate}" aria-label="Até"></div></div>` : ''}</div>
+      ${sel ? (() => {
+        const dia = V.finSel.length === 10; const ks = barras.map((b) => b[0]); const i = ks.indexOf(V.finSel);
+        const tit = dia ? (V.finSel === TODAY ? 'Fechamento de hoje' : V.finSel === A.iso(A.addDays(NOW, -1)) ? 'Fechamento de ontem' : `Fechamento de ${DOWL[A.parse(V.finSel).getDay()]}`) : `Fechamento de ${MESES[+V.finSel.slice(5, 7) - 1]}`;
+        return `<div class="fin-sel"><button type="button" class="btn-icone" data-a="fin-sel" data-v="${ks[i - 1] || ''}" ${i > 0 ? '' : 'disabled'} aria-label="${dia ? 'Dia' : 'Mês'} anterior">${ic('left', 18)}</button>
+          <div><small>${tit}</small><b>${dia ? cap(longDate(V.finSel)) : `${cap(MESES[+V.finSel.slice(5, 7) - 1])} de ${V.finSel.slice(0, 4)}`}</b></div>
+          <button type="button" class="btn-icone" data-a="fin-sel" data-v="${ks[i + 1] || ''}" ${i < ks.length - 1 ? '' : 'disabled'} aria-label="Próximo ${dia ? 'dia' : 'mês'}">${ic('right', 18)}</button>
+          <button type="button" class="btn p" data-a="fin-sel" data-v="">${ic('x', 15)}Ver o período todo</button></div>`;
+      })() : ''}
       <div class="kpis fin">
         ${kpi('verde', 'trend', money(fat), 'Faturamento', periodoTxt)}
         ${kpi('vermelho', 'down', money(totD), 'Despesas', `${desp.length} lançamento${desp.length === 1 ? '' : 's'}`)}
@@ -564,11 +583,11 @@
         ${kpi('neutro', 'userok', atend, 'Atendimentos', `Ticket médio ${money(atend ? fat / atend : 0)}`)}
       </div>
       <div class="duas-col">
-        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('trend', 17)}</span>Faturamento por ${n <= 62 ? 'dia' : 'mês'}</h3>${n > 1 ? '<small>Passe o mouse ou toque nas barras</small>' : ''}</div>${grafico}</section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('trend', 17)}</span>Faturamento por ${n <= 62 ? 'dia' : 'mês'}</h3>${n > 1 ? `<small>${sel ? 'Toque de novo para ver o período todo' : `Toque numa barra para ver só ${n <= 62 ? 'aquele dia' : 'aquele mês'}`}</small>` : ''}</div>${grafico}</section>
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('star', 17)}</span>Serviços mais feitos</h3>${ranking.length ? '<small>Toque para ver quem fez</small>' : ''}</div>
           <div class="rank">${ranking.length ? ranking.map(([nome, q]) => `<button type="button" class="rank-i" data-a="svc-ver" data-v="${esc(nome)}" aria-label="${esc(nome)}: ${q} vezes. Ver os clientes"><span class="ico-k p">${svcIcon(nome).replace('<svg', '<svg width="16" height="16"')}</span><b>${esc(nome)}</b><span>${q}×${ic('right', 15)}</span><div class="barra"><i style="width:${(q / rmax) * 100}%"></i></div></button>`).join('') : '<div class="muted" style="font-size:13.5px">Nenhum atendimento no período.</div>'}</div></section>
       </div>
-      <section class="cartao" id="cartaoDesp"><div class="cartao-topo"><h3><span class="ico-k p">${ic('receipt', 17)}</span>Despesas do período</h3><button type="button" class="btn ${V.despForm ? '' : 'pri'} p" data-a="desp-form">${ic(V.despForm ? 'x' : 'plus', 16)}${V.despForm ? 'Fechar' : 'Adicionar despesa'}</button></div>
+      <section class="cartao" id="cartaoDesp"><div class="cartao-topo"><h3><span class="ico-k p">${ic('receipt', 17)}</span>Despesas ${sel ? (V.finSel.length === 10 ? 'do dia' : 'do mês') : 'do período'}</h3><button type="button" class="btn ${V.despForm ? '' : 'pri'} p" data-a="desp-form">${ic(V.despForm ? 'x' : 'plus', 16)}${V.despForm ? 'Fechar' : 'Adicionar despesa'}</button></div>
         ${V.despForm ? `<form class="form-desp" id="despForm" novalidate>
           <div class="campo"><label for="d-t">Descrição</label><div class="entrada" id="e-dt"><input id="d-t" placeholder="Ex.: Cera modeladora" maxlength="120"></div></div>
           <div class="campo"><label for="d-v">Valor</label><div class="entrada" id="e-dv"><span class="muted">R$</span><input id="d-v" inputmode="decimal" placeholder="0,00"></div></div>
@@ -799,7 +818,7 @@
   }
   /** Lista de quem fez um serviço no período do financeiro. */
   function ladoSvc(nome) {
-    const [de, ate] = faixaPer();
+    const [de, ate] = faixaFin();
     const por = {}; let vezes = 0, total = 0;
     S.appts.filter((x) => x.status === 'realizado' && x.date >= de && x.date <= ate).forEach((x) => itensDe(x).forEach((it) => {
       if (it.name !== nome) return;
@@ -812,7 +831,7 @@
     const l = Object.values(por).sort(ords[V.svcOrd] || ords.vezes);
     const { itens, html } = pagina(l, 'svc');
     const h = `<div style="display:flex;gap:14px;align-items:center;min-width:0"><span class="ico-k" style="width:52px;height:52px;border-radius:14px">${svcIcon(nome).replace('<svg', '<svg width="24" height="24"')}</span><div style="min-width:0"><small class="muted" style="font-weight:700;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase">Quem fez</small><h3 style="font-size:22px">${esc(nome)}</h3></div></div>`;
-    const b = `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('cal', 15)}</span><div><strong>${perTxt()}</strong><p>Mesmo período escolhido no financeiro.</p></div></div>
+    const b = `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('cal', 15)}</span><div><strong>${perTxt()}</strong><p>${V.finSel ? 'Mesmo dia escolhido no gráfico do financeiro.' : 'Mesmo período escolhido no financeiro.'}</p></div></div>
       <div class="kv"><div><small>Vezes</small><b>${vezes}</b></div><div><small>Clientes</small><b>${l.length}</b></div><div><small>Entrou</small><b class="num">${money0(total)}</b></div></div>
       <div class="seg seg-cheio">${[['vezes', 'Mais vezes'], ['recente', 'Mais recente'], ['valor', 'Mais gastou']].map(([k, r]) => `<button type="button" class="${V.svcOrd === k ? 'on' : ''}" data-a="svc-ord" data-v="${k}">${r}</button>`).join('')}</div>
       <div class="svc-clis">${itens.map((p, i) => { const pos = ((V.pg.svc || 1) - 1) * PER + i + 1; return `<button type="button" class="svc-cli" data-a="cli" data-id="${p.c.id}">
@@ -1142,7 +1161,8 @@
       case 'cli-q-x': V.cliQ = ''; V.pg.cli = 1; render(); break;
       case 'rk': V.rk = v; render(); break;
       case 'rk-per': V.rkPer = v; render(); break;
-      case 'per': V.per = v; V.pg.desp = 1; render(); break;
+      case 'per': V.per = v; V.finSel = null; V.pg.desp = 1; render(); break;
+      case 'fin-sel': V.finSel = !v || V.finSel === v && el.classList.contains('g-bar') ? null : v; V.pg.desp = 1; render(); break;
       case 'desp-form': V.despForm = !V.despForm; render(); if (V.despForm) setTimeout(() => { const i = $('#d-t'); if (i) i.focus(); }, 30); break;
       case 'desp-ask': V.despAsk = id; render(); break;
       case 'desp-no': V.despAsk = null; render(); break;
@@ -1264,6 +1284,7 @@
     if (V.draft && (el.dataset.d === 'shopName' || el.dataset.d === 'tagline' || el.dataset.svc)) { const p = document.querySelector('.previa-cel'); if (p) p.outerHTML = previa(V.draft); }
     const k = el.dataset.ch; if (!k) return;
     if (k === 'cli-ord') { V.cliOrd = el.value; V.pg.cli = 1; $('#cliLista').innerHTML = cliLista(); return; }
+    if (k === 'per-de' || k === 'per-ate') V.finSel = null;
     if (k === 'per-de') { V.de = el.value || V.de; V.pg.desp = 1; render(); }
     if (k === 'per-ate') { V.ate = el.value || V.ate; V.pg.desp = 1; render(); }
     if (k === 'cor-custom') render();
