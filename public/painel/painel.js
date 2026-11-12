@@ -542,9 +542,11 @@
     const fat = done.reduce((s, x) => s + x.price, 0); const atend = done.length;
     const desp = S.expenses.filter((e) => e.date >= de && e.date <= ate).sort((p, q) => q.date.localeCompare(p.date) || Number(q.id) - Number(p.id));
     const totD = desp.reduce((s, e) => s + e.val, 0); const lucro = fat - totD;
-    // barras: por dia até 2 meses; acima disso, por mês
+    // barras: por dia até 2 meses; acima disso, por mês. Num dia só, o gráfico mostra a semana até ele (com o dia em destaque).
+    const umDia = n === 1; const gde = umDia ? A.iso(A.addDays(A.parse(pate), -6)) : pde; const gn = umDia ? 7 : n;
+    const doneG = umDia ? S.appts.filter((x) => x.status === 'realizado' && x.date >= gde && x.date <= pate) : doneP;
     const barras = [];
-    if (n <= 62) for (let i = 0; i < n; i++) { const ds = A.iso(A.addDays(A.parse(pde), i)); barras.push([ds, doneP.filter((x) => x.date === ds).reduce((s, x) => s + x.price, 0), shortDate(ds), String(A.parse(ds).getDate())]); }
+    if (gn <= 62) for (let i = 0; i < gn; i++) { const ds = A.iso(A.addDays(A.parse(gde), i)); barras.push([ds, doneG.filter((x) => x.date === ds).reduce((s, x) => s + x.price, 0), shortDate(ds), String(A.parse(ds).getDate())]); }
     else {
       const a = A.parse(pde); const z = A.parse(pate);
       for (let d = new Date(a.getFullYear(), a.getMonth(), 1); d <= z; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
@@ -560,10 +562,9 @@
     const ranking = Object.entries(porSvc).sort((p, q) => q[1] - p[1]); const rmax = ranking.length ? ranking[0][1] : 1;
     const { itens, html } = pagina(desp, 'desp');
     const periodoTxt = perTxt();
-    const grafico = n === 1
-      ? `<div class="vazio" style="padding:24px 10px"><span class="ico-k" data-k="verde">${ic('trend', 26)}</span><h4>${money(fat)} hoje</h4><p>${atend ? `${atend} atendimento${atend > 1 ? 's' : ''} até agora. Para ver o gráfico, escolha 7 dias ou o mês.` : 'Nenhum atendimento marcado como atendido hoje ainda.'}</p></div>`
-      : `<div class="grafico"><div class="g-eixo"><span>${money0(maxV)}</span><span>${money0(maxV / 2)}</span><span>R$ 0</span></div>
-        <div class="g-area ${sel ? 'com-sel' : ''}">${barras.map(([k, v, tip], i) => `<button type="button" class="g-bar ${!sel && i === barras.length - 1 ? 'ultimo' : ''} ${V.finSel === k ? 'sel' : ''}" data-a="fin-sel" data-v="${k}" aria-pressed="${V.finSel === k}" aria-label="${tip}: ${money(v)}. Ver só ${k.length === 7 ? 'este mês' : 'este dia'}"><i style="height:${(v / maxV) * 100}%"></i><span class="tip">${tip} · ${money(v)}</span></button>`).join('')}</div></div>
+    const marcado = umDia ? pate : V.finSel;
+    const grafico = `<div class="grafico"><div class="g-eixo"><span>${money0(maxV)}</span><span>${money0(maxV / 2)}</span><span>R$ 0</span></div>
+        <div class="g-area ${marcado ? 'com-sel' : ''}">${barras.map(([k, v, tip], i) => `<button type="button" class="g-bar ${!marcado && i === barras.length - 1 ? 'ultimo' : ''} ${marcado === k ? 'sel' : ''}" data-a="${umDia ? 'fin-dia' : 'fin-sel'}" data-v="${k}" aria-pressed="${marcado === k}" aria-label="${tip}: ${money(v)}. Ver só ${k.length === 7 ? 'este mês' : 'este dia'}"><i style="height:${(v / maxV) * 100}%"></i><span class="tip">${tip} · ${money(v)}</span></button>`).join('')}</div></div>
         <div class="g-rot">${barras.map(([, , , r], i) => `<span>${i % rotEvery === 0 || i === barras.length - 1 ? r : ''}</span>`).join('')}</div>`;
     const cats = Object.keys(CAT);
     return `<div class="barra-filtros"><div class="chips">${pers.map(([k, r]) => `<button type="button" class="chip ${V.per === k ? 'on' : ''}" data-a="per" data-v="${k}">${r}</button>`).join('')}</div>
@@ -583,11 +584,11 @@
         ${kpi('neutro', 'userok', atend, 'Atendimentos', `Ticket médio ${money(atend ? fat / atend : 0)}`)}
       </div>
       <div class="duas-col">
-        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('trend', 17)}</span>Faturamento por ${n <= 62 ? 'dia' : 'mês'}</h3>${n > 1 ? `<small>${sel ? 'Toque de novo para ver o período todo' : `Toque numa barra para ver só ${n <= 62 ? 'aquele dia' : 'aquele mês'}`}</small>` : ''}</div>${grafico}</section>
+        <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('trend', 17)}</span>Faturamento por ${gn <= 62 ? 'dia' : 'mês'}</h3><small>${umDia ? 'Últimos 7 dias. Toque em outro dia para ver o fechamento dele' : sel ? 'Toque de novo para ver o período todo' : `Toque numa barra para ver só ${n <= 62 ? 'aquele dia' : 'aquele mês'}`}</small></div>${grafico}</section>
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('star', 17)}</span>Serviços mais feitos</h3>${ranking.length ? '<small>Toque para ver quem fez</small>' : ''}</div>
           <div class="rank">${ranking.length ? ranking.map(([nome, q]) => `<button type="button" class="rank-i" data-a="svc-ver" data-v="${esc(nome)}" aria-label="${esc(nome)}: ${q} vezes. Ver os clientes"><span class="ico-k p">${svcIcon(nome).replace('<svg', '<svg width="16" height="16"')}</span><b>${esc(nome)}</b><span>${q}×${ic('right', 15)}</span><div class="barra"><i style="width:${(q / rmax) * 100}%"></i></div></button>`).join('') : '<div class="muted" style="font-size:13.5px">Nenhum atendimento no período.</div>'}</div></section>
       </div>
-      <section class="cartao" id="cartaoDesp"><div class="cartao-topo"><h3><span class="ico-k p">${ic('receipt', 17)}</span>Despesas ${sel ? (V.finSel.length === 10 ? 'do dia' : 'do mês') : 'do período'}</h3><button type="button" class="btn ${V.despForm ? '' : 'pri'} p" data-a="desp-form">${ic(V.despForm ? 'x' : 'plus', 16)}${V.despForm ? 'Fechar' : 'Adicionar despesa'}</button></div>
+      <section class="cartao" id="cartaoDesp"><div class="cartao-topo"><h3><span class="ico-k p">${ic('receipt', 17)}</span>Despesas ${sel ? (V.finSel.length === 10 ? 'do dia' : 'do mês') : umDia ? 'do dia' : 'do período'}</h3><button type="button" class="btn ${V.despForm ? '' : 'pri'} p" data-a="desp-form">${ic(V.despForm ? 'x' : 'plus', 16)}${V.despForm ? 'Fechar' : 'Adicionar despesa'}</button></div>
         ${V.despForm ? `<form class="form-desp" id="despForm" novalidate>
           <div class="campo"><label for="d-t">Descrição</label><div class="entrada" id="e-dt"><input id="d-t" placeholder="Ex.: Cera modeladora" maxlength="120"></div></div>
           <div class="campo"><label for="d-v">Valor</label><div class="entrada" id="e-dv"><span class="muted">R$</span><input id="d-v" inputmode="decimal" placeholder="0,00"></div></div>
@@ -813,6 +814,7 @@
   function openLado(type, id) {
     // Saindo da lista de um serviço para a ficha do cliente: guarda o caminho de volta
     V.ladoPrev = V.lado && V.lado.type === 'svc' && type !== 'svc' ? V.lado : null;
+    if (!V.lado || V.lado.id !== id) V.pg.hist = 1;
     V.lado = { type, id }; V.ladoAsk = null; V.sino = false; V.menu = false; render();
     const l = $('.lado'); if (l) l.scrollTop = 0;
   }
@@ -863,7 +865,9 @@
     } else {
       const { arr } = clientStats(); const x = arr.find((y) => y.c.id === d.id);
       if (!x) { V.lado = null; return ''; }
-      const hist = sortAp(live().filter((y) => y.clientId === x.c.id)).reverse().slice(0, 12);
+      // Histórico paginado, do mais recente para o mais antigo; no celular, menos por página
+      const histTodo = sortAp(live().filter((y) => y.clientId === x.c.id)).reverse();
+      const hp = pagina(histTodo, 'hist', matchMedia('(max-width:560px)').matches ? 5 : 8, ' atendimentos'); const hist = hp.itens;
       const fut = live().filter((y) => y.clientId === x.c.id && y.status === 'agendado' && y.date >= TODAY).length;
       h = `<div style="display:flex;flex-direction:column;gap:12px;min-width:0">${V.ladoPrev ? `<button type="button" class="link" data-a="lado-volta" style="align-self:flex-start">${ic('left', 15)}Voltar para ${esc(V.ladoPrev.id)}</button>` : ''}<div style="display:flex;gap:14px;align-items:center;min-width:0">${avk(x.c, 52)}<div style="min-width:0"><h3 style="font-size:22px">${esc(x.c.name)}</h3><span class="muted" style="font-size:13px">Cliente desde ${shortDate(x.c.since)}/${A.parse(x.c.since).getFullYear()}</span></div></div></div>`;
       const pilHist = { agendado: ['azul', 'Marcado'], realizado: ['verde', 'Atendido'], faltou: ['vermelho', 'Não veio'] };
@@ -874,7 +878,7 @@
         <form id="cliForm" data-id="${x.c.id}" class="form-g" novalidate><div class="campo"><label for="cd-n">Nome</label><div class="entrada" id="e-cdn"><input id="cd-n" value="${esc(x.c.name)}"></div></div>
           <div class="campo"><label for="cd-p">WhatsApp</label><div class="entrada" id="e-cdp">${ic('whats', 18)}<input id="cd-p" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"></div></div>
           <div class="acoes"><button type="submit" class="btn pri">${ic('check', 16)}Salvar dados</button>${x.c.phone ? `<a class="btn" href="${waLink(x.c.phone)}" target="_blank" rel="noopener">${ic('whats', 16)}WhatsApp</a>` : ''}</div></form>
-        <div><span class="lab" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}${y.discount ? ' com desconto' : ''}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div></div>
+        <div><span class="lab" id="histTopo" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico${histTodo.length ? ` · ${histTodo.length} ${histTodo.length === 1 ? 'horário' : 'horários'}` : ''}</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}${y.discount ? ' com desconto' : ''}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div><div class="hist-pag">${hp.html}</div></div>
         ${x.c.blocked ? '' : V.ladoAsk === 'block' ? `<div class="confirma"><span>Bloquear ${esc(first(x.c.name))}? Não vai conseguir mais marcar pelo site${fut ? ` e ${fut === 1 ? 'o horário já marcado será cancelado' : `os ${fut} horários já marcados serão cancelados`}` : ''}.</span><div><button type="button" class="btn p sim" data-a="bloq" data-id="${x.c.id}">Sim, bloquear</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>`
           : `<button type="button" class="btn verm" data-a="lado-ask" data-v="block">${ic('ban', 16)}Bloquear cliente</button>`}`;
     }
@@ -1123,6 +1127,8 @@
       case 'ag-rola': { const el2 = $('#agCols'); if (el2) el2.scrollBy({ left: Number(v) * 628, behavior: 'smooth' }); break; }
       case 'pag': {
         V.pg[el.dataset.k] = Number(el.dataset.p); render();
+        if (el.dataset.k === 'hist') { const h = $('#histTopo'); if (h) h.scrollIntoView({ block: 'start', behavior: 'smooth' }); break; }
+        if (el.dataset.k === 'svc') { const l = $('.lado'); if (l) l.scrollTo({ top: 0, behavior: 'smooth' }); break; }
         const t = $('.p-main'); if (t) window.scrollTo({ top: 0, behavior: 'smooth' });
         break;
       }
@@ -1162,6 +1168,7 @@
       case 'rk': V.rk = v; render(); break;
       case 'rk-per': V.rkPer = v; render(); break;
       case 'per': V.per = v; V.finSel = null; V.pg.desp = 1; render(); break;
+      case 'fin-dia': if (v !== faixaPer()[1]) { V.per = 'per'; V.de = v; V.ate = v; V.finSel = null; V.pg.desp = 1; render(); } break;
       case 'fin-sel': V.finSel = !v || V.finSel === v && el.classList.contains('g-bar') ? null : v; V.pg.desp = 1; render(); break;
       case 'desp-form': V.despForm = !V.despForm; render(); if (V.despForm) setTimeout(() => { const i = $('#d-t'); if (i) i.focus(); }, 30); break;
       case 'desp-ask': V.despAsk = id; render(); break;

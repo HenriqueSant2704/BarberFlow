@@ -899,3 +899,5 @@ button.g-bar:focus-visible{outline:2px solid var(--ouro);outline-offset:2px;bord
   .fin-sel b{font-size:16px}
   .fin-sel>.btn{grid-column:1/-1}
 }
+.hist-pag .pag{margin-top:10px;flex-wrap:wrap;gap:8px}
+.hist-pag .pag small{font-size:12px}
