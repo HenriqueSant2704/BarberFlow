@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const repo = require('../repo');
+const marca = require('../marca');
 const notify = require('../notify');
 const wa = require('../whatsapp');
 const lembretes = require('../lembretes');
@@ -302,7 +303,9 @@ r.put('/configuracoes', ah(async (req, res) => {
   if (Agenda.toMin(next.lunchStart) > Agenda.toMin(next.lunchEnd)) fail(400, 'O fim do almoço precisa ser depois do começo.');
   if (next.bookFrom > next.bookTo) fail(400, 'A data final precisa ser depois da inicial.');
   await db.query(`UPDATE settings SET ${sets.join(', ')} WHERE id = 1`, vals);
-  res.json({ settings: await repo.getSettings() });
+  const settings = await repo.getSettings();
+  marca.guardar(settings); // tela de carregamento e ícone da aba já saem com a logo, o nome e a cor novos
+  res.json({ settings });
 }));
 
 // ----- WhatsApp dos lembretes -----

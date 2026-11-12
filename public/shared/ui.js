@@ -21,12 +21,7 @@
   const initials = (n) => String(n || '').split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   const STATUS = { agendado: 'Agendado', realizado: 'Realizado', faltou: 'Não compareceu', cancelado: 'Cancelado' };
   // [nome, cor no fundo claro, cor no fundo escuro]
-  const PRESETS = {
-    latao: ['Dourado', '#8c6a2b', '#d2b06b'], verde: ['Verde garrafa', '#1f5f4a', '#6cc8a1'], bordo: ['Bordô', '#7a2433', '#e3909b'],
-    petroleo: ['Petróleo', '#1d4e68', '#7cbde0'], cobre: ['Cobre', '#9a4a24', '#e59a6c'], branco: ['Branco', '#4a4a48', '#f5f3ef'],
-    preto: ['Preto', '#111111', '#cfcfcf'], azul: ['Azul royal', '#1f3fa8', '#8ea8ff'], roxo: ['Roxo', '#5b2a86', '#c3a0f0'], vermelho: ['Vermelho', '#b3261e', '#ff8a80'],
-    laranja: ['Laranja', '#b45309', '#f6ad55'], rosa: ['Rosa', '#a3245f', '#f19ac2'], ciano: ['Ciano', '#0e6377', '#6fd3e6'], prata: ['Prata', '#52525b', '#c4c4cc'],
-  };
+  const PRESETS = A.PRESETS;
   const AVC = ['#c9a86a', '#7fb8a0', '#d68f8f', '#8fb0d6', '#c7a0d0', '#d6b37f', '#9fc78a'];
   const avColor = (id) => AVC[[...String(id)].reduce((s, c) => s + c.charCodeAt(0), 0) % AVC.length];
 
@@ -105,13 +100,11 @@
   };
 
   function applyTheme(st) {
-    let l, d;
-    if (st.color === 'custom') { l = d = st.custom; } else { [, l, d] = PRESETS[st.color] || PRESETS.latao; }
-    const lum = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
+    const c = A.accent(st);
     const R = document.documentElement.style;
-    R.setProperty('--acc-l', l); R.setProperty('--acc-d', d);
-    R.setProperty('--on-acc-l', lum(l) > 0.6 ? '#1c1915' : '#ffffff');
-    R.setProperty('--on-acc-d', lum(d) > 0.5 ? '#17130d' : '#ffffff');
+    R.setProperty('--acc-l', c.l); R.setProperty('--acc-d', c.d);
+    R.setProperty('--on-acc-l', c.onL);
+    R.setProperty('--on-acc-d', c.onD);
   }
 
   // ----- Avisos que chamam atenção -----
@@ -168,7 +161,7 @@
   }
 
   function logo(st, size) {
-    const ini = initials(st.shopName.replace(/barbearia/i, '').trim() || st.shopName) || 'B';
+    const ini = A.shopInitials(st.shopName);
     return `<span class="av logo" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.42)}px">${st.logo ? `<img src="${esc(st.logo)}" alt="Logo">` : esc(ini)}</span>`;
   }
   function avatar(c, size = 40) {

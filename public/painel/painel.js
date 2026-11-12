@@ -174,6 +174,15 @@
     $('#overlay').innerHTML = cam;
     updateTitle();
     paintSave();
+    trocaIcone();
+  }
+  // Trocou a logo, o nome ou a cor em Configurações: o ícone da aba muda na hora
+  let marcaVista = null;
+  function trocaIcone() {
+    const st = S.settings, lg = st.logo || '';
+    const k = `${lg.length}|${lg.slice(-40)}|${st.shopName}|${st.color}|${st.custom}`;
+    if (marcaVista && k !== marcaVista) { const l = document.querySelector('link[rel="icon"]'); if (l) { l.removeAttribute('type'); l.href = `/marca/icone?t=${Date.now()}`; } }
+    marcaVista = k;
   }
 
   function vLogin() {
@@ -1351,8 +1360,10 @@
       await reload(); V.logged = true; connectLive();
     } catch (e) {
       V.logged = false; S = null;
-      if (e.status && e.status !== 401) setTimeout(() => alerta('erro', 'Não deu para carregar o painel', e.message), 50);
+      if (!e.status) { if (window.Carregando) return window.Carregando.erro('Não conseguimos abrir o painel', 'Confira se a internet está ligada e tente de novo.'); }
+      else if (e.status !== 401) setTimeout(() => alerta('erro', 'Não deu para carregar o painel', e.message), 50);
     }
     render();
+    if (window.Carregando) window.Carregando.pronto();
   })();
 })();
