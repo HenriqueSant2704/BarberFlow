@@ -939,3 +939,24 @@ button.g-bar:focus-visible{outline:2px solid var(--ouro);outline-offset:2px;bord
 .esp-passos p{margin:0;font-size:13px;line-height:1.5;color:var(--ink-soft)}
 @media (max-width:560px){.esp-dias{grid-template-columns:minmax(0,1fr)}}
 .esp-i .det b{margin-left:auto}
+/* Ficha do pedido: quem vai cortar e o que foi pedido em destaque; quem marcou fica no fim */
+.pedido{display:flex;flex-direction:column;border-radius:14px;border:1px solid var(--line);background:var(--surface);overflow:hidden}
+.pedido-quem{display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.pedido-quem .av-k{width:46px;height:46px;font-size:15px;flex:none}
+.pedido-quem div{min-width:0;display:flex;flex-direction:column}
+.pedido-quem small,.pedido-itens>small{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.pedido-quem b{font-size:18px}
+.pedido-quem span{color:var(--muted);font-size:12.5px}
+.pedido-itens{display:flex;flex-direction:column;gap:8px;padding:14px}
+.pedido-itens .l{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;font-size:14px}
+.pedido-itens .l .ico-k{width:28px;height:28px;border-radius:8px}
+.pedido-itens .l.desc{color:var(--verde)}
+.pedido-itens .l.tot{grid-template-columns:minmax(0,1fr) auto;margin-top:4px;padding-top:10px;border-top:1px dashed var(--line);font-weight:700}
+.pedido-itens .l.tot span{color:var(--muted);font-size:13px}
+.pedido-itens .l.tot b{font-size:20px;color:var(--ouro)}
+.pedido-cli{opacity:.92}
+.pedido-cli small{display:block}
+.tl-card .por{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:1px 7px;border-radius:6px;background:var(--ouro-soft);color:var(--ouro);font-size:11px;font-weight:700;vertical-align:2px}
+.tl-card small svg{vertical-align:-1px;margin-right:4px;color:var(--ouro)}
+.pedido,.pedido-cli{flex-shrink:0}
+.lado>*{flex-shrink:0}
