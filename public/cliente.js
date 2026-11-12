@@ -633,8 +633,13 @@
       await loadInfo();
       await Promise.all([loadBusy(), loadMe()]);
       render();
+      if (window.Carregando) window.Carregando.pronto();
     } catch (e) {
-      $('#app').innerHTML = `<div class="loading"><div style="text-align:center;display:flex;flex-direction:column;gap:12px;padding:20px;align-items:center"><b>Não foi possível carregar a agenda.</b><span>${esc(e.message)}</span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>`;
+      const semNet = !e.status;
+      const titulo = semNet ? 'Não conseguimos abrir o site' : 'Não foi possível carregar a agenda';
+      const texto = semNet ? `Confira se a internet do seu ${MOBILE.matches ? 'celular' : 'computador'} está ligada e tente de novo.` : e.message;
+      if (window.Carregando) window.Carregando.erro(titulo, texto);
+      else $('#app').innerHTML = `<div class="loading"><div style="text-align:center;display:flex;flex-direction:column;gap:12px;padding:20px;align-items:center"><b>${esc(titulo)}</b><span>${esc(texto)}</span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>`;
     }
   })();
 })();

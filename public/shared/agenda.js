@@ -167,5 +167,26 @@
     return String(tpl || REMIND_MSG).replace(/\{(nome|hora|servico|serviço|barbearia)\}/gi, (m, k) => map[k.toLowerCase().replace('ç', 'c')]);
   }
 
-  return { STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText };
+  // ----- Marca: cor e iniciais (usadas no site, no painel e no servidor, que monta a tela de carregamento e o ícone da aba) -----
+  const PRESETS = {
+    latao: ['Dourado', '#8c6a2b', '#d2b06b'], verde: ['Verde garrafa', '#1f5f4a', '#6cc8a1'], bordo: ['Bordô', '#7a2433', '#e3909b'],
+    petroleo: ['Petróleo', '#1d4e68', '#7cbde0'], cobre: ['Cobre', '#9a4a24', '#e59a6c'], branco: ['Branco', '#4a4a48', '#f5f3ef'],
+    preto: ['Preto', '#111111', '#cfcfcf'], azul: ['Azul royal', '#1f3fa8', '#8ea8ff'], roxo: ['Roxo', '#5b2a86', '#c3a0f0'], vermelho: ['Vermelho', '#b3261e', '#ff8a80'],
+    laranja: ['Laranja', '#b45309', '#f6ad55'], rosa: ['Rosa', '#a3245f', '#f19ac2'], ciano: ['Ciano', '#0e6377', '#6fd3e6'], prata: ['Prata', '#52525b', '#c4c4cc'],
+  };
+  /** Cores da marca para tema claro (l) e escuro (d), com a cor do texto por cima de cada uma. */
+  function accent(st) {
+    let l, d;
+    if (st.color === 'custom' && /^#[0-9a-fA-F]{6}$/.test(st.custom || '')) { l = d = st.custom; } else { [, l, d] = PRESETS[st.color] || PRESETS.latao; }
+    const lum = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
+    return { l, d, onL: lum(l) > 0.6 ? '#1c1915' : '#ffffff', onD: lum(d) > 0.5 ? '#17130d' : '#ffffff' };
+  }
+  /** Iniciais da barbearia (sem a palavra "Barbearia"): "Barbearia Navalha de Ouro" vira "ND". */
+  function shopInitials(name) {
+    const n = String(name || '').trim();
+    const base = n.replace(/barbearia/i, '').trim() || n;
+    return base.split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'B';
+  }
+
+  return { PRESETS, accent, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText };
 });

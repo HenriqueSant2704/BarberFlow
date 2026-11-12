@@ -21,9 +21,25 @@ app.use('/api/public', require('./routes/public'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Rota não encontrada.' }));
 
-app.use(express.static(PUBLIC, { extensions: ['html'] }));
-app.get('/painel', (req, res) => res.sendFile(path.join(PUBLIC, 'painel', 'index.html')));
-app.get('/', (req, res) => res.sendFile(path.join(PUBLIC, 'index.html')));
+// Site e painel saem já com a tela de carregamento e o ícone da aba com a logo da barbearia
+const marca = require('./marca');
+const enviarPagina = (qual) => (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(marca.pagina(qual));
+};
+app.get(['/', '/index.html'], enviarPagina('site'));
+app.get(['/painel', '/painel/', '/painel/index.html'], enviarPagina('painel'));
+app.get('/marca/icone', (req, res) => {
+  const ic = marca.getIcone();
+  // Com ?v= certo, o navegador guarda o ícone; quando a logo muda, a versão muda junto
+  res.set('Cache-Control', req.query.v === ic.versao ? 'public, max-age=31536000, immutable' : 'no-cache');
+  // A imagem nunca roda script, mesmo se for um SVG
+  res.set({ 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'X-Content-Type-Options': 'nosniff' });
+  res.type(ic.tipo).send(ic.dados);
+});
+app.get('/favicon.ico', (req, res) => res.redirect(302, `/marca/icone?v=${marca.getIcone().versao}`));
+
+app.use(express.static(PUBLIC, { extensions: ['html'], index: false }));
 
 // Erros: mensagens claras para quem usa, detalhes técnicos só no terminal
 app.use((err, req, res, next) => {
@@ -43,6 +59,7 @@ async function migrate() {
   try {
     await db.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
     await db.query('INSERT INTO settings (id) VALUES (1) ON CONFLICT DO NOTHING');
+    await require('./marca').carregar();
   } catch (err) {
     console.error('Não consegui atualizar as tabelas do banco:', err.message);
   }
