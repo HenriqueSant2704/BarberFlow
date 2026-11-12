@@ -92,6 +92,23 @@ r.delete('/avisos/:id', ah(async (req, res) => {
 }));
 
 // ----- Agendamentos -----
+/** Confere a lista de serviços e o desconto enviados ao fechar um atendimento. */
+function cleanConta(items, discount) {
+  if (!Array.isArray(items) || !items.length || items.length > 20) fail(400, 'Coloque pelo menos um serviço no atendimento.');
+  const lista = items.map((it) => {
+    const name = String((it && it.name) || '').trim();
+    if (!name || name.length > 60) fail(400, 'Cada item precisa de um nome com até 60 letras.');
+    const price = Math.round(Number(it.price) * 100) / 100;
+    if (!(price >= 0) || price > 100000) fail(400, `Valor inválido em "${name}".`);
+    const sid = it.serviceId == null || it.serviceId === '' ? null : cleanId(it.serviceId);
+    return { serviceId: sid == null ? null : String(sid), name, price };
+  });
+  const sub = Math.round(lista.reduce((s, x) => s + x.price, 0) * 100) / 100;
+  const disc = Math.round((Number(discount) || 0) * 100) / 100;
+  if (disc < 0 || disc > sub) fail(400, 'O desconto não pode ser maior que o valor dos serviços.');
+  return { items: lista, discount: disc, total: Math.round((sub - disc) * 100) / 100 };
+}
+
 r.patch('/agendamentos/:id', ah(async (req, res) => {
   const id = cleanId(req.params.id);
   const status = req.body.status;
@@ -108,7 +125,16 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
       const appts = await repo.getApptsOn(c, a.date);
       if (!Agenda.fits(settings, blocked, appts, a.date, a.time, a.duration, a.id)) fail(409, 'Esse horário já foi ocupado por outro cliente.');
     }
-    const up = await c.query('UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2 RETURNING *', [status, id]);
+    let up;
+    if (req.body.items !== undefined) {
+      // Fechar atendimento: o que foi feito de verdade, com desconto. O financeiro usa o total.
+      const conta = cleanConta(req.body.items, req.body.discount);
+      const unico = conta.items.length === 1 && !conta.discount;
+      up = await c.query(
+        `UPDATE appointments SET status = $1, items = $2, discount = $3, price = $4, service_name = $5,
+           service_id = COALESCE($6, service_id), updated_at = now() WHERE id = $7 RETURNING *`,
+        [status, unico ? null : JSON.stringify(conta.items), conta.discount, conta.total, conta.items.map((x) => x.name).join(' + ').slice(0, 200), unico ? conta.items[0].serviceId : null, id]);
+    } else up = await c.query('UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2 RETURNING *', [status, id]);
     // Bloqueio automático: o cliente faltou X vezes e não pode mais marcar pelo site
     let blockedClient = null;
     if (status === 'faltou' && a.status !== 'faltou') {

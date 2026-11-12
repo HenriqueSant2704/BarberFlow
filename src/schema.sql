@@ -115,3 +115,9 @@ CREATE TABLE IF NOT EXISTS wa_auth (
 
 -- ----- Intervalo dos horários (v1.6) -----
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS slot_step smallint NOT NULL DEFAULT 30; -- horários do site de 30 em 30 ou de 60 em 60 minutos
+
+-- ----- Fechar atendimento (v1.7) -----
+-- O barbeiro confere o que foi feito ao marcar "Atendido": pode trocar ou somar serviços e dar desconto.
+-- items guarda a lista [{serviceId, name, price}] (vazio = só o serviço marcado); price passa a ser o total cobrado.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS items    jsonb;
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS discount numeric(10,2) NOT NULL DEFAULT 0;
