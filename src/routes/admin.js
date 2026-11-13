@@ -260,6 +260,7 @@ const FIELDS = {
     return v;
   }],
   color: ['color', (v) => { if (!COLORS.includes(v)) fail(400, 'Cor inválida.'); return v; }],
+  font: ['font', (v) => { if (!Object.prototype.hasOwnProperty.call(Agenda.FONTES, v)) fail(400, 'Letra inválida.'); return v; }],
   custom: ['custom_color', (v) => { if (!/^#[0-9a-fA-F]{6}$/.test(v)) fail(400, 'Cor inválida.'); return v; }],
   open: ['open_time', (v) => { if (!Agenda.isTime(v)) fail(400, 'Horário inválido.'); return v; }],
   close: ['close_time', (v) => { if (!Agenda.isTime(v)) fail(400, 'Horário inválido.'); return v; }],

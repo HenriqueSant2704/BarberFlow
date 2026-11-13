@@ -1,7 +1,7 @@
 // Painel do barbeiro (computador e celular), no visual do protótipo aprovado.
 (function () {
   const A = window.Agenda;
-  const { alerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, PRESETS, svcIcon, applyTheme, toast, api } = window.U;
+  const { alerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, PRESETS, svcIcon, applyTheme, carregaFontes, toast, api } = window.U;
   const $ = (s) => document.querySelector(s);
 
   let S = null; // tudo que veio de /api/admin/dados
@@ -672,7 +672,7 @@
   function mkDraft() {
     const st = S.settings;
     return {
-      shopName: st.shopName, tagline: st.tagline, address: st.address, phone: maskPhone(st.phone), color: st.color, custom: st.custom, logo: st.logo,
+      shopName: st.shopName, tagline: st.tagline, address: st.address, phone: maskPhone(st.phone), color: st.color, custom: st.custom, font: A.fonte(st).k, logo: st.logo,
       days: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ on: !st.closed.includes(i), ...A.dayHours(st, i) })),
       lunchStart: st.lunchStart, lunchEnd: st.lunchEnd, bookFrom: st.bookFrom, bookTo: st.bookTo, step: st.step === 60 ? 60 : 30,
       maxActive: st.maxActive, maxPerDay: st.maxPerDay, maxDevice: st.maxDevice, autoBlock: st.autoBlock,
@@ -702,6 +702,7 @@
   function vCfg() {
     if (!V.draft) V.draft = mkDraft();
     const d = V.draft; const st = S.settings;
+    carregaFontes(Object.keys(A.FONTES)); // a vitrine mostra cada letra nela mesma
     const corAtual = d.color === 'custom' ? 'Outra cor' : (PRESETS[d.color] || PRESETS.latao)[0];
     const sel = (key, id, label, opts, help) => `<div class="campo"><label for="${id}">${label}</label><div class="entrada"><select id="${id}" data-d="${key}" data-num="1">${opts.map(([v, l]) => `<option value="${v}" ${Number(d[key]) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div><span class="ajuda">${help}</span></div>`;
     const nOpt = (a, one, many) => a.map((v) => [v, `${v} ${v === 1 ? one : many}`]);
@@ -717,6 +718,9 @@
             <div class="campo"><label>Logo</label><div class="logo-up">${logo(60)}<div style="flex:1;min-width:150px"><b style="font-size:14px">Sua logo aparece no site e no painel</b><div class="muted" style="font-size:12.5px">PNG ou JPG, quadrada, até 1,5 MB. Troca na hora.</div></div><div class="bts"><label class="btn p" for="cfg-logo" style="cursor:pointer">${ic('upload', 16)}${st.logo ? 'Trocar logo' : 'Enviar logo'}</label>${st.logo ? `<button type="button" class="btn p" data-a="logo-rm">${ic('trash', 15)}Tirar</button>` : ''}</div><input type="file" id="cfg-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden data-ch="logo"></div></div>
             <div class="campo"><span class="lab">Cor de destaque <span class="muted" style="font-weight:500">· ${esc(corAtual)}</span></span><div class="cores">${[...CORES, ...extra].map((k) => `<button type="button" class="cor ${d.color === k ? 'on' : ''}" style="--c:${PRESETS[k][1]}" data-a="cor" data-v="${k}" aria-label="${PRESETS[k][0]}" title="${PRESETS[k][0]}"></button>`).join('')}
               <label class="cor outra ${d.color === 'custom' ? 'on' : ''}" title="Escolher outra cor" ${d.color === 'custom' ? `style="--c:${d.custom};background:${d.custom}"` : ''}><input type="color" value="${d.custom}" data-ch="cor-custom" aria-label="Escolher outra cor"></label></div></div>
+            <div class="campo"><span class="lab">Letra do sistema <span class="muted" style="font-weight:500">· ${esc(A.fonte(d).nome)}</span></span>
+              <div class="fontes">${Object.entries(A.FONTES).map(([k, f]) => `<button type="button" class="fonte ${A.fonte(d).k === k ? 'on' : ''}" data-a="fonte" data-v="${k}" aria-pressed="${A.fonte(d).k === k}" title="${esc(f.desc)}" style="--ft:'${f.tit}';--fb:'${f.txt}'"><span class="ft-aa"><b>Aa</b><i>Aa</i></span><small>${esc(f.nome)}</small></button>`).join('')}</div>
+              <span class="ajuda">Toque para ver como fica. Gostou? É só salvar.</span></div>
             ${previa(d)}
           </div></section>
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('pin', 17)}</span>O que o cliente vê</h3></div>
@@ -840,7 +844,7 @@
     if (!/\{hora\}/i.test(d.remindMsg)) return erro('Falta o {hora} na mensagem', 'Ele vira o horário do cliente. Sem ele o cliente não sabe a hora.', '#e-wamsg');
     const hours = {}; d.days.forEach((x, i) => { hours[i] = { open: x.open, close: x.close }; });
     const patch = {
-      shopName: d.shopName.trim(), tagline: d.tagline.trim(), address: d.address.trim(), phone: fone, color: d.color, custom: d.custom, hours,
+      shopName: d.shopName.trim(), tagline: d.tagline.trim(), address: d.address.trim(), phone: fone, color: d.color, custom: d.custom, font: d.font, hours,
       closed: [0, 1, 2, 3, 4, 5, 6].filter((i) => !d.days[i].on),
       open: abertos.map((i) => d.days[i].open).sort()[0], close: abertos.map((i) => d.days[i].close).sort().pop(),
       lunchStart: d.lunchStart, lunchEnd: d.lunchEnd, bookFrom: d.bookFrom, bookTo: d.bookTo, step: d.step,
@@ -1295,6 +1299,7 @@
       case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; render(); { const f = $('#nv-q'); if (f) f.focus(); } break;
       // configurações
       case 'cor': V.draft.color = v; render(); break;
+      case 'fonte': V.draft.font = v; render(); break;
       case 'step': V.draft.step = Number(v) === 60 ? 60 : 30; render(); break;
       case 'dia-on': { const x = V.draft.days[Number(v)]; x.on = !x.on; render(); break; }
       case 'bk-quick': {
