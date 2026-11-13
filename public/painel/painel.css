@@ -41,7 +41,6 @@ a{color:inherit}
 h1,h2,h3,h4{font-family:var(--f-display);font-weight:600;letter-spacing:-.01em;margin:0}
 .muted{color:var(--muted)}
 .loading{min-height:100dvh;display:grid;place-items:center;color:var(--muted)}
-.vista{animation:entra .4s var(--ease) both}
 @keyframes entra{from{opacity:0;transform:translateY(10px)}}
 @keyframes sobe{from{opacity:0;transform:translateY(30px)}}
 @keyframes fade{from{opacity:0}}
@@ -960,3 +959,9 @@ button.g-bar:focus-visible{outline:2px solid var(--ouro);outline-offset:2px;bord
 .tl-card small svg{vertical-align:-1px;margin-right:4px;color:var(--ouro)}
 .pedido,.pedido-cli{flex-shrink:0}
 .lado>*{flex-shrink:0}
+
+/* ---------- Menu: marcador que desliza até a tela escolhida ---------- */
+.p-menu-in .marca-nav{background:rgba(255,255,255,.09);box-shadow:inset 3px 0 0 var(--ouro-d);border-radius:10px}
+.p-menu-in.com-marca .p-item.on{background:none;box-shadow:none}
+.sino-p .pag{margin-top:12px;justify-content:center}
+.sino-p .pag small{width:100%;text-align:center}

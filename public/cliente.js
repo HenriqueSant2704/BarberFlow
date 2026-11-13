@@ -21,6 +21,7 @@
     tab: 'inicio', date: null, time: null, svcs: [], sheet: null, phone: '', newName: '', newPhone: '',
     errs: {}, notFound: false, cancelAsk: null, lastBooking: null, done: false, busyAction: false, calMonth: null, step: 1, stepDir: 0, abre: {},
     remarca: null, antes: null, detalhe: null, esp: null, acao: 'agendar', espSai: null,
+    espVer: null, espTroca: null, hpg: 1, // pedido aberto da lista de espera, pedido trocando de dia, página do histórico
   };
   const MAX_SVCS = 4;
   let MYESP = []; // pedidos na lista de espera
@@ -62,6 +63,19 @@
   const PERIODOS = [['qualquer', 'Qualquer horário'], ['manha', 'Manhã'], ['tarde', 'Tarde'], ['noite', 'Noite']];
   const noPeriodo = (t, p) => { const m = A.toMin(t); return p === 'manha' ? m < 720 : p === 'tarde' ? m >= 720 && m < 1080 : p === 'noite' ? m >= 1080 : true; };
   const perTxt = (p) => (PERIODOS.find((x) => x[0] === p) || PERIODOS[0])[1];
+  const PER_HORAS = { manha: 'até 12h', tarde: '12h às 18h', noite: 'depois das 18h' };
+  /** Horários livres agora num período do dia, em que "dur" minutos cabem. */
+  const livresNo = (ds, per, dur) => { const bz = busy(ds); return daySlots(ds).filter((t) => !bz.has(t) && !isPast(ds, t) && noPeriodo(t, per) && fits(ds, t, dur)); };
+  const espDe = (id) => MYESP.find((x) => String(x.id) === String(id)) || null;
+  const espIds = (e) => (e.items || []).map((x) => String(x.serviceId)).filter((x) => svcById(x));
+  const espTot = (e) => (e.items || []).reduce((s2, x) => s2 + Number(x.price || 0), 0);
+  /** "hoje às 14:20", "ontem às 9:05" ou "12/11 às 18:00". */
+  function quando(at) {
+    const d = new Date(at); if (isNaN(d)) return '';
+    const ds = A.iso(d); const h = `${A.pad(d.getHours())}:${A.pad(d.getMinutes())}`;
+    const dd = daysTo(ds);
+    return `${dd === 0 ? 'hoje' : dd === -1 ? 'ontem' : shortDate(ds)} às ${h}`;
+  }
   const esperaOn = () => !!(S.espera && S.espera.on);
   const ord = (n) => `${n}º`;
   const endOf = (t, dur) => A.fromMin(A.toMin(t) + dur);
@@ -144,27 +158,33 @@
   // ----- tela -----
   const TABS = [['inicio', 'Início', 'home'], ['agendar', 'Agendar', 'cal'], ['horarios', 'Meus horários', 'clock'], ['perfil', 'Perfil', 'user']];
   let lastTab = null, lastSheet = null;
+  // Troca de aba com movimento: anda para o lado da aba tocada e o marcador do menu desliza junto
+  const NAVS = '.c-nav, .c-tabbar';
+  const ordemTab = (t) => TABS.findIndex((x) => x[0] === (t === 'ok' ? 'agendar' : t));
   function render(keep) {
     const top = window.scrollY;
     // anima só quando troca de aba ou abre a janela, não a cada toque
     const animTab = V.tab !== lastTab, animSheet = V.sheet !== lastSheet;
+    const dirTab = lastTab == null ? 0 : Math.sign(ordemTab(V.tab) - ordemTab(lastTab));
     lastTab = V.tab; lastSheet = V.sheet;
     const view = { inicio: vHome, agendar: vAgendar, horarios: vHorarios, perfil: vPerfil, ok: vOk }[V.tab]();
     const cur = V.tab === 'ok' ? 'agendar' : V.tab;
     const now = shopNow();
     const tabBtn = (size) => ([k, l, i]) => `<button type="button" class="${cur === k ? 'on' : ''}" data-a="tab" data-t="${k}" ${cur === k ? 'aria-current="page"' : ''}>${ic(i, size)}${l}</button>`;
     const barra = V.tab === 'agendar' && V.step === 3 && MOBILE.matches;
+    window.U.mov.marcaAntes(NAVS);
     $('#app').innerHTML = `<div class="c-app ${barra ? 'tem-barra' : ''}">
       <header class="c-topo"><div class="c-topo-in">
         <button type="button" class="c-logo" data-a="tab" data-t="inicio">${window.U.logo(S.settings, 44)}<div><b>${esc(S.settings.shopName)}</b><small data-st="${now.st}">${now.r}</small></div></button>
         <nav class="c-nav" aria-label="Menu">${TABS.map(tabBtn(18)).join('')}</nav>
         ${window.U.tema.botao('c-tema')}<a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
       </div></header>
-      <main class="c-main ${animTab ? 'vista' : ''}">${view}</main>
+      <main class="c-main ${animTab ? 'vista' : ''}" data-dir="${dirTab > 0 ? 'vai' : dirTab < 0 ? 'volta' : 'fica'}">${view}</main>
       ${barra ? bookbar() : ''}
       <nav class="c-tabbar" aria-label="Menu">${TABS.map(tabBtn(21)).join('')}</nav>
     </div>${V.sheet ? sheet(animSheet) : ''}`;
     if (keep) window.scrollTo(0, top); else window.scrollTo(0, 0);
+    window.U.mov.deslizaMarca(NAVS);
     wireCarousel();
   }
   function myNext() {
@@ -186,6 +206,12 @@
     } else if (!ME) {
       prox = `<button type="button" class="ini-entrar" data-a="tab" data-t="horarios"><span class="ico-k">${ic('phone', 17)}</span><span><b>Já agendou antes?</b><small>Entre com seu WhatsApp para ver seu horário</small></span>${ic('right', 18)}</button>`;
     }
+    // Na lista de espera: um atalho direto para ver e mudar o pedido
+    const esp = MYESP[0];
+    const espIni = esp ? `<section class="cartao ini-esp"><button type="button" class="ini-esp-abre" data-a="esp-det" data-id="${esp.id}"><span class="cal-g esp"><small>${DOW[A.parse(esp.date).getDay()]}</small><b>${A.parse(esp.date).getDate()}</b><small>${MESES[A.parse(esp.date).getMonth()].slice(0, 3)}</small></span>
+        <span class="ini-esp-tx"><small class="ini-rot">${ic('bell', 13)}Você está na lista de espera</small><b>${esc((esp.items || []).map((x) => x.name).join(' + '))}</b><span>${cap(diaCurto(esp.date))} · ${perTxt(esp.period).toLowerCase()}</span></span>
+        <span class="pilula" data-k="laranja">${ord(esp.pos)} da fila</span></button>
+      <div class="ini-acoes"><button type="button" class="btn p" data-a="esp-mudar" data-id="${esp.id}">${ic('repeat', 16)}Mudar pedido</button><button type="button" class="btn p" data-a="esp-det" data-id="${esp.id}">${ic('list', 16)}Ver detalhes</button>${MYESP.length > 1 ? `<button type="button" class="link" data-a="tab" data-t="horarios">+${MYESP.length - 1} pedido${MYESP.length > 2 ? 's' : ''}${ic('right', 15)}</button>` : ''}</div></section>` : '';
     const svcs = S.services;
     const carousel = svcs.length ? `<section class="cartao"><div class="cartao-topo"><h3><span class="ico-k">${ic('scissors', 17)}</span>Serviços e valores</h3>${svcs.length > 2 ? `<div class="car-setas"><button type="button" class="btn-icone" data-a="carro" data-n="-1" aria-label="Serviços anteriores">${ic('left', 18)}</button><button type="button" class="btn-icone" data-a="carro" data-n="1" aria-label="Próximos serviços">${ic('right', 18)}</button></div>` : ''}</div>
       <div class="carrossel" id="carrossel">${svcs.map((x) => `<button type="button" class="car-svc" data-a="ini-svc" data-id="${x.id}"><span class="ico-k">${svcIcon(x.name).replace('<svg', '<svg width="20" height="20"')}</span><b>${esc(x.name)}</b><span class="car-rod"><span class="tag">${ic('clock', 13)}${tempo(x.dur)}</span><b class="preco">${money(x.price)}</b></span></button>`).join('')}</div>
@@ -205,12 +231,12 @@
       ${addr ? linha('mapa', 'pin', 'Endereço', esc(addr), '', mapa) : ''}
       ${st.phone ? `<a class="info-l info-cab" href="${waLink('Olá! Vim pelo site de agendamento.')}" target="_blank" rel="noopener"><span class="ico-k verde">${ic('whats', 17)}</span><span class="info-txt"><small>WhatsApp</small><b class="num">${maskPhone(st.phone)}</b></span><span class="info-ir">Chamar ${ic('arrow', 14)}</span></a>` : ''}
     </section>`;
-    return `<div class="ini">
+    return `<div class="ini cascata">
       <section class="c-hero bv"><div class="poste" aria-hidden="true"><span class="tampa"></span><span class="vidro"><i></i></span><span class="tampa b"></span></div><div><small class="sobre bv-ola">${ME ? `Olá, ${esc(first(ME.name))}` : 'Agendamento online'}</small><h1>${esc(st.tagline || st.shopName)}</h1><p>Atendimento com hora marcada, sem fila. Escolha seu horário pelo celular e pague na barbearia.</p>
         <div class="ini-acoes" style="margin-top:16px"><button type="button" class="btn-claro" data-a="tab" data-t="agendar">${ic('cal', 18)}Agendar meu horário</button></div>
         <div class="bv-selos"><span>${ic('clock', 14)}Sem fila</span><span>${ic('check', 14)}Pague na barbearia</span></div></div>
         <div class="ini-selo" aria-hidden="true">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span>${esc(initials(st.shopName.replace(/barbearia/i, '').trim() || st.shopName) || 'B')}</span><small>Barbearia</small>`}</div></section>
-      ${prox}
+      ${prox}${espIni}
       <div class="ini-grid"><div class="col">${carousel}</div><div class="col">${infos}</div></div>
     </div>`;
   }
@@ -239,16 +265,16 @@
       return `<div class="cartao"><div class="vazio"><span class="ico-k">${ic('cal', 26)}</span><h4>Agenda fechada no momento</h4><p>A barbearia ainda não abriu novas datas para agendamento. Volte em breve.</p></div></div>`;
     }
     const l = escolhidos(); const s = l.length > 0;
-    const rem = remAp();
+    const rem = remAp(); const tr = trocaEsp();
     const valor = [V.date ? shortDate(V.date) : '', V.time || '', l.length > 1 ? `${l.length} serviços` : s ? l[0].name : ''];
-    const tit = (rem ? ['Para qual dia quer mudar?', 'E qual horário?', 'Confere os serviços'] : ['Qual dia fica bom pra você?', 'Que horas você prefere?', 'O que vamos fazer?'])[V.step - 1];
+    const tit = (tr ? ['Para qual dia quer trocar?', 'Algum horário livre serve?', 'Confere os serviços'] : rem ? ['Para qual dia quer mudar?', 'E qual horário?', 'Confere os serviços'] : ['Qual dia fica bom pra você?', 'Que horas você prefere?', 'O que vamos fazer?'])[V.step - 1];
     const sub = [
       `Datas abertas até ${shortDate(st.bookTo)}. Toque em um dia com vaga.`,
       V.date ? cap(longDate(V.date)) : '',
       V.time ? `${cap(longDate(V.date))} às ${V.time} · ${rem ? 'pode trocar ou somar outro serviço' : 'escolha um ou mais serviços'}` : '',
     ][V.step - 1];
     // Faixa do "mudando seu horário": mostra o horário atual e dá para desistir
-    const faixaRem = rem ? `<div class="rem-faixa"><span class="ico-k">${ic('repeat', 18)}</span><div><small>Mudando seu horário</small><b>Atual: ${cap(DOW[A.parse(rem.date).getDay()].toLowerCase())}, ${shortDate(rem.date)} às ${rem.time} · ${esc(rem.service)}</b></div><button type="button" class="link" data-a="rem-x">${ic('x', 15)}Desistir</button></div>` : '';
+    const faixaRem = tr ? `<div class="rem-faixa"><span class="ico-k">${ic('bell', 18)}</span><div><small>Trocando o dia do seu pedido</small><b>Fila de ${diaCurto(tr.date)} · ${perTxt(tr.period).toLowerCase()} · ${esc((tr.items || []).map((x) => x.name).join(' + '))}</b></div><button type="button" class="link" data-a="esp-troca-x">${ic('x', 15)}Desistir</button></div>` : rem ? `<div class="rem-faixa"><span class="ico-k">${ic('repeat', 18)}</span><div><small>Mudando seu horário</small><b>Atual: ${cap(DOW[A.parse(rem.date).getDay()].toLowerCase())}, ${shortDate(rem.date)} às ${rem.time} · ${esc(rem.service)}</b></div><button type="button" class="link" data-a="rem-x">${ic('x', 15)}Desistir</button></div>` : '';
     const stepper = `<ol class="wiz-passos" aria-label="Passos do agendamento">${PASSOS.map(([t, i], k) => {
       const n = k + 1; const feito = n < V.step || (n === 3 && s); const atual = n === V.step;
       const pode = n < V.step;
@@ -267,8 +293,8 @@
   }
   function blocoDia() {
     return `<section class="bloco" id="b-dia">${monthCal()}
-      <div class="legenda"><span data-k="verde"><i></i>Com vagas</span><span data-k="laranja"><i></i>Poucas vagas</span><span data-k="vermelho"><i></i>Lotado</span><span data-k="cinza"><i></i>Fechado</span>${remAp() ? '<span class="meu"><i></i>Seu horário atual</span>' : ''}</div>
-      ${esperaOn() && !remAp() ? `<div class="wiz-nota">${ic('bell', 15)}Dia lotado? Toque nele e entre na lista de espera.</div>` : ''}
+      <div class="legenda"><span data-k="verde"><i></i>Com vagas</span><span data-k="laranja"><i></i>Poucas vagas</span><span data-k="vermelho"><i></i>Lotado</span><span data-k="cinza"><i></i>Fechado</span>${remAp() ? '<span class="meu"><i></i>Seu horário atual</span>' : trocaEsp() ? '<span class="meu"><i></i>Sua fila atual</span>' : ''}</div>
+      ${esperaOn() && !remAp() ? `<div class="wiz-nota">${ic('bell', 15)}${trocaEsp() ? 'Dia com vaga: é só marcar e você sai da fila. Dia lotado: você troca de fila.' : 'Dia lotado? Toque nele e entre na lista de espera.'}</div>` : ''}
     </section>`;
   }
   function monthCal() {
@@ -278,10 +304,10 @@
     const m = A.parse(V.calMonth); const f = new Date(m.getFullYear(), m.getMonth(), 1); const last = new Date(m.getFullYear(), m.getMonth() + 1, 0);
     let cells = DOW.map((d) => `<span class="dw">${d}</span>`).join('');
     for (let i = 0; i < f.getDay(); i++) cells += '<span></span>';
-    const rem = remAp();
+    const rem = remAp(); const tr = trocaEsp();
     for (let d = 1; d <= last.getDate(); d++) {
-      const ds = A.iso(new Date(m.getFullYear(), m.getMonth(), d)); const x = dayStatus(ds); const meu = rem && rem.date === ds;
-      cells += `<button type="button" class="${V.date === ds ? 'sel' : ''} ${ds === TODAY ? 'hoje' : ''} ${meu ? 'meu' : ''}" data-st="${x.st}" ${x.st === 'fora' ? 'disabled' : `data-a="day" data-d="${ds}"`} aria-label="${longDate(ds)}${x.r ? ', ' + x.r : ''}${meu ? ', seu horário atual' : ''}">${d}${ds === TODAY ? '<small>hoje</small>' : meu ? '<small>atual</small>' : ''}</button>`;
+      const ds = A.iso(new Date(m.getFullYear(), m.getMonth(), d)); const x = dayStatus(ds); const meu = (rem && rem.date === ds) || (tr && tr.date === ds);
+      cells += `<button type="button" class="${V.date === ds ? 'sel' : ''} ${ds === TODAY ? 'hoje' : ''} ${meu ? 'meu' : ''}" data-st="${x.st}" ${x.st === 'fora' ? 'disabled' : `data-a="day" data-d="${ds}"`} aria-label="${longDate(ds)}${x.r ? ', ' + x.r : ''}${meu ? (tr ? ', sua fila atual' : ', seu horário atual') : ''}">${d}${ds === TODAY ? '<small>hoje</small>' : meu ? `<small>${tr ? 'fila' : 'atual'}</small>` : ''}</button>`;
     }
     const next = A.iso(new Date(m.getFullYear(), m.getMonth() + 1, 1));
     return `<div><div class="mes-cab"><button type="button" class="btn-icone" data-a="cm" data-n="-1" ${V.calMonth <= sm ? 'disabled' : ''} aria-label="Mês anterior">${ic('left', 18)}</button><b>${cap(MESES[m.getMonth()])} de ${m.getFullYear()}</b><button type="button" class="btn-icone" data-a="cm" data-n="1" ${next > limit ? 'disabled' : ''} aria-label="Próximo mês">${ic('right', 18)}</button></div><div class="mes">${cells}</div></div>`;
@@ -351,6 +377,7 @@
     let t, sub, body;
     if (V.sheet === 'detalhe') return folha(anim, ...sheetDetalhe());
     if (V.sheet === 'espera') return folha(anim, ...sheetEspera());
+    if (V.sheet === 'espdet') return folha(anim, ...sheetEspDet());
     if (V.sheet === 'remarca') return folha(anim, ...sheetRemarca());
     if (V.sheet === 'quem') {
       t = 'Quase lá! Quem é você?'; sub = 'Escolha uma opção para finalizar.';
@@ -424,22 +451,58 @@
     return ['Mudar seu horário?', 'Confira antes de confirmar.', body];
   }
 
-  // ===== Lista de espera: dia lotado ou nenhum horário serve =====
+  // ===== Lista de espera: dia lotado ou nenhum horário serve (ou mudando um pedido que já está na fila) =====
   function sheetEspera() {
     const e = V.esp; const ds = e.date; const wait = V.busyAction;
+    const ed = e.edit ? espDe(e.edit) : null;
     const sl = daySlots(ds);
     const pers = PERIODOS.filter(([k]) => k === 'qualquer' || sl.some((t) => noPeriodo(t, k) && !isPast(ds, t)));
     const l = escolhidos(e.svcs); const lotado = dayStatus(ds).st === 'lotado';
-    const ja = MYESP.find((x) => x.date === ds);
-    const body = `<div class="faixa" data-t="ok"><span class="f-ico">${ic('bell', 18)}</span><div><strong>Se alguém desistir, o horário é seu</strong><p>A gente marca sozinho para o primeiro da fila e avisa no seu WhatsApp. Você não precisa ficar olhando o site.</p></div></div>
-      <div class="campo"><span class="lab">Que horas você pode?</span><div class="esp-chips">${pers.map(([k, r]) => `<button type="button" class="chip ${e.per === k ? 'on' : ''}" data-a="esp-per" data-v="${k}" aria-pressed="${e.per === k}">${r}</button>`).join('')}</div></div>
+    const ja = !ed && MYESP.find((x) => x.date === ds);
+    // Tem vaga agora no período escolhido? Então não precisa esperar: marca direto
+    const livres = l.length ? livresNo(ds, e.per, durDe(l)) : [];
+    const vaga = livres.length ? `<div class="faixa esp-vaga" data-t="ok"><span class="f-ico">${ic('check', 18)}</span><div><strong>${e.per === 'qualquer' ? 'Tem horário livre nesse dia!' : `Tem horário livre de ${perTxt(e.per).toLowerCase()}!`}</strong><p>Não precisa esperar na fila. Toque no horário para marcar${ed ? ' (você sai da fila desse dia)' : ''}:</p>
+        <div class="esp-livres">${livres.slice(0, 6).map((t) => `<button type="button" class="hora" data-a="esp-livre" data-t="${t}">${t}<small>até ${endOf(t, durDe(l))}</small></button>`).join('')}</div></div></div>` : '';
+    const topo = ed ? `<div class="esp-lugar"><span class="ico-k">${ic('users', 17)}</span><div><b>Você continua em ${ord(ed.pos)} lugar</b><small>Mudar o período ou os serviços não tira você da fila.</small></div></div>`
+      : `<div class="faixa" data-t="ok"><span class="f-ico">${ic('bell', 18)}</span><div><strong>Se alguém desistir, o horário é seu</strong><p>A gente marca sozinho para o primeiro da fila e avisa no seu WhatsApp. Você não precisa ficar olhando o site.</p></div></div>`;
+    const btn = livres.length ? ''
+      : ed ? `<button type="button" class="btn pri bloco-btn" data-a="esp-ok" ${wait ? 'disabled' : ''}>${wait ? 'Salvando…' : `${ic('check', 18)}Salvar mudanças`}</button>`
+      : ME ? `<button type="button" class="btn pri bloco-btn" data-a="esp-ok" ${wait ? 'disabled' : ''}>${wait ? 'Entrando na lista…' : `${ic('bell', 18)}Entrar na lista de espera`}</button>`
+      : `<button type="button" class="btn pri bloco-btn" data-a="esp-ok">${ic('arrow', 18)}Continuar</button>`;
+    const body = `${topo}
+      <div class="campo"><span class="lab">Que horas você pode?</span><div class="esp-chips">${pers.map(([k, r]) => `<button type="button" class="chip ${e.per === k ? 'on' : ''}" data-a="esp-per" data-v="${k}" aria-pressed="${e.per === k}">${r}${PER_HORAS[k] ? `<small>${PER_HORAS[k]}</small>` : ''}</button>`).join('')}</div></div>
       <div class="campo" id="e-esp-svc"><span class="lab">O que vai fazer? <span class="muted" style="font-weight:500">· pode somar</span></span><div class="esp-svcs">${S.services.map((s) => { const on = e.svcs.includes(s.id); return `<button type="button" class="esp-svc ${on ? 'on' : ''}" data-a="esp-svc" data-id="${s.id}" aria-pressed="${on}"><span class="ck">${on ? ic('check', 13) : ''}</span><span>${esc(s.name)}<small>${tempo(s.dur)}</small></span><b class="num">${money(s.price)}</b></button>`; }).join('')}</div>
         ${l.length ? `<div class="esp-tot"><span>${l.length > 1 ? `${l.length} serviços · ` : ''}${tempo(durDe(l))}</span><b class="preco">${money(precoDe(l))}</b></div>` : ''}</div>
+      ${vaga}
       ${ja ? `<div class="faixa fina" data-t="aviso"><span class="f-ico">${ic('alert', 15)}</span><p>Você já está na fila desse dia (${ord(ja.pos)} lugar). Entrar de novo troca o pedido antigo.</p></div>` : ''}
-      ${ME ? `<div class="achou"><span class="av">${esc(initials(ME.name))}</span><div><small>Entrando como</small><b>${esc(ME.name)}</b></div></div>
-        <button type="button" class="btn pri bloco-btn" data-a="esp-ok" ${wait ? 'disabled' : ''}>${wait ? 'Entrando na lista…' : `${ic('bell', 18)}Entrar na lista de espera`}</button>`
-        : `<button type="button" class="btn pri bloco-btn" data-a="esp-ok">${ic('arrow', 18)}Continuar</button>`}`;
+      ${ME && !ed && !livres.length ? `<div class="achou"><span class="av">${esc(initials(ME.name))}</span><div><small>Entrando como</small><b>${esc(ME.name)}</b></div></div>` : ''}
+      ${btn}
+      ${ed ? `<div class="esp-rodape"><button type="button" class="link" data-a="esp-det" data-id="${ed.id}">${ic('left', 16)}Voltar ao pedido</button><button type="button" class="link" data-a="esp-dia" data-id="${ed.id}">${ic('cal', 16)}Trocar o dia</button></div>` : ''}`;
+    if (ed) return ['Mudar seu pedido', `Lista de espera de ${diaCurto(ds)}.`, body];
     return ['Lista de espera', `${cap(longDate(ds))}${lotado ? ' está lotado' : ''}.`, body];
+  }
+
+  // ===== Seu pedido na lista de espera: tudo sobre ele, mudar, trocar o dia ou sair =====
+  function sheetEspDet() {
+    const e = espDe(V.espVer);
+    if (!e) { V.sheet = null; return ['', '', '']; }
+    const d = A.parse(e.date); const it = e.items || [];
+    const livres = livresNo(e.date, e.period, Number(e.dur) || 30);
+    const passos = [
+      ['check', 'Você entrou na fila', e.at ? cap(quando(e.at)) : 'Pedido feito pelo site', 'feito'],
+      ['clock', 'Esperando alguém desistir', e.pos === 1 ? 'Você é o primeiro: a próxima vaga é sua' : `Você é o ${ord(e.pos)}. Antes de você, ${e.pos - 1 === 1 ? '1 pessoa' : `${e.pos - 1} pessoas`}`, 'atual'],
+      ['whats', 'A gente marca e te avisa', 'Chega no seu WhatsApp, sem precisar ficar olhando o site', ''],
+    ];
+    const body = `<div class="det-quando"><div class="cal-g esp"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b><small>${MESES[d.getMonth()].slice(0, 3)}</small></div>
+        <div style="min-width:0"><b>${cap(longDate(e.date))}</b><span>${ic('clock', 14)}${perTxt(e.period)}${PER_HORAS[e.period] ? ` · ${PER_HORAS[e.period]}` : ''}</span></div><span class="pilula" data-k="laranja">${ord(e.pos)} da fila</span></div>
+      ${livres.length ? `<div class="faixa esp-vaga" data-t="ok"><span class="f-ico">${ic('check', 18)}</span><div><strong>Vagou horário ${e.period === 'qualquer' ? 'nesse dia' : `de ${perTxt(e.period).toLowerCase()}`}!</strong><p>Toque para marcar agora e sair da fila:</p><div class="esp-livres">${livres.slice(0, 6).map((t) => `<button type="button" class="hora" data-a="esp-livre" data-t="${t}" data-id="${e.id}">${t}<small>até ${endOf(t, Number(e.dur) || 30)}</small></button>`).join('')}</div></div></div>` : ''}
+      <ol class="esp-passos">${passos.map(([i, t, sub, k]) => `<li class="${k}"><span class="n">${ic(i, 15)}</span><div><b>${t}</b><small>${sub}</small></div></li>`).join('')}</ol>
+      <div class="det-conta"><small>${it.length > 1 ? 'Serviços do pedido' : 'Serviço do pedido'}</small>${it.map((x) => `<div><span>${esc(x.name)}</span><b class="num">${money(x.price)}</b></div>`).join('')}
+        <div class="tot"><span>Total, pago na barbearia</span><b class="preco">${money(espTot(e))}</b></div></div>
+      ${String(V.espSai) === String(e.id) ? `<div class="confirma-l"><span>Sair da lista de espera de ${diaCurto(e.date)}?</span><p class="muted" style="margin:0;font-size:13px">Você perde o seu lugar (${ord(e.pos)}) na fila.</p><div class="acoes"><button type="button" class="btn p verm" data-a="esp-sai-ok" data-id="${e.id}" ${V.busyAction ? 'disabled' : ''}>Sim, sair</button><button type="button" class="btn p" data-a="esp-sai-no">Ficar na fila</button></div></div>`
+        : `<div class="det-acoes"><button type="button" class="btn pri bloco-btn" data-a="esp-mudar" data-id="${e.id}">${ic('repeat', 18)}Mudar pedido <small class="btn-sub">período ou serviços</small></button>
+          <div class="duas-b"><button type="button" class="btn" data-a="esp-dia" data-id="${e.id}">${ic('cal', 16)}Trocar o dia</button><button type="button" class="btn verm" data-a="esp-sai" data-id="${e.id}">${ic('x', 16)}Sair da fila</button></div></div>`}`;
+    return ['Seu pedido na lista de espera', 'Tudo sobre o seu pedido.', body];
   }
 
   /** Texto do lembrete: "1 hora antes", "30 minutos antes"… */
@@ -473,7 +536,9 @@
   function vHorarios() {
     if (!ME) return entry('Meus horários', 'Veja e cancele seus agendamentos.');
     const next = sortAp(MYAP.filter((a) => a.status === 'agendado' && !isPast(a.date, a.time)));
-    const past = sortAp(MYAP.filter((a) => !next.includes(a))).reverse().slice(0, 8);
+    const past = sortAp(MYAP.filter((a) => !next.includes(a))).reverse();
+    // Histórico de visitas em páginas: 5 por vez no celular, 8 no computador
+    const hp = paginar(past, 'hpg', MOBILE.matches ? 5 : 8, past.length === 1 ? ' visita' : ' visitas');
     const card = (a, fut) => {
       const d = A.parse(a.date); const dd = daysTo(a.date);
       const pil = fut ? '<span class="pilula viva" data-k="verde">Confirmado</span>'
@@ -488,19 +553,31 @@
       const tags = `${a.forName ? ` <span class="para-quem">para ${esc(a.forName)}</span>` : ''}${a.origin === 'espera' && fut ? ` <span class="para-quem esp">${ic('bell', 11)}da lista de espera</span>` : ''}`;
       return `<div class="ag-c ${fut ? '' : 'velho'}"><button type="button" class="topo ag-c-abre" data-a="det" data-id="${a.id}" aria-label="Ver detalhes do horário de ${longDate(a.date)} às ${a.time}"><div class="quando"><div class="cal ${fut ? '' : 'velho'}"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(a.service)}${tags}</h4><p>${cap(DOWL[d.getDay()])} · ${a.time} às ${endOf(a.time, a.dur)}</p></div></div>${pil}</button>${extra}</div>`;
     };
-    // Pedidos na lista de espera: posição na fila e botão para sair
+    // Pedidos na lista de espera: posição na fila, detalhes do pedido e atalho para mudar
     const espCard = (e) => {
       const d = A.parse(e.date); const l = (e.items || []);
-      return `<div class="ag-c esp-c"><div class="topo"><div class="quando"><div class="cal esp"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(l.map((x) => x.name).join(' + ') || 'Lista de espera')}</h4><p>${cap(DOWL[d.getDay()])} · ${perTxt(e.period).toLowerCase()}</p></div></div><span class="pilula" data-k="laranja">${ord(e.pos)} da fila</span></div>
-        <div class="faixa p"><span class="f-ico">${ic('bell', 15)}</span><p>Se vagar um horário ${e.period === 'qualquer' ? 'nesse dia' : `de ${perTxt(e.period).toLowerCase()}`}, a gente marca e te avisa no WhatsApp.</p></div>
-        ${String(V.espSai) === String(e.id) ? `<div class="confirma-l"><span>Sair da lista de espera?</span><div class="acoes"><button type="button" class="btn p verm" data-a="esp-sai-ok" data-id="${e.id}" ${V.busyAction ? 'disabled' : ''}>Sim, sair</button><button type="button" class="btn p" data-a="esp-sai-no">Ficar na fila</button></div></div>`
-          : `<div class="acoes"><button type="button" class="btn p" data-a="esp-sai" data-id="${e.id}">${ic('x', 16)}Sair da lista</button></div>`}</div>`;
+      return `<div class="ag-c esp-c"><button type="button" class="topo ag-c-abre" data-a="esp-det" data-id="${e.id}" aria-label="Ver seu pedido na lista de espera de ${longDate(e.date)}"><div class="quando"><div class="cal esp"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(l.map((x) => x.name).join(' + ') || 'Lista de espera')}</h4><p>${cap(DOWL[d.getDay()])} · ${perTxt(e.period).toLowerCase()}${PER_HORAS[e.period] ? ` (${PER_HORAS[e.period]})` : ''}</p></div></div><span class="pilula" data-k="laranja">${ord(e.pos)} da fila</span></button>
+        <div class="faixa p"><span class="f-ico">${ic('bell', 15)}</span><p>Se vagar um horário ${e.period === 'qualquer' ? 'nesse dia' : `de ${perTxt(e.period).toLowerCase()}`}, a gente marca e te avisa no WhatsApp · ${money(espTot(e))} na barbearia</p></div>
+        <div class="acoes ag-c-acoes"><button type="button" class="btn p" data-a="esp-mudar" data-id="${e.id}">${ic('repeat', 16)}Mudar pedido</button><button type="button" class="btn p" data-a="esp-det" data-id="${e.id}">${ic('list', 16)}Ver detalhes</button></div></div>`;
     };
     return `<div class="pagina-t"><h1>Meus horários</h1><p>Olá, ${esc(first(ME.name))}! Toque em um horário para ver os detalhes, mudar ou cancelar.</p></div>
       <div class="secao-t">${ic('cal', 20)}Próximos <small>${next.length}</small></div>
       ${next.length ? `<div class="lista-cards">${next.map((a) => card(a, true)).join('')}</div>` : `<div class="cartao"><div class="vazio"><span class="ico-k">${ic('cal', 26)}</span><h4>Nenhum horário marcado</h4><p>Que tal agendar o próximo corte?</p><button type="button" class="btn pri" data-a="tab" data-t="agendar">${ic('plus', 17)}Agendar agora</button></div></div>`}
       ${MYESP.length ? `<div class="secao-t" style="margin-top:26px">${ic('bell', 20)}Lista de espera <small>${MYESP.length}</small></div><div class="lista-cards">${MYESP.map(espCard).join('')}</div>` : ''}
-      ${past.length ? `<div class="secao-t" style="margin-top:26px">${ic('list', 20)}Últimas visitas <small>${past.length}</small></div><div class="lista-cards">${past.map((a) => card(a, false)).join('')}</div>` : ''}`;
+      ${past.length ? `<div class="secao-t" style="margin-top:26px" id="hist-topo">${ic('list', 20)}Histórico de visitas <small>${past.length}</small></div><div class="lista-cards" id="hist-lista">${hp.itens.map((a) => card(a, false)).join('')}</div>${hp.html}` : ''}`;
+  }
+
+  // ----- paginação das listas (igual à do painel) -----
+  function paginar(list, key, per, rot = '') {
+    const tot = Math.max(1, Math.ceil(list.length / per));
+    const p = Math.min(Math.max(1, V[key] || 1), tot); V[key] = p;
+    const ini = (p - 1) * per; const itens = list.slice(ini, ini + per);
+    const nums = []; for (let i = 1; i <= tot; i++) if (i === 1 || i === tot || Math.abs(i - p) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
+    const html = list.length > per ? `<div class="pag"><small>Mostrando ${ini + 1} a ${ini + itens.length} de ${list.length}${rot}</small><div class="pag-bts">
+      <button type="button" data-a="pag" data-k="${key}" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''} aria-label="Página anterior">${ic('left', 16)}</button>
+      ${nums.map((n) => (n === '…' ? '<button type="button" disabled>…</button>' : `<button type="button" class="${n === p ? 'on' : ''}" data-a="pag" data-k="${key}" data-p="${n}" ${n === p ? 'aria-current="page"' : ''}>${n}</button>`)).join('')}
+      <button type="button" data-a="pag" data-k="${key}" data-p="${p + 1}" ${p === tot ? 'disabled' : ''} aria-label="Próxima página">${ic('right', 16)}</button></div></div>` : '';
+    return { itens, html };
   }
 
   // ===== Perfil =====
@@ -526,6 +603,8 @@
     const x = dayStatus(ds); const d = A.parse(ds);
     if (x.st === 'fechado') { alerta('aviso', `A barbearia não abre ${plural(d.getDay())}`, 'Escolha outro dia na faixa.'); marcar(el, 'aviso'); return; }
     if (x.st === 'folga') { alerta('aviso', 'Barbearia fechada nesse dia', `${x.why ? x.why + '. ' : ''}Escolha outro dia.`); marcar(el, 'aviso'); return; }
+    const tr = trocaEsp();
+    if (tr && tr.date === ds && x.st === 'lotado') { mudarEspera(tr.id); return; }
     if (x.st === 'lotado') {
       // Com a lista de espera ligada, o dia lotado abre a fila; senão, sugere outros dias
       if (esperaOn() && !remAp()) { abrirEspera(ds); return; }
@@ -603,12 +682,50 @@
   function largaRemarca() { Object.assign(V, { remarca: null, date: null, time: null, svcs: [], step: 1 }); }
   function abrirEspera(ds) {
     const svcs = V.svcs.length ? [...V.svcs] : [];
-    V.esp = { date: ds, per: 'qualquer', svcs }; V.acao = 'espera'; V.errs = {}; V.sheet = 'espera'; render(true);
+    const tr = trocaEsp();
+    V.esp = { date: ds, per: tr ? tr.period : 'qualquer', svcs }; V.acao = 'espera'; V.errs = {}; V.sheet = 'espera'; render(true);
+  }
+  /** Pedido da lista de espera que o cliente está trocando de dia (se estiver). */
+  const trocaEsp = () => (V.espTroca ? espDe(V.espTroca) : null);
+  /** Abre o pedido já na fila para mudar o período ou os serviços. */
+  function mudarEspera(id) {
+    const e = espDe(id); if (!e) return;
+    V.esp = { edit: e.id, date: e.date, per: e.period, svcs: espIds(e) }; V.acao = 'espera'; V.errs = {}; V.espSai = null; V.sheet = 'espera'; render(true);
+  }
+  /** Trocar o dia do pedido: vai para o calendário com os mesmos serviços; o lugar na fila fica guardado até confirmar. */
+  function trocaDiaEspera(id) {
+    const e = espDe(id); if (!e) return;
+    const de = V.tab;
+    Object.assign(V, { espTroca: e.id, remarca: null, svcs: espIds(e), date: null, time: null, step: 1, stepDir: 1, sheet: null, esp: null, acao: 'agendar', espSai: null, tab: 'agendar', done: false, antes: null, calMonth: e.date.slice(0, 8) + '01' });
+    loadBusy().then(() => { if (V.tab === 'agendar') render(true); }).catch(() => {});
+    const fim = () => { render(); alerta('info', 'Escolha o novo dia', `Seu lugar na fila de ${diaCurto(e.date)} fica guardado até você confirmar.`, [], 5000); };
+    if (de === 'agendar') fim(); else window.U.mov.trocaTela('.c-main', Math.sign(ordemTab('agendar') - ordemTab(de)), fim);
+  }
+  /** Vagou horário no período do pedido: marca direto (e sai da fila desse dia). */
+  function marcarLivre(t) {
+    const e = V.esp || (V.espVer && espDe(V.espVer) ? { date: espDe(V.espVer).date, svcs: espIds(espDe(V.espVer)) } : null);
+    if (!e) return;
+    Object.assign(V, { date: e.date, time: t, svcs: [...e.svcs], step: 3, esp: null, acao: 'agendar', remarca: null, espTroca: null, tab: 'agendar', done: false, antes: null });
+    goConfirm();
+  }
+  /** Salva o pedido mudado (período e serviços). O lugar na fila continua o mesmo. */
+  async function salvarEspera() {
+    const e = V.esp; const ed = e && espDe(e.edit); if (!ed) return;
+    try {
+      const d = await api('PATCH', `/api/public/me/espera/${ed.id}`, { period: e.per, serviceIds: [...e.svcs] }, authH());
+      await loadMe();
+      Object.assign(V, { sheet: 'espdet', espVer: ed.id, esp: null, acao: 'agendar' });
+      setTimeout(() => alerta('ok', 'Pedido atualizado', `Agora você espera um horário ${d.espera.period === 'qualquer' ? 'em qualquer hora' : `de ${perTxt(d.espera.period).toLowerCase()}`} em ${diaCurto(d.espera.date)}. Continua em ${ord(d.espera.pos)} lugar.`, [], 6000), 50);
+    } catch (err) {
+      await Promise.all([loadMe(), loadBusy()]).catch(() => {});
+      setTimeout(() => alerta('erro', 'Não deu para mudar o pedido', err.message), 50);
+    }
   }
   function focusSheet() { setTimeout(() => { const i = document.querySelector('.folha input'); if (i && !MOBILE.matches) i.focus(); }, 60); }
 
   async function book() {
     const body = { date: V.date, time: V.time, serviceIds: [...V.svcs], serviceId: V.svcs[0] };
+    const tr = trocaEsp(); if (tr) body.trocaEspera = tr.id; // marcou com vaga: sai da fila antiga
     if (!ME) { body.name = A.tidyName(V.newName); body.phone = digits(V.newPhone); }
     if (podeFamilia() && V.para === 'outro') {
       const nome = String(V.paraNome || '').trim().replace(/\s+/g, ' ');
@@ -620,8 +737,8 @@
       const d = await api('POST', '/api/public/agendar', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
       store.set(TOKEN_KEY, d.token);
       await Promise.all([loadMe(), loadBusy()]);
-      Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', paraNome: '', done: true, errs: {}, antes: null });
-      setTimeout(() => alerta('ok', 'Agendado com sucesso!', `${cap(longDate(d.appointment.date))} às ${d.appointment.time}. Te esperamos!`), 50);
+      Object.assign(V, { lastBooking: d.appointment.id, sheet: null, tab: 'ok', newName: '', newPhone: '', paraNome: '', done: true, errs: {}, antes: null, espTroca: null });
+      setTimeout(() => alerta('ok', 'Agendado com sucesso!', `${cap(longDate(d.appointment.date))} às ${d.appointment.time}. Te esperamos!${tr ? ` Você saiu da lista de espera de ${diaCurto(tr.date)}.` : ''}`), 50);
     } catch (err) {
       if (err.status === 409) {
         await loadBusy().catch(() => {});
@@ -670,14 +787,16 @@
   async function entrarEspera() {
     const e = V.esp; if (!e) return;
     const body = { date: e.date, period: e.per, serviceIds: [...e.svcs] };
+    const tr = trocaEsp(); if (tr) body.trocaEspera = tr.id; // trocando o dia: sai da fila antiga junto
     if (!ME) { body.name = A.tidyName(V.newName); body.phone = digits(V.newPhone); }
     const dev = deviceId();
     try {
       const d = await api('POST', '/api/public/espera', body, { ...authH(), ...(dev ? { 'X-Device': dev } : {}) });
       store.set(TOKEN_KEY, d.token);
       await loadMe();
-      Object.assign(V, { sheet: null, esp: null, acao: 'agendar', tab: 'horarios', newName: '', newPhone: '', errs: {} });
-      setTimeout(() => alerta('ok', 'Você está na lista de espera', `Você é o ${ord(d.espera.pos)} da fila de ${diaCurto(d.espera.date)}. Se vagar, a gente marca e te avisa no WhatsApp.`, [], 7000), 50);
+      Object.assign(V, { sheet: null, esp: null, acao: 'agendar', tab: 'horarios', newName: '', newPhone: '', errs: {}, espTroca: null, remarca: null, date: null, time: null, svcs: [] });
+      const ver = [{ r: 'Ver meu pedido', fn: () => { V.espVer = d.espera.id; V.espSai = null; V.sheet = 'espdet'; render(true); } }];
+      setTimeout(() => alerta('ok', tr ? 'Pedido trocado de dia' : 'Você está na lista de espera', `${tr && tr.date !== d.espera.date ? `Você saiu da fila de ${diaCurto(tr.date)}. ` : ''}Você é o ${ord(d.espera.pos)} da fila de ${diaCurto(d.espera.date)}. Se vagar, a gente marca e te avisa no WhatsApp.`, ver, 7000), 50);
     } catch (err) {
       if (err.status === 401) { store.set(TOKEN_KEY, null); ME = null; MYAP = []; MYESP = []; V.sheet = 'quem'; setTimeout(() => alerta('aviso', 'Entre de novo', err.message), 50); return; }
       setTimeout(() => alerta('erro', 'Não deu para entrar na lista', err.message), 50);
@@ -686,6 +805,11 @@
   function confirmaEspera() {
     const e = V.esp; if (!e) return;
     if (!e.svcs.length) { alerta('aviso', 'O que você vai fazer?', 'Escolha pelo menos um serviço. Assim a gente sabe quanto tempo precisa vagar.'); marcar('#e-esp-svc', 'aviso'); return; }
+    if (e.edit) {
+      const ed = espDe(e.edit);
+      if (ed && ed.period === e.per && espIds(ed).sort().join() === e.svcs.map(String).sort().join()) { alerta('info', 'Nada mudou', 'Troque o período ou os serviços, ou toque em Voltar ao pedido.'); return; }
+      run(salvarEspera); return;
+    }
     if (ME) { run(entrarEspera); return; }
     V.acao = 'espera'; V.sheet = 'quem'; render(true);
   }
@@ -745,14 +869,18 @@
   }
   function toNew() { V.sheet = 'novo'; V.newPhone = V.phone; V.errs = {}; V.notFound = false; render(true); focusSheet(); }
   function goTab(t) {
+    const de = V.tab;
     if (t !== 'agendar' && V.remarca) largaRemarca();
+    if (t !== 'agendar' && V.espTroca) Object.assign(V, { espTroca: null, svcs: [], date: null, time: null, step: 1 });
     V.tab = t; V.errs = {}; V.sheet = null; V.cancelAsk = null; V.pName = null; V.pPhone = null; V.espSai = null;
     if (t === 'agendar') {
       if (V.done) Object.assign(V, { date: null, time: null, svcs: [], done: false, antes: null });
       V.step = !V.date ? 1 : !V.time ? 2 : 3;
       loadBusy().then(() => { if (V.tab === 'agendar') render(true); }).catch(() => {});
     }
-    render();
+    // a tela atual sai para o lado oposto da aba tocada; a nova entra (e o marcador do menu desliza)
+    if (de === t || (de === 'ok' && t === 'agendar')) { render(); return; }
+    window.U.mov.trocaTela('.c-main', Math.sign(ordemTab(t) - ordemTab(de)), render);
   }
 
   document.addEventListener('click', (e) => {
@@ -781,9 +909,15 @@
       case 'esp-per': V.esp.per = el.dataset.v; render(true); break;
       case 'esp-svc': { const id = el.dataset.id; const l = V.esp.svcs; V.esp.svcs = l.includes(id) ? l.filter((x) => x !== id) : l.length >= MAX_SVCS ? l : [...l, id]; render(true); break; }
       case 'esp-ok': confirmaEspera(); break;
+      case 'esp-det': V.espVer = el.dataset.id; V.espSai = null; V.esp = null; V.acao = 'agendar'; V.sheet = 'espdet'; render(true); break;
+      case 'esp-mudar': mudarEspera(el.dataset.id); break;
+      case 'esp-dia': trocaDiaEspera(el.dataset.id); break;
+      case 'esp-troca-x': { const tr = trocaEsp(); Object.assign(V, { espTroca: null, svcs: [], date: null, time: null, step: 1 }); goTab('horarios'); if (tr) alerta('info', 'Nada mudou', `Você continua na fila de ${diaCurto(tr.date)}.`); break; }
+      case 'esp-livre': marcarLivre(el.dataset.t); break;
+      case 'pag': { const k = el.dataset.k; const de = V[k] || 1; V[k] = Number(el.dataset.p); render(true); window.U.mov.animaLista($('#hist-lista'), V[k] - de); break; }
       case 'esp-sai': V.espSai = el.dataset.id; render(true); break;
       case 'esp-sai-no': V.espSai = null; render(true); break;
-      case 'esp-sai-ok': { const id = el.dataset.id; run(async () => { await api('DELETE', `/api/public/me/espera/${id}`, null, authH()); V.espSai = null; await loadMe(); setTimeout(() => alerta('info', 'Você saiu da lista de espera', 'Quando quiser, é só entrar de novo.'), 30); }); break; }
+      case 'esp-sai-ok': { const id = el.dataset.id; run(async () => { await api('DELETE', `/api/public/me/espera/${id}`, null, authH()); V.espSai = null; V.sheet = null; await loadMe(); setTimeout(() => alerta('info', 'Você saiu da lista de espera', 'Quando quiser, é só entrar de novo.'), 30); }); break; }
       case 'who': V.sheet = el.dataset.w || 'quem'; V.errs = {}; V.notFound = false; render(true); focusSheet(); break;
       case 'to-new': toNew(); break;
       case 'confirm': run(book); break;

@@ -79,3 +79,42 @@ button{cursor:pointer}
 @keyframes tremer{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(2px)}}
 @media (max-width:600px){.alerta{padding:14px 10px 16px 12px;gap:10px}.al-ico{width:38px;height:38px}.al-txt strong{font-size:15.5px}.al-txt p{font-size:13px}}
 @media (prefers-reduced-motion:reduce){.alerta,.tremer,#flash-borda,.al-ico{animation-duration:.01ms!important;animation-iteration-count:1!important}}
+
+/* ---------- Troca de telas: a atual sai para um lado, a nova entra pelo outro e os blocos chegam em cascata ---------- */
+.saindo{animation:tela-sai .15s cubic-bezier(.4,0,1,1) forwards;pointer-events:none}
+.saindo[data-dir="vai"]{animation-name:tela-sai-e}
+.saindo[data-dir="volta"]{animation-name:tela-sai-d}
+@keyframes tela-sai{to{opacity:0;transform:translateY(-8px)}}
+@keyframes tela-sai-e{to{opacity:0;transform:translateX(-24px)}}
+@keyframes tela-sai-d{to{opacity:0;transform:translateX(24px)}}
+.vista{animation:tela-entra .5s cubic-bezier(.22,1,.36,1) backwards}
+.vista[data-dir="vai"]{animation-name:tela-entra-d}
+.vista[data-dir="volta"]{animation-name:tela-entra-e}
+@keyframes tela-entra{from{opacity:0;transform:translateY(14px)}}
+@keyframes tela-entra-d{from{opacity:0;transform:translateX(36px)}}
+@keyframes tela-entra-e{from{opacity:0;transform:translateX(-36px)}}
+.vista>*,.vista .cascata>*{animation:bloco-entra .6s cubic-bezier(.22,1,.36,1) backwards}
+.vista>*:nth-child(2),.vista .cascata>*:nth-child(2){animation-delay:0.045s}
+.vista>*:nth-child(3),.vista .cascata>*:nth-child(3){animation-delay:0.090s}
+.vista>*:nth-child(4),.vista .cascata>*:nth-child(4){animation-delay:0.135s}
+.vista>*:nth-child(5),.vista .cascata>*:nth-child(5){animation-delay:0.180s}
+.vista>*:nth-child(6),.vista .cascata>*:nth-child(6){animation-delay:0.225s}
+.vista>*:nth-child(7),.vista .cascata>*:nth-child(7){animation-delay:0.270s}
+.vista>*:nth-child(8),.vista .cascata>*:nth-child(8){animation-delay:0.315s}
+@keyframes bloco-entra{from{opacity:0;transform:translateY(18px) scale(.985)}}
+/* trocou de página numa lista: os cards chegam do lado da seta tocada */
+.pg-vai>*{animation:card-vai .45s cubic-bezier(.22,1,.36,1) backwards}
+.pg-volta>*{animation:card-volta .45s cubic-bezier(.22,1,.36,1) backwards}
+.pg-vai>*:nth-child(2),.pg-volta>*:nth-child(2){animation-delay:0.035s}
+.pg-vai>*:nth-child(3),.pg-volta>*:nth-child(3){animation-delay:0.070s}
+.pg-vai>*:nth-child(4),.pg-volta>*:nth-child(4){animation-delay:0.105s}
+.pg-vai>*:nth-child(5),.pg-volta>*:nth-child(5){animation-delay:0.140s}
+.pg-vai>*:nth-child(6),.pg-volta>*:nth-child(6){animation-delay:0.175s}
+.pg-vai>*:nth-child(7),.pg-volta>*:nth-child(7){animation-delay:0.210s}
+.pg-vai>*:nth-child(8),.pg-volta>*:nth-child(8){animation-delay:0.245s}
+@keyframes card-vai{from{opacity:0;transform:translateX(28px)}}
+@keyframes card-volta{from{opacity:0;transform:translateX(-28px)}}
+/* marcador do menu que desliza até o item tocado */
+.marca-nav{position:absolute;left:0;top:0;z-index:0;pointer-events:none;border-radius:10px;transition:transform .45s cubic-bezier(.22,1,.36,1),width .45s cubic-bezier(.22,1,.36,1),height .45s cubic-bezier(.22,1,.36,1)}
+.com-marca>:not(.marca-nav){position:relative;z-index:1}
+@media (prefers-reduced-motion:reduce){.saindo,.vista,.vista>*,.vista .cascata>*,.pg-vai>*,.pg-volta>*{animation:none!important}.marca-nav{transition:none}}

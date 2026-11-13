@@ -83,7 +83,7 @@
     const p = Math.min(Math.max(1, V.pg[key] || 1), tot); V.pg[key] = p;
     const ini = (p - 1) * per; const itens = list.slice(ini, ini + per);
     const nums = []; for (let i = 1; i <= tot; i++) if (i === 1 || i === tot || Math.abs(i - p) <= 1) nums.push(i); else if (nums[nums.length - 1] !== '…') nums.push('…');
-    const html = list.length > per ? `<div class="pag"><small>Mostrando ${ini + 1} a ${ini + itens.length} de ${list.length}${rot}</small><div class="pag-bts">
+    const html = list.length > per ? `<div class="pag" data-k="${key}"><small>Mostrando ${ini + 1} a ${ini + itens.length} de ${list.length}${rot}</small><div class="pag-bts">
       <button type="button" data-a="pag" data-k="${key}" data-p="${p - 1}" ${p === 1 ? 'disabled' : ''} aria-label="Página anterior">${ic('left', 16)}</button>
       ${nums.map((n) => (n === '…' ? '<button type="button" disabled>…</button>' : `<button type="button" class="${n === p ? 'on' : ''}" data-a="pag" data-k="${key}" data-p="${n}" ${n === p ? 'aria-current="page"' : ''}>${n}</button>`)).join('')}
       <button type="button" data-a="pag" data-k="${key}" data-p="${p + 1}" ${p === tot ? 'disabled' : ''} aria-label="Próxima página">${ic('right', 16)}</button></div></div>` : '';
@@ -161,12 +161,18 @@
 
   // ===== Tela =====
   let lastSec = null;
+  // Troca de tela com movimento: a direção segue a ordem do menu e o marcador do menu desliza junto
+  const SECS = ['inicio', 'agenda', 'cli', 'fin', 'cfg', 'perfil'];
+  const MENU = '.p-menu .p-menu-in';
   function render() {
     const root = $('#root');
     if (!V.logged || !S) { root.innerHTML = vLogin(); $('#overlay').innerHTML = ''; lastSec = null; return; }
     applyTheme(V.sec === 'cfg' && V.draft ? V.draft : S.settings);
-    root.innerHTML = adminApp(lastSec !== V.sec);
+    const dir = lastSec == null ? 0 : Math.sign(SECS.indexOf(V.sec) - SECS.indexOf(lastSec));
+    window.U.mov.marcaAntes(MENU);
+    root.innerHTML = adminApp(lastSec !== V.sec, dir);
     lastSec = V.sec;
+    window.U.mov.deslizaMarca(MENU);
     let cam = '';
     if (V.menu) cam += vGaveta();
     if (V.sino) cam += vSino();
@@ -212,7 +218,7 @@
       <div class="p-sec">Conta</div>${it('perfil', 'user', 'Meu perfil')}
       <div class="rodape-menu"><a class="p-item" href="/" target="_blank" rel="noopener">${ic('phone', 20)}<span>Ver site do cliente</span></a><button type="button" class="p-item" data-a="logout">${ic('out', 20)}<span>Sair</span></button></div>`;
   }
-  function adminApp(anim) {
+  function adminApp(anim, dir) {
     const view = { inicio: vInicio, agenda: vAgenda, cli: vCli, fin: vFin, cfg: vCfg, perfil: vPerfil }[V.sec]();
     const n = unread();
     const needSound = Som.enabled() && !Som.ready();
@@ -229,7 +235,7 @@
             <button type="button" class="p-user" data-a="sec" data-s="perfil"><div><b>${esc(S.barber.name)}</b><small>Barbeiro</small></div><span class="av" style="width:34px;height:34px;font-size:13px">${esc(initials(S.barber.name))}</span></button>
           </div>
         </header>
-        <main class="p-main ${anim ? 'vista' : ''}">
+        <main class="p-main ${anim ? 'vista' : ''}" data-dir="${dir > 0 ? 'vai' : dir < 0 ? 'volta' : 'fica'}">
           ${needSound ? `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('sound', 16)}</span><div><strong>Som dos avisos desligado</strong><p>Ligue para ouvir a campainha quando um cliente marcar.</p></div><button type="button" class="btn p" data-a="som-on">Ativar som</button></div>` : ''}
           ${view}
         </main>
@@ -254,10 +260,12 @@
   }
   function vSino() {
     const l = S.notifications;
+    // Avisos em páginas: 6 por vez no celular, 8 no computador
+    const pg = pagina(l, 'avisos', matchMedia('(max-width:560px)').matches ? 6 : 8, ' avisos');
     return `<div class="overlay limpo" data-a="sino"></div><div class="sino-p" role="dialog" aria-label="Avisos">
       <div class="cartao-topo"><h3>Avisos</h3><div class="bts"><button type="button" class="link" data-a="som-toggle">${ic(Som.enabled() ? 'sound' : 'mute', 16)}${Som.enabled() ? 'Som ligado' : 'Som desligado'}</button>${l.length ? `<button type="button" class="link" data-a="n-clear-ask">${ic('trash', 15)}Limpar</button>` : ''}</div></div>
       ${V.nClearAsk ? `<div class="faixa" data-t="erro"><span class="f-ico">${ic('trash', 16)}</span><div><strong>Apagar todos os avisos?</strong><p>Os agendamentos continuam na agenda.</p><div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="btn p verm" data-a="n-clear">Apagar</button><button type="button" class="btn p" data-a="n-clear-no">Voltar</button></div></div></div>` : ''}
-      <div class="avisos-l">${l.length ? l.map((x) => rAviso(x, true)).join('') : '<div class="vazio" style="padding:18px 8px"><p>Quando um cliente marcar, mudar ou cancelar pelo site, o aviso aparece aqui.</p></div>'}</div></div>`;
+      <div class="avisos-l">${l.length ? pg.itens.map((x) => rAviso(x, true)).join('') : '<div class="vazio" style="padding:18px 8px"><p>Quando um cliente marcar, mudar ou cancelar pelo site, o aviso aparece aqui.</p></div>'}</div>${pg.html}</div>`;
   }
 
   // ===== Início (sem valores em dinheiro: a tela pode ficar à vista dos clientes) =====
@@ -1115,9 +1123,14 @@
       V.menu = false; render(); return;
     }
     if (sec !== 'cfg') V.draft = null;
+    const de = V.sec; const gaveta = V.menu;
     V.sec = sec; V.menu = false; V.sino = false; V.lado = null; V.cancel = null; V.despAsk = null;
     if (extra) extra();
-    render(); window.scrollTo({ top: 0 });
+    const vai = () => { render(); window.scrollTo({ top: 0 }); };
+    // no celular a gaveta fecha na hora; a tela atual sai para o lado e a nova entra
+    if (de === sec) { vai(); return; }
+    if (gaveta) $('#overlay').innerHTML = '';
+    window.U.mov.trocaTela('.p-main', Math.sign(SECS.indexOf(sec) - SECS.indexOf(de)), vai);
   }
 
   document.addEventListener('submit', (e) => {
@@ -1207,7 +1220,11 @@
       case 'som-on': Som.setEnabled(true); Som.unlock(); setTimeout(() => { Som.play('novo'); render(); }, 150); alerta('ok', 'Som ativado', 'É assim que vai tocar quando chegar agendamento novo.'); break;
       case 'ag-rola': { const el2 = $('#agCols'); if (el2) el2.scrollBy({ left: Number(v) * 628, behavior: 'smooth' }); break; }
       case 'pag': {
-        V.pg[el.dataset.k] = Number(el.dataset.p); render();
+        const k = el.dataset.k; const de = V.pg[k] || 1;
+        V.pg[k] = Number(el.dataset.p); render();
+        // os cards da página nova entram do lado da seta tocada
+        { const pg = document.querySelector(`.pag[data-k="${k}"]`); const lista = pg && (pg.previousElementSibling || (pg.parentElement && pg.parentElement.previousElementSibling)); window.U.mov.animaLista(lista, V.pg[k] - de, false); }
+        if (k === 'avisos') break;
         if (el.dataset.k === 'hist') { const h = $('#histTopo'); if (h) h.scrollIntoView({ block: 'start', behavior: 'smooth' }); break; }
         if (el.dataset.k === 'svc') { const l = $('.lado'); if (l) l.scrollTo({ top: 0, behavior: 'smooth' }); break; }
         const t = $('.p-main'); if (t) window.scrollTo({ top: 0, behavior: 'smooth' });
