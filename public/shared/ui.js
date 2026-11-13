@@ -209,5 +209,57 @@
     },
   };
 
-  window.U = { alerta, fecharAlerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, STATUS, PRESETS, avColor, IC, svcIcon, applyTheme, toast, logo, avatar, api, store, tema };
+
+  // ----- Movimento na troca de telas -----
+  // A tela atual sai para um lado e a nova entra pelo outro (direção = ordem do menu).
+  // Quem pediu menos movimento no aparelho vê a troca na hora, sem animação.
+  const calmo = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  let saindo = null;
+  /** Faz a tela "sel" sair na direção "dir" (1 avança, -1 volta, 0 só some) e depois chama "fn". */
+  function trocaTela(sel, dir, fn) {
+    if (saindo) { clearTimeout(saindo.t); saindo = null; }
+    const el = document.querySelector(sel);
+    if (!el || calmo()) { fn(); return; }
+    el.dataset.dir = dir > 0 ? 'vai' : dir < 0 ? 'volta' : 'fica';
+    el.classList.remove('vista'); el.classList.add('saindo');
+    saindo = { t: setTimeout(() => { saindo = null; fn(); }, 150) };
+  }
+  /** Marcador do menu que desliza do item antigo até o novo.
+   *  marcaAntes: guarda onde o marcador está (chamar antes de redesenhar o menu);
+   *  deslizaMarca: leva o marcador até o item ".on" (chamar depois de desenhar). */
+  const marcas = {};
+  function marcaAntes(sel) {
+    document.querySelectorAll(sel).forEach((nav, i) => {
+      const m = nav.querySelector(':scope > .marca-nav'); if (!m || !m.offsetWidth) return;
+      const a = nav.getBoundingClientRect(), b = m.getBoundingClientRect();
+      marcas[sel + i] = { x: b.left - a.left - nav.clientLeft + nav.scrollLeft, y: b.top - a.top - nav.clientTop + nav.scrollTop, w: b.width, h: b.height };
+    });
+  }
+  function deslizaMarca(sel) {
+    document.querySelectorAll(sel).forEach((nav, i) => {
+      const on = nav.querySelector(':scope > .on'); if (!on || !on.offsetWidth) return;
+      let m = nav.querySelector(':scope > .marca-nav');
+      if (!m) { m = document.createElement('span'); m.className = 'marca-nav'; m.setAttribute('aria-hidden', 'true'); nav.prepend(m); }
+      nav.classList.add('com-marca');
+      const r = { x: on.offsetLeft, y: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight };
+      const pos = (q) => { m.style.transform = `translate(${q.x}px,${q.y}px)`; m.style.width = q.w + 'px'; m.style.height = q.h + 'px'; };
+      const k = sel + i; const p = marcas[k];
+      const mudou = p && (Math.abs(p.x - r.x) > 1 || Math.abs(p.y - r.y) > 1 || Math.abs(p.w - r.w) > 1);
+      m.style.transition = 'none'; pos(mudou && !calmo() ? p : r); void m.offsetWidth; m.style.transition = '';
+      if (mudou) pos(r);
+      marcas[k] = r;
+    });
+  }
+  /** Trocou de página numa lista: os cards entram do lado certo e a lista volta para a vista. */
+  function animaLista(el, dir, rola = true) {
+    if (!el) return;
+    if (!calmo()) { el.classList.remove('pg-vai', 'pg-volta'); void el.offsetWidth; el.classList.add(dir < 0 ? 'pg-volta' : 'pg-vai'); }
+    if (!rola) return;
+    const r = el.getBoundingClientRect(); const topo = document.querySelector('.c-topo, .p-topo');
+    const h = topo ? topo.getBoundingClientRect().height : 0;
+    if (r.top < h + 8) window.scrollBy({ top: r.top - h - 70, behavior: calmo() ? 'auto' : 'smooth' });
+  }
+  const mov = { trocaTela, marcaAntes, deslizaMarca, animaLista, calmo };
+
+  window.U = { mov, alerta, fecharAlerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, STATUS, PRESETS, avColor, IC, svcIcon, applyTheme, toast, logo, avatar, api, store, tema };
 })();
