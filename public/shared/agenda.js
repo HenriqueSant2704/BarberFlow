@@ -190,6 +190,39 @@
     const lum = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
     return { l, d, onL: lum(l) > 0.6 ? '#1c1915' : '#ffffff', onD: lum(d) > 0.5 ? '#17130d' : '#ffffff' };
   }
+  // ----- Letra do sistema: par de fontes (títulos + textos) escolhido em Configurações. Vale no site e no painel. -----
+  // g = família no Google Fonts (com os pesos usados), css = como entra no CSS (com reservas caso a fonte não carregue)
+  const SERIF = 'Georgia,"Times New Roman",serif'; const SANS = 'ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif';
+  const FAMILIAS = {
+    Fraunces: 'Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500',
+    Manrope: 'Manrope:wght@400;500;600;700;800',
+    'DM Serif Display': 'DM+Serif+Display:ital@0;1',
+    'DM Sans': 'DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800',
+    Cinzel: 'Cinzel:wght@500;600;700',
+    Jost: 'Jost:wght@400;500;600;700;800',
+    'Bebas Neue': 'Bebas+Neue',
+    Barlow: 'Barlow:wght@400;500;600;700;800',
+    Outfit: 'Outfit:wght@400;500;600;700;800',
+    'Space Grotesk': 'Space+Grotesk:wght@400;500;600;700',
+  };
+  const FONTES = {
+    classica: { nome: 'Clássica', desc: 'A de sempre. Títulos com serifa suave.', tit: 'Fraunces', titR: SERIF, txt: 'Manrope' },
+    editorial: { nome: 'Editorial', desc: 'Títulos de revista, fortes e elegantes.', tit: 'DM Serif Display', titR: SERIF, txt: 'DM Sans' },
+    luxo: { nome: 'Luxo', desc: 'Letras de placa gravada, tudo em maiúsculas.', tit: 'Cinzel', titR: SERIF, txt: 'Jost' },
+    letreiro: { nome: 'Letreiro', desc: 'Estreita e alta, como fachada de barbearia.', tit: 'Bebas Neue', titR: 'Impact,"Arial Narrow",sans-serif', txt: 'Barlow' },
+    moderna: { nome: 'Moderna', desc: 'Sem serifa, limpa e arredondada.', tit: 'Outfit', titR: SANS, txt: 'Outfit' },
+    urbana: { nome: 'Urbana', desc: 'Traço reto e atual, com personalidade.', tit: 'Space Grotesk', titR: SANS, txt: 'Space Grotesk' },
+  };
+  /** Fontes escolhidas (cai na Clássica se a escolha não existir), já no formato do CSS. */
+  function fonte(st) {
+    const k = st && FONTES[st.font] ? st.font : 'classica'; const f = FONTES[k];
+    return { k, nome: f.nome, tit: `"${f.tit}",${f.titR}`, txt: `"${f.txt}",${SANS}` };
+  }
+  /** Endereço do Google Fonts com as fontes de uma ou mais escolhas (ex.: ['classica'] ou todas para a vitrine). */
+  function fonteUrl(keys) {
+    const fams = []; (keys || ['classica']).forEach((k) => { const f = FONTES[k] || FONTES.classica; [f.tit, f.txt].forEach((x) => { if (!fams.includes(x)) fams.push(x); }); });
+    return 'https://fonts.googleapis.com/css2?' + fams.map((x) => 'family=' + FAMILIAS[x]).join('&') + '&display=swap';
+  }
   /** Iniciais da barbearia (sem a palavra "Barbearia"): "Barbearia Navalha de Ouro" vira "ND". */
   function shopInitials(name) {
     const n = String(name || '').trim();
@@ -197,5 +230,5 @@
     return base.split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'B';
   }
 
-  return { PRESETS, accent, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText, ESPERA_MSG, esperaText };
+  return { PRESETS, accent, FONTES, fonte, fonteUrl, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText, ESPERA_MSG, esperaText };
 });

@@ -27,6 +27,10 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.3); --shadow-lg:0 30px 80px rgba(0,0,0,.55); color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14.5px;line-height:1.5;margin:0}
+/* Algumas letras do sistema só têm um peso: não deixa o navegador "engordar" ela à força */
+body{font-synthesis-weight:none}
+/* Letreiro é estreita: um respiro entre as letras dos títulos */
+:root[data-fonte="letreiro"] :is(h1,h2,h3,h4,.serif){letter-spacing:.025em}
 h1,h2,h3,h4{margin:0;text-wrap:balance}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}

@@ -105,6 +105,18 @@
     R.setProperty('--acc-l', c.l); R.setProperty('--acc-d', c.d);
     R.setProperty('--on-acc-l', c.onL);
     R.setProperty('--on-acc-d', c.onD);
+    const f = A.fonte(st);
+    carregaFontes([f.k]);
+    R.setProperty('--f-display', f.tit); R.setProperty('--f-body', f.txt);
+    document.documentElement.dataset.fonte = f.k;
+  }
+  /** Baixa do Google as fontes das escolhas pedidas (só uma vez cada). */
+  const fontesOk = new Set();
+  function carregaFontes(keys) {
+    const m = document.getElementById('fonte-marca'); if (m && m.dataset.k) fontesOk.add(m.dataset.k); // a página já veio com ela
+    const novas = keys.filter((k) => !fontesOk.has(k)); if (!novas.length) return;
+    novas.forEach((k) => fontesOk.add(k));
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = A.fonteUrl(novas); document.head.appendChild(l);
   }
 
   // ----- Avisos que chamam atenção -----
@@ -261,5 +273,5 @@
   }
   const mov = { trocaTela, marcaAntes, deslizaMarca, animaLista, calmo };
 
-  window.U = { mov, alerta, fecharAlerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, STATUS, PRESETS, avColor, IC, svcIcon, applyTheme, toast, logo, avatar, api, store, tema };
+  window.U = { mov, alerta, fecharAlerta, marcar, ic, esc, money, money0, digits, maskPhone, MESES, DOW, DOWL, longDate, shortDate, cap, initials, STATUS, PRESETS, avColor, IC, svcIcon, applyTheme, carregaFontes, toast, logo, avatar, api, store, tema };
 })();
