@@ -285,9 +285,8 @@
     const dir = V.stepDir; V.stepDir = 0; // anima só quando troca de passo
     return `<div class="c-grid"><div class="col wiz">${faixaRem}
       <div class="wiz-topo">${stepper}<div class="wiz-barra" aria-hidden="true"><i style="width:${((V.step - 1 + (V.step === 3 && s ? 1 : 0)) / 3) * 100}%"></i></div></div>
-      <div class="wiz-tit ${dir ? (dir > 0 ? 'vai' : 'volta') : ''}"><small>Passo ${V.step} de 3</small><h1>${tit}</h1>${sub ? `<p>${sub}</p>` : ''}</div>
+      <div class="wiz-tit ${dir ? (dir > 0 ? 'vai' : 'volta') : ''}"><div class="wiz-linha">${V.step > 1 ? `<button type="button" class="wiz-volta" data-a="passo" data-n="${V.step - 1}">${ic('left', 16)}Voltar para ${PASSOS[V.step - 2][0].toLowerCase()}</button>` : ''}<small>Passo ${V.step} de 3</small></div><h1>${tit}</h1>${sub ? `<p>${sub}</p>` : ''}</div>
       <div class="${dir ? (dir > 0 ? 'vai' : 'volta') : ''}">${corpo}</div>
-      ${V.step > 1 ? `<button type="button" class="link wiz-volta" data-a="passo" data-n="${V.step - 1}">${ic('left', 16)}Voltar para ${PASSOS[V.step - 2][0].toLowerCase()}</button>` : ''}
     </div><aside class="c-lado">${resumo()}
       <div class="info-casa">${ic('info', 16)}<span>Chegue 5 minutos antes. Se não puder vir, mude ou cancele em <b>Meus horários</b> para liberar a vaga.</span></div></aside></div>`;
   }
@@ -402,9 +401,9 @@
         <div class="muted" style="font-size:12.5px;text-align:center">Pagamento na barbearia, no dia do atendimento.</div>
         <button type="button" class="link" style="align-self:center" data-a="notme">Não é ${esc(first(ME.name))}? Trocar</button>`;
     }
-    const back = ['cliente', 'novo'].includes(V.sheet) ? `<button type="button" class="link" style="align-self:flex-start" data-a="who" data-w="">${ic('left', 16)}Voltar</button>`
-      : V.sheet === 'quem' && espera ? `<button type="button" class="link" style="align-self:flex-start" data-a="espera-volta">${ic('left', 16)}Voltar</button>` : '';
-    return folha(anim, t, sub, mini + body + back);
+    const back = ['cliente', 'novo'].includes(V.sheet) ? `<button type="button" class="volta-topo" data-a="who" data-w="">${ic('left', 16)}Voltar</button>`
+      : V.sheet === 'quem' && espera ? `<button type="button" class="volta-topo" data-a="espera-volta">${ic('left', 16)}Voltar</button>` : '';
+    return folha(anim, t, sub, back + mini + body);
   }
   function folha(anim, t, sub, body, cls = '') {
     return `<div class="overlay ${anim ? 'nova' : ''}" data-a="sheet-close"></div><div class="folha ${cls} ${anim ? 'nova' : ''}" role="dialog" aria-modal="true" aria-label="${esc(t)}"><span class="alca"></span>
@@ -469,7 +468,7 @@
       : ed ? `<button type="button" class="btn pri bloco-btn" data-a="esp-ok" ${wait ? 'disabled' : ''}>${wait ? 'Salvando…' : `${ic('check', 18)}Salvar mudanças`}</button>`
       : ME ? `<button type="button" class="btn pri bloco-btn" data-a="esp-ok" ${wait ? 'disabled' : ''}>${wait ? 'Entrando na lista…' : `${ic('bell', 18)}Entrar na lista de espera`}</button>`
       : `<button type="button" class="btn pri bloco-btn" data-a="esp-ok">${ic('arrow', 18)}Continuar</button>`;
-    const body = `${topo}
+    const body = `${ed ? `<button type="button" class="volta-topo" data-a="esp-det" data-id="${ed.id}">${ic('left', 16)}Voltar ao pedido</button>` : ''}${topo}
       <div class="campo"><span class="lab">Que horas você pode?</span><div class="esp-chips">${pers.map(([k, r]) => `<button type="button" class="chip ${e.per === k ? 'on' : ''}" data-a="esp-per" data-v="${k}" aria-pressed="${e.per === k}">${r}${PER_HORAS[k] ? `<small>${PER_HORAS[k]}</small>` : ''}</button>`).join('')}</div></div>
       <div class="campo" id="e-esp-svc"><span class="lab">O que vai fazer? <span class="muted" style="font-weight:500">· pode somar</span></span><div class="esp-svcs">${S.services.map((s) => { const on = e.svcs.includes(s.id); return `<button type="button" class="esp-svc ${on ? 'on' : ''}" data-a="esp-svc" data-id="${s.id}" aria-pressed="${on}"><span class="ck">${on ? ic('check', 13) : ''}</span><span>${esc(s.name)}<small>${tempo(s.dur)}</small></span><b class="num">${money(s.price)}</b></button>`; }).join('')}</div>
         ${l.length ? `<div class="esp-tot"><span>${l.length > 1 ? `${l.length} serviços · ` : ''}${tempo(durDe(l))}</span><b class="preco">${money(precoDe(l))}</b></div>` : ''}</div>
@@ -477,7 +476,7 @@
       ${ja ? `<div class="faixa fina" data-t="aviso"><span class="f-ico">${ic('alert', 15)}</span><p>Você já está na fila desse dia (${ord(ja.pos)} lugar). Entrar de novo troca o pedido antigo.</p></div>` : ''}
       ${ME && !ed && !livres.length ? `<div class="achou"><span class="av">${esc(initials(ME.name))}</span><div><small>Entrando como</small><b>${esc(ME.name)}</b></div></div>` : ''}
       ${btn}
-      ${ed ? `<div class="esp-rodape"><button type="button" class="link" data-a="esp-det" data-id="${ed.id}">${ic('left', 16)}Voltar ao pedido</button><button type="button" class="link" data-a="esp-dia" data-id="${ed.id}">${ic('cal', 16)}Trocar o dia</button></div>` : ''}`;
+      ${ed ? `<div class="esp-rodape"><button type="button" class="link" data-a="esp-dia" data-id="${ed.id}">${ic('cal', 16)}Prefere outro dia? Trocar o dia</button></div>` : ''}`;
     if (ed) return ['Mudar seu pedido', `Lista de espera de ${diaCurto(ds)}.`, body];
     return ['Lista de espera', `${cap(longDate(ds))}${lotado ? ' está lotado' : ''}.`, body];
   }
@@ -533,38 +532,105 @@
   }
 
   // ===== Meus horários =====
+  // Três blocos, cada um com cara própria: o próximo horário (cartão escuro, em destaque),
+  // a lista de espera (bilhete tracejado na cor da marca, com o lugar na fila)
+  // e o histórico (lista discreta, separada por mês). No computador a fila fica na coluna da direita.
+  const emQuanto = (dd) => (dd === 0 ? 'É hoje' : dd === 1 ? 'É amanhã' : `Em ${dd} dias`);
   function vHorarios() {
     if (!ME) return entry('Meus horários', 'Veja e cancele seus agendamentos.');
     const next = sortAp(MYAP.filter((a) => a.status === 'agendado' && !isPast(a.date, a.time)));
     const past = sortAp(MYAP.filter((a) => !next.includes(a))).reverse();
-    // Histórico de visitas em páginas: 5 por vez no celular, 8 no computador
-    const hp = paginar(past, 'hpg', MOBILE.matches ? 5 : 8, past.length === 1 ? ' visita' : ' visitas');
-    const card = (a, fut) => {
-      const d = A.parse(a.date); const dd = daysTo(a.date);
-      const pil = fut ? '<span class="pilula viva" data-k="verde">Confirmado</span>'
-        : a.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não compareceu</span>'
-        : a.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : '<span class="pilula" data-k="cinza">Já passou</span>';
-      let extra = '';
-      if (fut) {
-        const lemb = S.remind && S.remind.on ? (a.remind && a.remind.status === 'enviado' ? ' · lembrete enviado no WhatsApp' : ` · lembrete no WhatsApp ${antes(S.remind.min)}`) : '';
-        extra = `<div class="faixa p"><span class="f-ico">${ic('clock', 15)}</span><p>${dd === 0 ? '<b>É hoje!</b>' : dd === 1 ? '<b>É amanhã!</b>' : `Faltam <b>${dd} dias</b>`} · ${money(a.price)} na barbearia${lemb}</p></div>
-          <div class="acoes ag-c-acoes"><button type="button" class="btn p" data-a="rem" data-id="${a.id}">${ic('repeat', 16)}Mudar horário</button><button type="button" class="btn p" data-a="det" data-id="${a.id}">${ic('list', 16)}Ver detalhes</button></div>`;
-      }
-      const tags = `${a.forName ? ` <span class="para-quem">para ${esc(a.forName)}</span>` : ''}${a.origin === 'espera' && fut ? ` <span class="para-quem esp">${ic('bell', 11)}da lista de espera</span>` : ''}`;
-      return `<div class="ag-c ${fut ? '' : 'velho'}"><button type="button" class="topo ag-c-abre" data-a="det" data-id="${a.id}" aria-label="Ver detalhes do horário de ${longDate(a.date)} às ${a.time}"><div class="quando"><div class="cal ${fut ? '' : 'velho'}"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(a.service)}${tags}</h4><p>${cap(DOWL[d.getDay()])} · ${a.time} às ${endOf(a.time, a.dur)}</p></div></div>${pil}</button>${extra}</div>`;
-    };
-    // Pedidos na lista de espera: posição na fila, detalhes do pedido e atalho para mudar
-    const espCard = (e) => {
-      const d = A.parse(e.date); const l = (e.items || []);
-      return `<div class="ag-c esp-c"><button type="button" class="topo ag-c-abre" data-a="esp-det" data-id="${e.id}" aria-label="Ver seu pedido na lista de espera de ${longDate(e.date)}"><div class="quando"><div class="cal esp"><small>${MESES[d.getMonth()].slice(0, 3)}</small><b>${d.getDate()}</b></div><div style="min-width:0"><h4>${esc(l.map((x) => x.name).join(' + ') || 'Lista de espera')}</h4><p>${cap(DOWL[d.getDay()])} · ${perTxt(e.period).toLowerCase()}${PER_HORAS[e.period] ? ` (${PER_HORAS[e.period]})` : ''}</p></div></div><span class="pilula" data-k="laranja">${ord(e.pos)} da fila</span></button>
-        <div class="faixa p"><span class="f-ico">${ic('bell', 15)}</span><p>Se vagar um horário ${e.period === 'qualquer' ? 'nesse dia' : `de ${perTxt(e.period).toLowerCase()}`}, a gente marca e te avisa no WhatsApp · ${money(espTot(e))} na barbearia</p></div>
-        <div class="acoes ag-c-acoes"><button type="button" class="btn p" data-a="esp-mudar" data-id="${e.id}">${ic('repeat', 16)}Mudar pedido</button><button type="button" class="btn p" data-a="esp-det" data-id="${e.id}">${ic('list', 16)}Ver detalhes</button></div></div>`;
-    };
-    return `<div class="pagina-t"><h1>Meus horários</h1><p>Olá, ${esc(first(ME.name))}! Toque em um horário para ver os detalhes, mudar ou cancelar.</p></div>
-      <div class="secao-t">${ic('cal', 20)}Próximos <small>${next.length}</small></div>
-      ${next.length ? `<div class="lista-cards">${next.map((a) => card(a, true)).join('')}</div>` : `<div class="cartao"><div class="vazio"><span class="ico-k">${ic('cal', 26)}</span><h4>Nenhum horário marcado</h4><p>Que tal agendar o próximo corte?</p><button type="button" class="btn pri" data-a="tab" data-t="agendar">${ic('plus', 17)}Agendar agora</button></div></div>`}
-      ${MYESP.length ? `<div class="secao-t" style="margin-top:26px">${ic('bell', 20)}Lista de espera <small>${MYESP.length}</small></div><div class="lista-cards">${MYESP.map(espCard).join('')}</div>` : ''}
-      ${past.length ? `<div class="secao-t" style="margin-top:26px" id="hist-topo">${ic('list', 20)}Histórico de visitas <small>${past.length}</small></div><div class="lista-cards" id="hist-lista">${hp.itens.map((a) => card(a, false)).join('')}</div>${hp.html}` : ''}`;
+    // Histórico de visitas em páginas: 6 por vez no celular, 8 no computador
+    const hp = paginar(past, 'hpg', MOBILE.matches ? 6 : 8, past.length === 1 ? ' visita' : ' visitas');
+    const [prim, ...outros] = next;
+    const tit = (i, t, sub) => `<div class="mh-t">${ic(i, 18)}<h2>${t}</h2>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    const prox = prim ? heroAp(prim) + (outros.length ? `<div class="mh-mais"><small class="mh-rot">Também marcado${outros.length > 1 ? 's' : ''}</small>${outros.map(miniAp).join('')}</div>` : '')
+      : `<div class="mh-vazio"><span class="ico-k">${ic('cal', 24)}</span><div><b>Nenhum horário marcado</b><small>${MYESP.length ? 'Você está na lista de espera. Se vagar, a gente marca e te avisa.' : 'Que tal agendar o próximo corte?'}</small></div><button type="button" class="btn pri" data-a="tab" data-t="agendar">${ic('plus', 16)}Agendar</button></div>`;
+    return `<div class="pagina-t mh-cab"><div><h1>Meus horários</h1><p>Olá, ${esc(first(ME.name))}! Toque em um horário para ver os detalhes, mudar ou cancelar.</p></div>
+        <button type="button" class="btn pri mh-novo" data-a="tab" data-t="agendar">${ic('plus', 16)}Agendar outro</button></div>
+      <div class="mh ${MYESP.length ? 'com-esp' : ''}">
+        <section class="mh-sec mh-prox">${tit('cal', next.length > 1 ? 'Próximos horários' : 'Próximo horário', next.length > 1 ? `${next.length} marcados` : '')}${prox}</section>
+        <aside class="mh-lado">${MYESP.length ? `<section class="mh-sec">${tit('bell', 'Lista de espera', `${MYESP.length} pedido${MYESP.length > 1 ? 's' : ''}`)}${MYESP.map(espBilhete).join('')}</section>` : ''}
+          ${resumoVisitas(past)}</aside>
+        ${past.length ? `<section class="mh-sec mh-hist-sec" id="hist-topo">${tit('list', 'Histórico de visitas', `${past.length} no total`)}<div class="mh-hist" id="hist-lista">${histGrupos(hp.itens)}</div>${hp.html}</section>` : ''}
+      </div>`;
+  }
+  /** Tags do horário: para quem é e se veio da lista de espera. */
+  const tagsAp = (a, fut) => `${a.forName ? `<span class="para-quem">para ${esc(a.forName)}</span>` : ''}${a.origin === 'espera' && fut ? `<span class="para-quem esp">${ic('bell', 11)}da lista de espera</span>` : ''}`;
+  /** Próximo horário: cartão escuro tipo bilhete, com a data grande, a contagem e as ações. */
+  function heroAp(a) {
+    const d = A.parse(a.date); const dd = daysTo(a.date); const l = itensAp(a);
+    const lemb = S.remind && S.remind.on ? (a.remind && a.remind.status === 'enviado' ? 'Lembrete enviado no WhatsApp' : `Lembrete no WhatsApp ${antes(S.remind.min)}`) : '';
+    const tags = tagsAp(a, true);
+    return `<article class="mh-hero"><button type="button" class="mh-hero-abre" data-a="det" data-id="${a.id}" aria-label="Ver detalhes do horário de ${longDate(a.date)} às ${a.time}">
+        <span class="mh-data"><small>${DOW[d.getDay()]}</small><b>${d.getDate()}</b><small>${MESES[d.getMonth()].slice(0, 3)}</small></span>
+        <span class="mh-hero-tx"><span class="mh-conta ${dd === 0 ? 'hoje' : ''}">${emQuanto(dd)}</span>
+          <b class="mh-hora numd">${a.time}<i>às ${endOf(a.time, a.dur)}</i></b>
+          <span class="mh-svc">${esc(l.map((x) => x.name).join(' + '))}</span>${tags ? `<span class="mh-tags">${tags}</span>` : ''}</span>
+        <span class="pilula viva" data-k="verde">Confirmado</span></button>
+      <div class="mh-picote" aria-hidden="true"></div>
+      <div class="mh-hero-pe"><span>${ic('money', 15)}<b class="num">${money(a.price)}</b> na barbearia</span>${lemb ? `<span>${ic('whats', 15)}${lemb}</span>` : ''}</div>
+      <div class="mh-hero-acoes"><button type="button" class="btn" data-a="rem" data-id="${a.id}">${ic('repeat', 16)}Mudar horário</button><button type="button" class="btn" data-a="det" data-id="${a.id}">${ic('list', 16)}Ver detalhes</button></div></article>`;
+  }
+  /** Outros horários marcados (ex.: da família): linha compacta. */
+  function miniAp(a) {
+    const d = A.parse(a.date);
+    return `<button type="button" class="mh-linha futuro" data-a="det" data-id="${a.id}"><span class="mh-dia"><b>${d.getDate()}</b><small>${MESES[d.getMonth()].slice(0, 3)}</small></span>
+      <span class="mh-l-tx"><b>${esc(a.service)}</b><small>${cap(DOWL[d.getDay()])} · ${a.time} às ${endOf(a.time, a.dur)} · ${emQuanto(daysTo(a.date)).toLowerCase()}</small>${tagsAp(a, true) ? `<span class="mh-tags">${tagsAp(a, true)}</span>` : ''}</span>
+      <span class="pilula" data-k="verde">Confirmado</span>${ic('right', 16)}</button>`;
+  }
+  /** Pedido na lista de espera: bilhete com o lugar na fila, a fila desenhada e a faixa do período no dia. */
+  function espBilhete(e) {
+    const d = A.parse(e.date); const l = e.items || []; const pos = Number(e.pos) || 1;
+    const frente = pos - 1;
+    // a fila: a cadeira na frente, quem está antes (até 4) e você
+    const fila = `<div class="mh-fila" aria-label="${frente ? `${frente} pessoa${frente > 1 ? 's' : ''} na sua frente` : 'Você é o primeiro da fila'}">
+      <span class="mh-cadeira">${ic('scissors', 14)}</span><i class="mh-seta"></i>
+      ${Array.from({ length: Math.min(frente, 4) }, () => `<span class="mh-pessoa">${ic('user', 13)}</span>`).join('')}${frente > 4 ? `<span class="mh-pessoa mais">+${frente - 4}</span>` : ''}
+      <span class="mh-pessoa voce">Você</span></div>`;
+    return `<article class="mh-esp"><div class="mh-esp-topo"><span class="mh-ao-vivo"></span>Esperando vaga<small>${e.at ? `desde ${quando(e.at)}` : ''}</small></div>
+      <button type="button" class="mh-esp-abre" data-a="esp-det" data-id="${e.id}" aria-label="Ver seu pedido na lista de espera de ${longDate(e.date)}">
+        <span class="mh-lugar"><b class="numd">${ord(pos)}</b><small>na fila</small></span>
+        <span class="mh-esp-tx"><small>${cap(DOWL[d.getDay()])}, ${d.getDate()} de ${MESES[d.getMonth()].toLowerCase()}</small><b>${esc(l.map((x) => x.name).join(' + ') || 'Lista de espera')}</b>
+          <span>${perTxt(e.period)}${PER_HORAS[e.period] ? ` · ${PER_HORAS[e.period]}` : ''}</span></span></button>
+      ${faixaPeriodo(e.date, e.period)}
+      ${fila}<p class="mh-esp-nota">${frente ? `<b>${frente === 1 ? '1 pessoa' : `${frente} pessoas`} na sua frente.</b> ` : '<b>Você é o próximo!</b> '}Se vagar ${e.period === 'qualquer' ? 'um horário nesse dia' : `um horário de ${perTxt(e.period).toLowerCase()}`}, a gente marca sozinho e te avisa no WhatsApp.</p>
+      <div class="mh-esp-pe"><span>Total <b class="num">${money(espTot(e))}</b></span><div><button type="button" class="btn p" data-a="esp-mudar" data-id="${e.id}">${ic('repeat', 15)}Mudar pedido</button><button type="button" class="btn p" data-a="esp-det" data-id="${e.id}">${ic('list', 15)}Detalhes</button></div></div></article>`;
+  }
+  /** Faixa do dia (abre → fecha) com o pedaço do período que o cliente pediu. */
+  function faixaPeriodo(ds, per) {
+    const hh = A.dayHours(S.settings, A.parse(ds).getDay()); const o = A.toMin(hh.open), c = A.toMin(hh.close);
+    if (!(c > o)) return '';
+    const [ini, fim] = per === 'manha' ? [o, 720] : per === 'tarde' ? [720, 1080] : per === 'noite' ? [1080, c] : [o, c];
+    const a = Math.max(o, ini), b = Math.min(c, fim); if (b <= a) return '';
+    const pc = (m) => ((m - o) / (c - o)) * 100;
+    const h = (m) => `${Math.floor(m / 60)}h${m % 60 ? A.pad(m % 60) : ''}`;
+    return `<div class="mh-periodo" aria-hidden="true"><div class="mh-trilho"><i style="left:${pc(a)}%;width:${pc(b) - pc(a)}%"></i></div>
+      <div class="mh-trilho-h">${a === o ? `<span class="ini marca">${h(o)}</span>` : `${pc(a) > 16 ? `<span class="ini">${h(o)}</span>` : ''}<span class="marca" style="left:${pc(a)}%">${h(a)}</span>`}
+        ${b === c ? `<span class="fim marca">${h(c)}</span>` : `<span class="marca" style="left:${pc(b)}%">${h(b)}</span>${pc(b) < 84 ? `<span class="fim">${h(c)}</span>` : ''}`}</div></div>`;
+  }
+  /** Histórico agrupado por mês, em linhas finas. */
+  function histGrupos(l) {
+    const grupos = [];
+    l.forEach((a) => { const k = a.date.slice(0, 7); const g = grupos[grupos.length - 1]; if (g && g.k === k) g.l.push(a); else grupos.push({ k, l: [a] }); });
+    const pil = (a) => (a.status === 'faltou' ? '<span class="pilula" data-k="vermelho">Não veio</span>' : a.status === 'realizado' ? '<span class="pilula" data-k="verde">Atendido</span>' : '<span class="pilula" data-k="cinza">Já passou</span>');
+    return grupos.map((g) => { const d = A.parse(g.k + '-01');
+      return `<div class="mh-mes"><small class="mh-rot">${MESES[d.getMonth()]}${d.getFullYear() !== A.parse(TODAY).getFullYear() ? ` de ${d.getFullYear()}` : ''}</small>
+        ${g.l.map((a) => { const dt = A.parse(a.date); return `<button type="button" class="mh-linha ${a.status === 'faltou' ? 'faltou' : ''}" data-a="det" data-id="${a.id}" aria-label="Ver detalhes do horário de ${longDate(a.date)} às ${a.time}">
+          <span class="mh-dia"><b>${dt.getDate()}</b><small>${DOW[dt.getDay()]}</small></span>
+          <span class="mh-l-tx"><b>${esc(a.service)}</b><small>${a.time} às ${endOf(a.time, a.dur)}</small>${tagsAp(a, false) ? `<span class="mh-tags">${tagsAp(a, false)}</span>` : ''}</span>
+          ${pil(a)}${ic('right', 16)}</button>`; }).join('')}</div>`; }).join('');
+  }
+  /** Coluna da direita no computador: um resumo das visitas e o atalho para agendar. */
+  function resumoVisitas(past) {
+    const feitas = past.filter((a) => a.status === 'realizado');
+    const since = A.parse(ME.since);
+    const conta = {}; feitas.forEach((a) => itensAp(a).forEach((x) => { conta[x.name] = (conta[x.name] || 0) + 1; }));
+    const fav = Object.entries(conta).sort((p, q) => q[1] - p[1])[0];
+    const ult = feitas[0]; const dias = ult ? -daysTo(ult.date) : null;
+    if (!feitas.length) return '';
+    return `<div class="mh-resumo"><div class="mh-resumo-n"><b class="numd">${feitas.length}</b><span>visita${feitas.length === 1 ? '' : 's'} feita${feitas.length === 1 ? '' : 's'}<small>desde ${MESES[since.getMonth()].toLowerCase()} de ${since.getFullYear()}</small></span></div>
+      <ul>${fav ? `<li>${ic('scissors', 15)}<span>Seu preferido</span><b>${esc(fav[0])}</b></li>` : ''}${ult ? `<li>${ic('clock', 15)}<span>Última visita</span><b>${dias === 0 ? 'hoje' : dias === 1 ? 'ontem' : `há ${dias} dias`}</b></li>` : ''}</ul></div>`;
   }
 
   // ----- paginação das listas (igual à do painel) -----
