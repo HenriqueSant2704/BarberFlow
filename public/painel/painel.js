@@ -414,8 +414,8 @@
       else if (x.date <= TODAY) acoes = `<div class="acoes"><button type="button" class="btn ok-soft p" data-a="st" data-id="${x.id}" data-s="realizado">${ic('check', 15)}Atendido</button><button type="button" class="btn verm p" data-a="st" data-id="${x.id}" data-s="faltou">${ic('x', 15)}Não veio</button></div>`;
       else acoes = `<div class="acoes">${c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}WhatsApp</a>` : ''}<button type="button" class="btn verm p" data-a="cancel-ask" data-id="${x.id}">${ic('x', 15)}Cancelar</button></div>`;
     }
-    return `<div class="ag"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
-      <button type="button" class="quem" data-a="ap" data-id="${x.id}">${x.forName ? `<span class="av-k">${esc(initials(x.forName))}</span>` : avk(c)}<div><b>${esc(x.forName || c.name)}</b><small>${x.forName ? `${ic('users', 13)}pedido de ${esc(first(c.name))}` : `${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}`}</small></div></button>
+    return `<div class="ag" role="button" tabindex="0" data-a="ap" data-id="${x.id}" aria-label="Ver detalhes do horário de ${esc(x.forName || c.name)} às ${x.time}"><div class="topo"><span class="hr">${ic('clock', 15)}${x.time} – ${endOf(x.time, x.dur)}</span>${pil}</div>
+      <div class="quem">${x.forName ? `<span class="av-k">${esc(initials(x.forName))}</span>` : avk(c)}<div><b>${esc(x.forName || c.name)}</b><small>${x.forName ? `${ic('users', 13)}pedido de ${esc(first(c.name))}` : `${ic('whats', 13)}${maskPhone(c.phone) || 'sem telefone'}`}</small></div></div>
       <div class="det"><span class="tag">${svcIcon(x.service).replace('<svg', '<svg width="14" height="14"')}${esc(x.service)}</span><b class="num">${money(x.price)}</b></div>${origemTag(x)}${lembreteTag(x)}${acoes}</div>`;
   }
   function vMes() {
@@ -1204,6 +1204,8 @@
   document.addEventListener('click', (e) => {
     if (Som.enabled()) Som.unlock();
     const el = e.target.closest('[data-a]'); if (!el) return;
+    // Card da agenda: abre os detalhes em qualquer parte, menos no link do WhatsApp e na área dos botões
+    if (el.classList.contains('ag') && e.target.closest('a, .acoes, .confirma')) return;
     const a = el.dataset.a; const id = el.dataset.id; const v = el.dataset.v;
     switch (a) {
       case 'olho': { const i = $('#l-pass'); i.type = i.type === 'password' ? 'text' : 'password'; el.innerHTML = ic(i.type === 'password' ? 'eye' : 'eyeoff', 18); el.setAttribute('aria-label', i.type === 'password' ? 'Mostrar senha' : 'Esconder senha'); break; }
