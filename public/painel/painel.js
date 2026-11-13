@@ -719,8 +719,8 @@
             <div class="campo"><span class="lab">Cor de destaque <span class="muted" style="font-weight:500">· ${esc(corAtual)}</span></span><div class="cores">${[...CORES, ...extra].map((k) => `<button type="button" class="cor ${d.color === k ? 'on' : ''}" style="--c:${PRESETS[k][1]}" data-a="cor" data-v="${k}" aria-label="${PRESETS[k][0]}" title="${PRESETS[k][0]}"></button>`).join('')}
               <label class="cor outra ${d.color === 'custom' ? 'on' : ''}" title="Escolher outra cor" ${d.color === 'custom' ? `style="--c:${d.custom};background:${d.custom}"` : ''}><input type="color" value="${d.custom}" data-ch="cor-custom" aria-label="Escolher outra cor"></label></div></div>
             <div class="campo"><span class="lab">Letra do sistema <span class="muted" style="font-weight:500">· ${esc(A.fonte(d).nome)}</span></span>
-              <div class="fontes">${Object.entries(A.FONTES).map(([k, f]) => `<button type="button" class="fonte ${A.fonte(d).k === k ? 'on' : ''}" data-a="fonte" data-v="${k}" aria-pressed="${A.fonte(d).k === k}" style="--ft:'${f.tit}';--fb:'${f.txt}'"><span class="ft-aa">Aa<i>${ic('check', 13)}</i></span><b>${esc(f.nome)}</b><small>${esc(f.desc)}</small><span class="ft-ex"><em>14:30</em>Corte · R$ 65</span></button>`).join('')}</div>
-              <span class="ajuda">Toque para ver na hora: o painel e a prévia abaixo já mudam. Vale para o painel e para o site do cliente depois de salvar.</span></div>
+              <div class="fontes">${Object.entries(A.FONTES).map(([k, f]) => `<button type="button" class="fonte ${A.fonte(d).k === k ? 'on' : ''}" data-a="fonte" data-v="${k}" aria-pressed="${A.fonte(d).k === k}" title="${esc(f.desc)}" style="--ft:'${f.tit}';--fb:'${f.txt}'"><span class="ft-aa"><b>Aa</b><i>Aa</i></span><small>${esc(f.nome)}</small></button>`).join('')}</div>
+              <span class="ajuda">Toque para ver como fica. Gostou? É só salvar.</span></div>
             ${previa(d)}
           </div></section>
         <section class="cartao"><div class="cartao-topo"><h3><span class="ico-k p">${ic('pin', 17)}</span>O que o cliente vê</h3></div>
