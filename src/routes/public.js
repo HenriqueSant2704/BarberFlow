@@ -65,6 +65,8 @@ r.post('/agendar', ah(async (req, res) => {
     const forName = client.perDay > 1 ? String(req.body.forName || '').replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40) || null : null;
     const appt = await createAppointment(c, { clientId: Number(client.id), date, time, serviceId, serviceIds, origin: 'site', enforceWindow: true, device, ipHash, forName });
     await espera.saiSeLotou(c, settings, client, date);
+    // Trocando o dia de um pedido da lista de espera: marcou com vaga, sai da fila antiga
+    if (req.body.trocaEspera) await c.query("UPDATE waitlist SET status = 'saiu' WHERE id = $1 AND client_id = $2 AND status = 'aguardando'", [cleanId(req.body.trocaEspera), client.id]);
     const { rows: n } = await c.query("INSERT INTO notifications (type, appointment_id) VALUES ('novo', $1) RETURNING id, created_at", [appt.id]);
     return { client, appt, notif: n[0] };
   });
@@ -80,7 +82,7 @@ r.get('/me', requireClient, ah(async (req, res) => {
   const { rows } = await db.query('SELECT * FROM clients WHERE id = $1', [req.clientId]);
   if (!rows[0]) fail(401, 'Cadastro não encontrado. Entre de novo com seu WhatsApp.');
   const { rows: ap } = await db.query(
-    "SELECT * FROM appointments WHERE client_id = $1 AND status <> 'cancelado' ORDER BY date DESC, time DESC LIMIT 60", [req.clientId]);
+    "SELECT * FROM appointments WHERE client_id = $1 AND status <> 'cancelado' ORDER BY date DESC, time DESC LIMIT 200", [req.clientId]);
   const { rows: esp } = await db.query(
     `SELECT w.*, ${espera.POS_SQL} FROM waitlist w WHERE w.client_id = $1 AND w.status = 'aguardando' AND w.date >= $2 ORDER BY w.date`, [req.clientId, today()]);
   res.json({ client: repo.mapClient(rows[0]), appointments: ap.map(repo.mapAppt), espera: esp.map(repo.mapEspera) });
@@ -200,6 +202,8 @@ r.post('/espera', ah(async (req, res) => {
     const appts = await repo.getApptsOn(c, date);
     const livre = slots.find((s) => !Agenda.isPast(date, s, today(), nowMin()) && espera.noPeriodo(s, period) && Agenda.fits(settings, blocked, appts, date, s, conta.dur));
     if (livre) fail(409, `Ainda tem horário livre nesse dia para isso (${livre}). Escolha o horário na agenda.`);
+    // Trocando o dia do pedido: sai da fila antiga junto (não conta no limite de dias)
+    if (req.body.trocaEspera) await c.query("UPDATE waitlist SET status = 'saiu' WHERE id = $1 AND client_id = $2 AND status = 'aguardando'", [cleanId(req.body.trocaEspera), client.id]);
     const { rows: outras } = await c.query(
       "SELECT count(DISTINCT date)::int AS n FROM waitlist WHERE client_id = $1 AND status = 'aguardando' AND date >= $2 AND date <> $3", [client.id, today(), date]);
     if (outras[0].n >= MAX_FILAS) fail(403, `Você já está na lista de espera de ${MAX_FILAS} dias. Saia de uma em "Meus horários" para entrar em outra.`);
@@ -211,6 +215,31 @@ r.post('/espera', ah(async (req, res) => {
     return { client, espera: repo.mapEspera(w[0]) };
   });
   res.status(201).json({ espera: result.espera, client: result.client, token: signClient(result.client.id) });
+}));
+
+/** Mudar o pedido (período e serviços) sem perder o lugar na fila: a data de entrada não muda. */
+r.patch('/me/espera/:id', requireClient, ah(async (req, res) => {
+  const id = cleanId(req.params.id);
+  const period = espera.PERIODOS.includes(req.body.period) ? req.body.period : 'qualquer';
+  const settings = await repo.getSettings();
+  const result = await db.tx(async (c) => {
+    await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['cli:' + req.clientId]);
+    const { rows } = await c.query("SELECT * FROM waitlist WHERE id = $1 AND client_id = $2 AND status = 'aguardando' AND date >= $3 FOR UPDATE", [id, req.clientId, today()]);
+    const w = rows[0];
+    if (!w) fail(404, 'Esse pedido não está mais na lista de espera. Veja em "Meus horários".');
+    const conta = await contaDe(c, req.body.serviceIds);
+    // Já tem vaga no período escolhido? Então é só marcar, não precisa esperar
+    const blocked = await repo.getBlocked(c, w.date);
+    const slots = Agenda.startSlots(settings, blocked, w.date);
+    const appts = await repo.getApptsOn(c, w.date);
+    const livre = slots.find((s) => !Agenda.isPast(w.date, s, today(), nowMin()) && espera.noPeriodo(s, period) && Agenda.fits(settings, blocked, appts, w.date, s, conta.dur));
+    if (livre) fail(409, `Ainda tem horário livre nesse período (${livre}). Marque direto pela agenda.`);
+    const items = conta.l.map((x) => ({ serviceId: String(x.id), name: x.name, price: Number(x.price), dur: x.duration }));
+    await c.query('UPDATE waitlist SET period = $1, items = $2, duration = $3 WHERE id = $4', [period, JSON.stringify(items), conta.dur, id]);
+    const { rows: up } = await c.query(`SELECT w.*, ${espera.POS_SQL} FROM waitlist w WHERE w.id = $1`, [id]);
+    return repo.mapEspera(up[0]);
+  });
+  res.json({ espera: result });
 }));
 
 r.delete('/me/espera/:id', requireClient, ah(async (req, res) => {
