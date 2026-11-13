@@ -5,17 +5,17 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const repo = require('./repo');
-const { accent, shopInitials } = require('../public/shared/agenda');
+const { accent, fonte, fonteUrl, shopInitials } = require('../public/shared/agenda');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
 const ler = (p) => fs.readFileSync(path.join(PUBLIC, p), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let atual = { shopName: 'Barbearia', logo: null, color: 'latao', custom: '#8c6a2b' };
+let atual = { shopName: 'Barbearia', logo: null, color: 'latao', custom: '#8c6a2b', font: 'classica' };
 let icone = null; // { tipo, dados, versao }
 
 function guardar(st) {
-  atual = { shopName: st.shopName || 'Barbearia', logo: st.logo || null, color: st.color, custom: st.custom };
+  atual = { shopName: st.shopName || 'Barbearia', logo: st.logo || null, color: st.color, custom: st.custom, font: st.font };
   icone = null;
 }
 
@@ -61,6 +61,7 @@ function pagina(qual) {
   const t = getModelos();
   const ic = getIcone();
   const c = accent(atual);
+  const f = fonte(atual);
   const nome = esc(atual.shopName);
   const urlIcone = `/marca/icone?v=${ic.versao}`;
   const titulo = qual === 'painel' ? `Painel · ${nome}` : `${nome} · Agendar horário`;
@@ -73,9 +74,11 @@ function pagina(qual) {
 <script>${t.js}</script>`;
   const cabeca = `<link rel="icon" href="${urlIcone}" type="${ic.tipo}">`
     + (ic.tipo === 'image/svg+xml' ? '' : `\n<link rel="apple-touch-icon" href="${urlIcone}">`)
-    + `\n<style>:root{--acc-l:${c.l};--acc-d:${c.d};--on-acc-l:${c.onL};--on-acc-d:${c.onD}}\n${t.css}</style>`;
+    + `\n<link rel="stylesheet" id="fonte-marca" data-k="${f.k}" href="${esc(fonteUrl([f.k]))}">`
+    + `\n<style>:root{--acc-l:${c.l};--acc-d:${c.d};--on-acc-l:${c.onL};--on-acc-d:${c.onD};--f-display:${f.tit};--f-body:${f.txt}}\n${t.css}</style>`;
   return t[qual]
     .replace(/<title>[^<]*<\/title>/, () => `<title>${titulo}</title>`)
+    .replace('<html lang="pt-BR">', () => `<html lang="pt-BR" data-fonte="${f.k}">`)
     .replace('<!--MARCA-CABECA-->', () => cabeca)
     .replace('<!--MARCA-CARREGANDO-->', () => tela);
 }

@@ -4,7 +4,7 @@ const { REMIND_MSG } = require('../public/shared/agenda');
 
 const mapSettings = (r) => ({
   shopName: r.shop_name, tagline: r.tagline, address: r.address, logo: r.logo,
-  color: r.color, custom: r.custom_color,
+  color: r.color, custom: r.custom_color, font: r.font || 'classica',
   open: r.open_time, close: r.close_time, lunchStart: r.lunch_start, lunchEnd: r.lunch_end,
   closed: (r.closed_days || []).map(Number), bookFrom: r.book_from, bookTo: r.book_to,
   phone: r.phone || '', hours: r.day_hours || {},

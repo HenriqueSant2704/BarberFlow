@@ -144,6 +144,9 @@ END $$;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS info jsonb; -- detalhes do aviso (ex.: horário antigo de quem remarcou)
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS wait_on  boolean  NOT NULL DEFAULT true; -- lista de espera ligada (só aparece com o WhatsApp dos lembretes conectado)
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS wait_min smallint NOT NULL DEFAULT 60;   -- só passa a vaga se faltar pelo menos isso para o horário
+
+-- Letra do sistema (par de fontes escolhido em Configurações; ver FONTES em public/shared/agenda.js)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS font text NOT NULL DEFAULT 'classica';
 -- Fila de quem quer um horário num dia lotado. items = [{serviceId, name, price, dur}]
 CREATE TABLE IF NOT EXISTS waitlist (
   id             serial PRIMARY KEY,
