@@ -162,3 +162,27 @@ CREATE TABLE IF NOT EXISTS waitlist (
 );
 CREATE INDEX IF NOT EXISTS waitlist_date_idx   ON waitlist(date, status);
 CREATE INDEX IF NOT EXISTS waitlist_client_idx ON waitlist(client_id);
+
+-- ----- Agendado x feito e sininho do cliente (v2.0) -----
+-- conta: o que o cliente agendou, o que foi feito (com o motivo de cada mudança), desconto e edições depois de fechado.
+-- Formato em public/shared/agenda.js (mudancasConta). Vazio = atendimento sem fechamento detalhado.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS conta jsonb;
+-- Avisos do sininho do site: client_id vazio = para todos os clientes
+CREATE TABLE IF NOT EXISTS client_notices (
+  id             serial PRIMARY KEY,
+  client_id      integer REFERENCES clients(id) ON DELETE CASCADE,
+  type           text    NOT NULL,
+  title          text    NOT NULL,
+  body           text    NOT NULL,
+  appointment_id integer REFERENCES appointments(id) ON DELETE SET NULL,
+  action         text,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS client_notices_idx ON client_notices(client_id, created_at DESC);
+-- Quem já leu cada aviso (os avisos para todos são lidos um a um por cliente)
+CREATE TABLE IF NOT EXISTS client_notice_reads (
+  notice_id integer NOT NULL REFERENCES client_notices(id) ON DELETE CASCADE,
+  client_id integer NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  read_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (notice_id, client_id)
+);

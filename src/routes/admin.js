@@ -8,6 +8,7 @@ const notify = require('../notify');
 const wa = require('../whatsapp');
 const lembretes = require('../lembretes');
 const espera = require('../espera');
+const avisos = require('../avisos');
 const { setAdminCookie, clearAdminCookie, requireAdmin } = require('../auth');
 const { createAppointment, findOrCreateClient } = require('../booking');
 const { Agenda, ah, fail, today, nowMin, cleanName, cleanPhone, cleanId } = require('../util');
@@ -113,6 +114,46 @@ function cleanConta(items, discount) {
   if (disc < 0 || disc > sub) fail(400, 'O desconto não pode ser maior que o valor dos serviços.');
   return { items: lista, discount: disc, total: Math.round((sub - disc) * 100) / 100 };
 }
+const r2 = (v) => Math.round(Number(v || 0) * 100) / 100;
+const motivoDe = (v) => String(v || '').trim().slice(0, 120);
+/** Itens como o cliente agendou, antes de qualquer ajuste. */
+const itensAgendados = (a) => (Array.isArray(a.items) && a.items.length ? a.items : [{ serviceId: a.service_id == null ? null : String(a.service_id), name: a.service_name, price: Number(a.price) }])
+  .map((x) => ({ serviceId: x.serviceId == null ? null : String(x.serviceId), name: String(x.name), price: r2(x.price) }));
+/**
+ * O detalhe do fechamento: o que foi feito (com o motivo de cada preço diferente), o que saiu do agendado e o desconto.
+ * Todo ajuste precisa de motivo, porque fica no histórico e o cliente também vê.
+ */
+function cleanFechamento(b, conta, edit) {
+  if (!b || typeof b !== 'object') return null;
+  const fs = Array.isArray(b.feitos) ? b.feitos : [];
+  if (fs.length !== conta.items.length) fail(400, 'Confira os serviços do atendimento.');
+  const feitos = conta.items.map((it, i) => {
+    const f = fs[i] || {};
+    const tipo = ['agendado', 'trocado', 'acrescentado'].includes(f.tipo) ? f.tipo : 'acrescentado';
+    const base = f.base == null || f.base === '' ? null : r2(f.base);
+    if (base != null && !(base >= 0)) fail(400, 'Valor de referência inválido.');
+    const de = tipo === 'trocado' && f.de && f.de.name ? { serviceId: f.de.serviceId == null ? null : String(f.de.serviceId), name: String(f.de.name).slice(0, 60), price: r2(f.de.price) } : null;
+    const mudou = base != null && Math.abs(it.price - base) >= 0.005;
+    const motivo = mudou ? motivoDe(f.motivo) : '';
+    if (mudou && !motivo) fail(400, `Escreva por que ${it.name} ficou ${it.price > base ? 'mais caro' : 'mais barato'}.`);
+    return { serviceId: it.serviceId, name: it.name, price: it.price, base, tipo: de || tipo !== 'trocado' ? tipo : 'acrescentado', de, motivo };
+  });
+  const tirados = (Array.isArray(b.tirados) ? b.tirados : []).slice(0, 20).map((t) => {
+    const name = String((t && t.name) || '').trim().slice(0, 60); if (!name) fail(400, 'Serviço tirado sem nome.');
+    const motivo = motivoDe(t.motivo); if (!motivo) fail(400, `Escreva por que ${name} saiu.`);
+    return { serviceId: t.serviceId == null ? null : String(t.serviceId), name, price: r2(t.price), motivo };
+  });
+  let desconto = null;
+  if (conta.discount > 0) {
+    const d = b.desconto || {};
+    const motivo = motivoDe(d.motivo); if (!motivo) fail(400, 'Escreva o motivo do desconto.');
+    const pct = d.tipo === '%' ? Math.min(100, Math.max(0, Number(d.pct) || 0)) : null;
+    desconto = { tipo: d.tipo === '%' ? '%' : 'R$', pct, valor: conta.discount, motivo };
+  }
+  const motivoEdicao = motivoDe(b.motivoEdicao);
+  if (edit && !motivoEdicao) fail(400, 'Escreva por que está mudando os valores. O cliente recebe esse motivo.');
+  return { feitos, tirados, desconto, motivoEdicao };
+}
 
 // Quantas faltas seguidas o cliente tem agora: olha os horários do mais recente para o mais
 // antigo e para no primeiro atendimento. Cancelados e ainda marcados não contam para nada.
@@ -150,11 +191,32 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
     if (req.body.items !== undefined) {
       // Fechar atendimento: o que foi feito de verdade, com desconto. O financeiro usa o total.
       const conta = cleanConta(req.body.items, req.body.discount);
+      const edit = a.status === 'realizado';
+      const fech = cleanFechamento(req.body.conta, conta, edit);
+      // Guarda o agendado x o feito (com os motivos) para o histórico do painel e do site
+      let detalhe = null;
+      if (fech) {
+        const previsto = a.conta && a.conta.previsto ? a.conta.previsto : { items: itensAgendados(a), total: r2(a.price) };
+        const edicoes = a.conta && Array.isArray(a.conta.edicoes) ? a.conta.edicoes.slice(-20) : [];
+        if (edit) edicoes.push({ at: new Date().toISOString(), motivo: fech.motivoEdicao, de: r2(a.price), para: conta.total, visto: false });
+        detalhe = { previsto, feitos: fech.feitos, tirados: fech.tirados, desconto: fech.desconto, total: conta.total, fechadoEm: (a.conta && a.conta.fechadoEm) || new Date().toISOString(), edicoes };
+      }
       const unico = conta.items.length === 1 && !conta.discount;
       up = await c.query(
         `UPDATE appointments SET status = $1, items = $2, discount = $3, price = $4, service_name = $5,
-           service_id = COALESCE($6, service_id), updated_at = now() WHERE id = $7 RETURNING *`,
-        [status, unico ? null : JSON.stringify(conta.items), conta.discount, conta.total, conta.items.map((x) => x.name).join(' + ').slice(0, 200), unico ? conta.items[0].serviceId : null, id]);
+           service_id = COALESCE($6, service_id), conta = $8, updated_at = now() WHERE id = $7 RETURNING *`,
+        [status, unico ? null : JSON.stringify(conta.items), conta.discount, conta.total, conta.items.map((x) => x.name).join(' + ').slice(0, 200), unico ? conta.items[0].serviceId : null, id, detalhe ? JSON.stringify(detalhe) : (a.conta ? JSON.stringify(a.conta) : null)]);
+      // O cliente fica sabendo no sininho: fechou com mudanças ou o barbeiro editou depois
+      if (detalhe && (edit || Agenda.mudancasConta(detalhe).length)) {
+        await avisos.criar(c, { clientId: a.client_id, tipo: 'conta', apId: a.id, ...Agenda.avisoConta(detalhe, { date: a.date, time: a.time, edit }) });
+      }
+    } else if (status !== 'realizado' && a.conta && a.conta.previsto) {
+      // Voltou para aguardando (ou mudou para não veio): volta o que o cliente tinha agendado
+      const p = a.conta.previsto; const its = Array.isArray(p.items) && p.items.length ? p.items : itensAgendados(a);
+      up = await c.query(
+        `UPDATE appointments SET status = $1, items = $2, discount = 0, price = $3, service_name = $4, service_id = COALESCE($5, service_id), conta = NULL, updated_at = now()
+          WHERE id = $6 RETURNING *`,
+        [status, its.length > 1 ? JSON.stringify(its) : null, r2(p.total), its.map((x) => x.name).join(' + ').slice(0, 200), its.length === 1 && its[0].serviceId ? Number(its[0].serviceId) : null, id]);
     } else up = await c.query('UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2 RETURNING *', [status, id]);
     // Bloqueio automático: só por faltas SEGUIDAS. Um atendimento no meio zera a conta,
     // e desbloquear também (faltas marcadas antes do desbloqueio não contam mais).
@@ -167,7 +229,7 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
           const { rows: cl } = await c.query(
             'UPDATE clients SET blocked = true, blocked_reason = $2 WHERE id = $1 AND NOT blocked RETURNING *',
             [a.client_id, `Faltou ${seguidas} vezes seguidas sem avisar`]);
-          if (cl[0]) blockedClient = repo.mapClient(cl[0]);
+          if (cl[0]) { blockedClient = repo.mapClient(cl[0]); await avisos.bloqueado(c, a.client_id, cl[0].blocked_reason); }
         }
       }
     }
@@ -227,8 +289,11 @@ r.put('/clientes/:id', ah(async (req, res) => {
   const phone = cleanPhone(req.body.phone);
   const dup = await db.query('SELECT id FROM clients WHERE phone = $1 AND id <> $2', [phone, id]);
   if (dup.rows[0]) fail(409, 'Esse WhatsApp já está em outro cadastro.');
+  const antes = await db.query('SELECT name, phone FROM clients WHERE id = $1', [id]);
+  if (!antes.rows[0]) fail(404, 'Cliente não encontrado.');
   const { rows } = await db.query('UPDATE clients SET name = $1, phone = $2 WHERE id = $3 RETURNING *', [name, phone, id]);
-  if (!rows[0]) fail(404, 'Cliente não encontrado.');
+  const mud = [antes.rows[0].name !== name ? `nome: ${name}` : '', antes.rows[0].phone !== phone ? 'WhatsApp atualizado' : ''].filter(Boolean);
+  if (mud.length) await avisos.criar(null, { clientId: id, tipo: 'dados', titulo: 'A barbearia atualizou seus dados', texto: `${mud.join(' · ')}. Se algo estiver errado, ajuste em Perfil ou fale com a barbearia.` });
   res.json({ client: repo.mapClient(rows[0]) });
 }));
 
@@ -237,8 +302,10 @@ r.put('/clientes/:id/limite', ah(async (req, res) => {
   const id = cleanId(req.params.id);
   const v = req.body.perDay == null || req.body.perDay === '' ? null : Number(req.body.perDay);
   if (v !== null && v !== 0 && (!Number.isInteger(v) || v < 2 || v > 10)) fail(400, 'Escolha de 2 a 10 horários por dia.');
+  const antes = await db.query('SELECT per_day FROM clients WHERE id = $1', [id]);
   const { rows } = await db.query('UPDATE clients SET per_day = $2 WHERE id = $1 RETURNING *', [id, v || null]);
   if (!rows[0]) fail(404, 'Cliente não encontrado.');
+  if (v && v > 1 && Number(antes.rows[0].per_day || 0) !== v) await avisos.criar(null, { clientId: id, tipo: 'familia', titulo: `Agora você pode marcar ${v} horários no mesmo dia`, texto: 'Para você e sua família. Na hora de agendar aparece "Para quem é esse horário?".', acao: 'agendar' });
   res.json({ client: repo.mapClient(rows[0]) });
 }));
 
@@ -253,6 +320,7 @@ r.post('/clientes/:id/bloquear', ah(async (req, res) => {
       "UPDATE appointments SET status = 'cancelado', updated_at = now() WHERE client_id = $1 AND status = 'agendado' AND date >= $2 RETURNING *",
       [id, today()]);
     await c.query("UPDATE waitlist SET status = 'saiu' WHERE client_id = $1 AND status = 'aguardando'", [id]);
+    await avisos.bloqueado(c, id, reason);
     return { client: repo.mapClient(rows[0]), cancelled: cancel.map(repo.mapAppt) };
   });
   res.json(out);
@@ -261,6 +329,7 @@ r.post('/clientes/:id/bloquear', ah(async (req, res) => {
 r.post('/clientes/:id/desbloquear', ah(async (req, res) => {
   const { rows } = await db.query("UPDATE clients SET blocked = false, blocked_reason = '', faltas_zeradas_em = now() WHERE id = $1 RETURNING *", [cleanId(req.params.id)]);
   if (!rows[0]) fail(404, 'Cliente não encontrado.');
+  await avisos.desbloqueado(null, rows[0].id);
   res.json({ client: repo.mapClient(rows[0]) });
 }));
 
@@ -339,7 +408,9 @@ r.put('/configuracoes', ah(async (req, res) => {
   await db.query(`UPDATE settings SET ${sets.join(', ')} WHERE id = 1`, vals);
   const settings = await repo.getSettings();
   marca.guardar(settings); // tela de carregamento e ícone da aba já saem com a logo, o nome e a cor novos
-  res.json({ settings });
+  // Mudou algo que todo cliente precisa saber (nome, endereço, WhatsApp, horário): aviso no sininho do site
+  const av = await avisos.configMudou(cur, settings);
+  res.json({ settings, avisos: av });
 }));
 
 // ----- WhatsApp dos lembretes -----
@@ -369,20 +440,25 @@ function cleanService(b) {
 r.post('/servicos', ah(async (req, res) => {
   const s = cleanService(req.body);
   const { rows } = await db.query('INSERT INTO services (name, price, duration, position) VALUES ($1, $2, $3, (SELECT coalesce(max(position), 0) + 1 FROM services)) RETURNING *', [s.name, s.price, s.dur]);
-  res.status(201).json({ service: repo.mapService(rows[0]) });
+  const av = await avisos.servicoMudou(null, repo.mapService(rows[0]));
+  res.status(201).json({ service: repo.mapService(rows[0]), avisos: av });
 }));
 r.put('/servicos/:id', ah(async (req, res) => {
   const s = cleanService(req.body);
-  const { rows } = await db.query('UPDATE services SET name = $1, price = $2, duration = $3 WHERE id = $4 AND active RETURNING *', [s.name, s.price, s.dur, cleanId(req.params.id)]);
+  const id = cleanId(req.params.id);
+  const antes = await db.query('SELECT * FROM services WHERE id = $1 AND active', [id]);
+  const { rows } = await db.query('UPDATE services SET name = $1, price = $2, duration = $3 WHERE id = $4 AND active RETURNING *', [s.name, s.price, s.dur, id]);
   if (!rows[0]) fail(404, 'Serviço não encontrado.');
-  res.json({ service: repo.mapService(rows[0]) });
+  const av = await avisos.servicoMudou(antes.rows[0] ? repo.mapService(antes.rows[0]) : null, repo.mapService(rows[0]));
+  res.json({ service: repo.mapService(rows[0]), avisos: av });
 }));
 r.delete('/servicos/:id', ah(async (req, res) => {
   const { rows } = await db.query('SELECT count(*)::int AS n FROM services WHERE active');
   if (rows[0].n <= 1) fail(400, 'Mantenha pelo menos um serviço.');
   // Não apaga de verdade: o histórico de atendimentos continua apontando para ele
-  await db.query('UPDATE services SET active = false WHERE id = $1', [cleanId(req.params.id)]);
-  res.json({ ok: true });
+  const { rows: sv } = await db.query('UPDATE services SET active = false WHERE id = $1 AND active RETURNING *', [cleanId(req.params.id)]);
+  const av = sv[0] ? await avisos.servicoMudou(repo.mapService(sv[0]), null) : [];
+  res.json({ ok: true, avisos: av });
 }));
 
 // ----- Dias bloqueados -----
@@ -394,6 +470,7 @@ r.post('/bloqueios', ah(async (req, res) => {
   const { rowCount } = await db.query('INSERT INTO blocked_days (date, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING', [date, why]);
   if (!rowCount) fail(409, 'Esse dia já está bloqueado.');
   const { rows } = await db.query("SELECT count(*)::int AS n FROM appointments WHERE date = $1 AND status = 'agendado'", [date]);
+  await avisos.geral(null, { tipo: 'folga', titulo: `Fechado no dia ${avisos.ddmm(date)}`, texto: `${why ? `${why.replace(/\.$/, '')}. ` : ''}Nesse dia não tem atendimento; os outros dias seguem normais.` });
   res.status(201).json({ ok: true, existing: rows[0].n });
 }));
 r.delete('/bloqueios/:date', ah(async (req, res) => {

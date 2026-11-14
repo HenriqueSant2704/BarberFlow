@@ -5,6 +5,7 @@ const repo = require('../repo');
 const { signClient, readClient, requireClient } = require('../auth');
 const { createAppointment, findOrCreateClient, contaDe } = require('../booking');
 const espera = require('../espera');
+const avisos = require('../avisos');
 const notify = require('../notify');
 const wa = require('../whatsapp');
 const guard = require('../guard');
@@ -86,6 +87,15 @@ r.get('/me', requireClient, ah(async (req, res) => {
   const { rows: esp } = await db.query(
     `SELECT w.*, ${espera.POS_SQL} FROM waitlist w WHERE w.client_id = $1 AND w.status = 'aguardando' AND w.date >= $2 ORDER BY w.date`, [req.clientId, today()]);
   res.json({ client: repo.mapClient(rows[0]), appointments: ap.map(repo.mapAppt), espera: esp.map(repo.mapEspera) });
+}));
+
+// Sininho: avisos da barbearia. Sem login, só os avisos para todos.
+r.get('/avisos', ah(async (req, res) => {
+  res.json(await avisos.lista(readClient(req)));
+}));
+r.post('/avisos/lidos', requireClient, ah(async (req, res) => {
+  await avisos.lidos(req.clientId, req.body.ids);
+  res.json({ ok: true });
 }));
 
 r.put('/me', requireClient, ah(async (req, res) => {

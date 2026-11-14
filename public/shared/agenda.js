@@ -223,6 +223,40 @@
     const fams = []; (keys || ['classica']).forEach((k) => { const f = FONTES[k] || FONTES.classica; [f.tit, f.txt].forEach((x) => { if (!fams.includes(x)) fams.push(x); }); });
     return 'https://fonts.googleapis.com/css2?' + fams.map((x) => 'family=' + FAMILIAS[x]).join('&') + '&display=swap';
   }
+
+  // ----- Fechamento do atendimento: o que o cliente agendou x o que foi feito -----
+  // conta = { previsto:{items,total}, feitos:[{serviceId,name,price,base,tipo,de,motivo}], tirados:[{serviceId,name,price,motivo}],
+  //           desconto:{tipo:'R$'|'%',pct,valor,motivo}|null, total, fechadoEm, edicoes:[{at,motivo,de,para,visto}] }
+  // tipo: 'agendado' (o que o cliente marcou), 'trocado' (no lugar de de = {serviceId,name,price}), 'acrescentado' (pedido na hora ou extra).
+  // base: preço de tabela (ou o agendado); se o cobrado for diferente, "motivo" explica.
+  const reais = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }).replace(/\s/g, ' ');
+  const pctTxt = (p) => String(Math.round(Number(p) * 100) / 100).replace('.', ',') + '%';
+  const mudouPreco = (f) => f.base != null && Math.abs(Number(f.price) - Number(f.base)) >= 0.005;
+  /** Tudo o que mudou do agendado para o feito, uma linha por mudança (painel, site e sininho usam o mesmo texto). */
+  function mudancasConta(c) {
+    if (!c) return [];
+    const l = [];
+    (c.tirados || []).forEach((t) => l.push({ k: 'tirado', t: `Tirou ${t.name}`, v: -Number(t.price || 0), motivo: t.motivo || '' }));
+    (c.feitos || []).forEach((f) => {
+      if (f.tipo === 'trocado') l.push({ k: 'trocado', t: `Trocou ${(f.de && f.de.name) || f.de} por ${f.name}`, v: null, motivo: '' });
+      if (f.tipo === 'acrescentado') l.push({ k: 'acrescentado', t: `Acrescentou ${f.name}`, v: Number(f.price || 0), motivo: '' });
+      if (mudouPreco(f)) l.push({ k: 'preco', t: `${f.name}: ${reais(f.base)} → ${reais(f.price)}`, v: Number(f.price) - Number(f.base), motivo: f.motivo || '' });
+    });
+    if (c.desconto && Number(c.desconto.valor) > 0) l.push({ k: 'desconto', t: `Desconto${c.desconto.tipo === '%' ? ` de ${pctTxt(c.desconto.pct)}` : ''}`, v: -Number(c.desconto.valor), motivo: c.desconto.motivo || '' });
+    return l;
+  }
+  /** Aviso do sininho do cliente quando o barbeiro fecha (com mudanças) ou edita o valor de um atendimento. */
+  function avisoConta(c, o) {
+    const [, m, d] = String(o.date || '').split('-');
+    const quando = `${d}/${m}${o.time ? ` às ${o.time}` : ''}`;
+    const min = (t) => { t = String(t || '').trim().replace(/\.$/, ''); return t.length > 1 && t[1] !== t[1].toUpperCase() ? t[0].toLowerCase() + t.slice(1) : t; };
+    const frases = mudancasConta(c).map((x) => `${x.t}${x.motivo ? ` (${min(x.motivo)})` : ''}`);
+    if (o.edit) {
+      const e = (c.edicoes || [])[c.edicoes.length - 1] || {};
+      return { titulo: 'O valor do seu atendimento mudou', texto: `Atendimento de ${quando}: ${reais(e.de)} → ${reais(e.para)}. Motivo: ${String(e.motivo || '').replace(/\.$/, '')}.` };
+    }
+    return { titulo: 'Seu atendimento foi finalizado com mudanças', texto: `Atendimento de ${quando}. Agendado ${reais(c.previsto && c.previsto.total)}, pago ${reais(c.total)}. ${frases.join('; ')}.` };
+  }
   /** Iniciais da barbearia (sem a palavra "Barbearia"): "Barbearia Navalha de Ouro" vira "ND". */
   function shopInitials(name) {
     const n = String(name || '').trim();
@@ -230,5 +264,5 @@
     return base.split(' ').filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'B';
   }
 
-  return { PRESETS, accent, FONTES, fonte, fonteUrl, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText, ESPERA_MSG, esperaText };
+  return { PRESETS, accent, FONTES, fonte, fonteUrl, shopInitials, STEP, TZ, stepOf, startSlots, startBusy, pad, toMin, fromMin, iso, parse, addDays, isDate, isTime, todayIn, nowMinIn, isBlocked, dayHours, daySlots, busySet, fits, isPast, tidyName, nameError, phoneDigits, phoneError, REMIND_MSG, remindText, ESPERA_MSG, esperaText, reais, pctTxt, mudouPreco, mudancasConta, avisoConta };
 });

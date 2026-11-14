@@ -25,6 +25,11 @@
   };
   const MAX_SVCS = 4;
   let MYESP = []; // pedidos na lista de espera
+  // Sininho: avisos só para este cliente (valor do atendimento mudou, bloqueio...) e para todos (serviço novo, preço, nome...)
+  let AVISOS = [];
+  const LIDOS_KEY = 'barbearia_avisos_lidos'; // quem não entrou guarda neste aparelho o que já leu
+  const lidosLocal = () => { try { const l = JSON.parse(store.get(LIDOS_KEY) || '[]'); return Array.isArray(l) ? l.map(String) : []; } catch (e) { return []; } };
+  const naoLidos = () => AVISOS.filter((n) => !n.lido);
 
   const token = () => store.get(TOKEN_KEY);
   const authH = () => (token() ? { Authorization: 'Bearer ' + token() } : {});
@@ -145,7 +150,23 @@
     if (from > to) { S.busy = []; return; }
     S.busy = await api('GET', `/api/public/ocupados?from=${from}&to=${to}`);
   }
+  async function loadAvisos() {
+    try {
+      const l = await api('GET', '/api/public/avisos', null, authH());
+      const loc = lidosLocal();
+      AVISOS = (l || []).map((n) => ({ ...n, lido: n.lido || (!ME && loc.includes(String(n.id))) }));
+    } catch (e) { AVISOS = []; }
+  }
+  async function marcarLidos(ids) {
+    const l = AVISOS.filter((n) => ids.includes(String(n.id)) && !n.lido); if (!l.length) return;
+    l.forEach((n) => { n.lido = true; });
+    if (!ME) { store.set(LIDOS_KEY, JSON.stringify([...new Set([...lidosLocal(), ...l.map((n) => String(n.id))])].slice(-200))); return; }
+    try { await api('POST', '/api/public/avisos/lidos', { ids: l.map((n) => n.id) }, authH()); } catch (e) { /* tenta de novo na próxima vez */ }
+  }
   async function loadMe() {
+    try { await loadMe0(); } finally { await loadAvisos(); }
+  }
+  async function loadMe0() {
     if (!token()) { ME = null; MYAP = []; MYESP = []; return; }
     try {
       const d = await api('GET', '/api/public/me', null, authH());
@@ -177,7 +198,7 @@
       <header class="c-topo"><div class="c-topo-in">
         <button type="button" class="c-logo" data-a="tab" data-t="inicio">${window.U.logo(S.settings, 44)}<div><b>${esc(S.settings.shopName)}</b><small data-st="${now.st}">${now.r}</small></div></button>
         <nav class="c-nav" aria-label="Menu">${TABS.map(tabBtn(18)).join('')}</nav>
-        ${window.U.tema.botao('c-tema')}<a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
+        ${sinoBtn()}${window.U.tema.botao('c-tema')}<a class="c-portal" href="/painel/" rel="nofollow" title="Área do barbeiro">${ic('lock', 13)}<span>Portal</span></a>
       </div></header>
       <main class="c-main ${animTab ? 'vista' : ''}" data-dir="${dirTab > 0 ? 'vai' : dirTab < 0 ? 'volta' : 'fica'}">${view}</main>
       ${barra ? bookbar() : ''}
@@ -186,6 +207,10 @@
     if (keep) window.scrollTo(0, top); else window.scrollTo(0, 0);
     window.U.mov.deslizaMarca(NAVS);
     wireCarousel();
+  }
+  function sinoBtn() {
+    const n = naoLidos().length;
+    return `<button type="button" class="c-sino ${n ? 'tem' : ''}" data-a="avisos" aria-label="Notificações${n ? `: ${n} nova${n > 1 ? 's' : ''}` : ''}" title="Notificações">${ic('bell', 18)}${n ? `<b>${n > 9 ? '9+' : n}</b>` : ''}</button>`;
   }
   function myNext() {
     return sortAp(MYAP.filter((a) => a.status === 'agendado' && !isPast(a.date, a.time)))[0] || null;
@@ -236,9 +261,16 @@
         <div class="ini-acoes" style="margin-top:16px"><button type="button" class="btn-claro" data-a="tab" data-t="agendar">${ic('cal', 18)}Agendar meu horário</button></div>
         <div class="bv-selos"><span>${ic('clock', 14)}Sem fila</span><span>${ic('check', 14)}Pague na barbearia</span></div></div>
         <div class="ini-selo" aria-hidden="true">${st.logo ? `<img src="${esc(st.logo)}" alt="">` : `<span>${esc(initials(st.shopName.replace(/barbearia/i, '').trim() || st.shopName) || 'B')}</span><small>Barbearia</small>`}</div></section>
-      ${prox}${espIni}
+      ${avisoIni()}${prox}${espIni}
       <div class="ini-grid"><div class="col">${carousel}</div><div class="col">${infos}</div></div>
     </div>`;
+  }
+  /** No Início: o aviso mais recente que é só para este cliente e ainda não foi lido. */
+  function avisoIni() {
+    const n = naoLidos().filter((x) => x.para === 'voce')[0]; if (!n) return '';
+    const mais = naoLidos().length - 1;
+    return `<button type="button" class="ini-aviso" data-a="aviso" data-id="${n.id}"><span class="av-ico" data-k="${AV_TIPO[n.tipo] ? AV_TIPO[n.tipo][1] : 'ouro'}">${ic(AV_TIPO[n.tipo] ? AV_TIPO[n.tipo][0] : 'bell', 17)}</span>
+      <span><small>${ic('bell', 12)}Aviso da barbearia para você${mais > 0 ? ` · +${mais}` : ''}</small><b>${esc(n.titulo)}</b><span>${esc(n.texto)}</span></span>${ic('right', 18)}</button>`;
   }
   // Bolinhas do carrossel acompanham o deslize
   function wireCarousel() {
@@ -375,6 +407,7 @@
     const wait = V.busyAction;
     let t, sub, body;
     if (V.sheet === 'detalhe') return folha(anim, ...sheetDetalhe());
+    if (V.sheet === 'avisos') return folha(anim, ...sheetAvisos(), 'f-avisos');
     if (V.sheet === 'espera') return folha(anim, ...sheetEspera());
     if (V.sheet === 'espdet') return folha(anim, ...sheetEspDet());
     if (V.sheet === 'remarca') return folha(anim, ...sheetRemarca());
@@ -411,6 +444,60 @@
       ${body}</div>`;
   }
 
+  // ===== Sininho: notificações da barbearia =====
+  const AV_TIPO = {
+    conta: ['tag', 'ouro'], bloqueio: ['ban', 'vermelho'], desbloqueio: ['check', 'verde'], familia: ['users', 'azul'], dados: ['user', 'azul'],
+    servico: ['scissors', 'verde'], preco: ['money', 'ouro'], servico_saiu: ['x', 'cinza'], nome: ['home', 'ouro'], horario: ['clock', 'azul'], endereco: ['pin', 'azul'], folga: ['cal', 'laranja'], contato: ['whats', 'verde'],
+  };
+  function sheetAvisos() {
+    const f = V.avF || 'todas';
+    const l = AVISOS.filter((n) => f === 'todas' || (f === 'voce' ? n.para === 'voce' : n.para === 'todos'));
+    const nl = naoLidos().length;
+    const pg = paginar(l, 'apg', MOBILE.matches ? 5 : 6, l.length === 1 ? ' aviso' : ' avisos');
+    const nVoce = AVISOS.filter((n) => n.para === 'voce').length;
+    const seg = ME ? `<div class="av-seg" role="group" aria-label="Filtrar">${[['todas', 'Todas', AVISOS.length], ['voce', 'Para você', nVoce], ['todos', 'Da barbearia', AVISOS.length - nVoce]].map(([k, r, n]) => `<button type="button" class="${f === k ? 'on' : ''}" data-a="av-f" data-v="${k}" aria-pressed="${f === k}">${r}<b>${n}</b></button>`).join('')}</div>` : '';
+    const card = (n) => { const t = AV_TIPO[n.tipo] || ['bell', 'ouro'];
+      const ir = n.apId ? 'Ver atendimento' : n.acao === 'agendar' ? 'Agendar' : n.acao === 'falar' && S.settings.phone ? 'Falar com a barbearia' : '';
+      return `<button type="button" class="av-it ${n.lido ? '' : 'novo'}" data-a="aviso" data-id="${n.id}"><span class="av-ico" data-k="${t[1]}">${ic(t[0], 17)}</span>
+        <span class="av-tx"><small>${n.para === 'voce' ? 'Para você' : 'Para todos os clientes'} · ${quando(n.at)}</small><b>${esc(n.titulo)}</b><span>${esc(n.texto)}</span>${ir ? `<i class="av-ir">${ir}${ic('right', 13)}</i>` : ''}</span>
+        ${n.lido ? '' : '<i class="av-dot" aria-label="Não lida"></i>'}</button>`; };
+    const body = `${seg}${nl ? `<div class="av-acoes"><span>${nl} não lida${nl > 1 ? 's' : ''}</span><button type="button" class="link" data-a="av-todas">${ic('check', 15)}Marcar todas como lidas</button></div>` : ''}
+      <div class="av-lista" id="av-lista">${pg.itens.map(card).join('') || `<div class="av-vazio"><span class="ico-k">${ic('bell', 22)}</span><b>Nada por aqui</b><small>${f === 'voce' ? 'Quando a barbearia mexer em algo seu, o aviso aparece aqui.' : 'Novidades da barbearia aparecem aqui.'}</small></div>`}</div>${pg.html}
+      ${!ME ? `<button type="button" class="ini-entrar av-entrar" data-a="tab" data-t="horarios"><span class="ico-k">${ic('phone', 17)}</span><span><b>Entre com seu WhatsApp</b><small>Para ver também os avisos só seus</small></span>${ic('right', 18)}</button>` : ''}`;
+    return ['Notificações', nl ? `Você tem ${nl} aviso${nl > 1 ? 's' : ''} novo${nl > 1 ? 's' : ''}.` : 'Tudo lido por aqui.', body];
+  }
+  function abrirAviso(id) {
+    const n = AVISOS.find((x) => String(x.id) === String(id)); if (!n) return;
+    marcarLidos([String(n.id)]);
+    if (n.apId && MYAP.some((a) => String(a.id) === String(n.apId))) { V.detalhe = String(n.apId); V.cancelAsk = null; V.deAvisos = V.sheet === 'avisos'; V.sheet = 'detalhe'; render(true); return; }
+    if (n.acao === 'agendar') { V.sheet = null; goTab('agendar'); return; }
+    if (n.acao === 'falar' && S.settings.phone) window.open(waLink('Olá! Vi o aviso no site e queria falar sobre ele.'), '_blank', 'noopener');
+    if (V.sheet !== 'avisos') V.sheet = 'avisos';
+    render(true);
+  }
+
+  /** Histórico do atendimento: o que o cliente agendou, o que foi feito e o porquê de cada mudança. */
+  function contaCli(a) {
+    const c = a.conta; const prev = c.previsto; const mud = A.mudancasConta(c);
+    const ln = (nome, val, nota, cls = '') => `<div class="cc-l ${cls}"><span>${nome}${nota ? `<em>${nota}</em>` : ''}</span><b class="num">${val}</b></div>`;
+    const feitos = c.feitos.map((f) => {
+      const nt = [];
+      if (f.tipo === 'trocado') nt.push(`No lugar de ${esc(f.de.name)}`);
+      if (f.tipo === 'acrescentado') nt.push(f.serviceId ? 'Acrescentado na hora' : 'Extra');
+      if (A.mudouPreco(f)) nt.push(`${money(f.base)} → ${money(f.price)}${f.motivo ? ` · ${esc(f.motivo)}` : ''}`);
+      return ln(esc(f.name), money(f.price), nt.join(' · '), f.tipo !== 'agendado' || A.mudouPreco(f) ? 'mudou' : '');
+    }).join('');
+    const tir = (c.tirados || []).map((t) => ln(`<s>${esc(t.name)}</s>`, `<s>${money(t.price)}</s>`, `Tirado${t.motivo ? ` · ${esc(t.motivo)}` : ''}`, 'tirado')).join('');
+    const d = c.desconto && c.desconto.valor > 0 ? ln(`Desconto${c.desconto.tipo === '%' ? ` de ${A.pctTxt(c.desconto.pct)}` : ''}`, `− ${money(c.desconto.valor)}`, esc(c.desconto.motivo || ''), 'desc') : '';
+    const dif = Math.round((c.total - prev.total) * 100) / 100;
+    const eds = (c.edicoes || []).map((e) => `<li><b>Mudou ${quando(e.at)}</b><span>${money(e.de)} → ${money(e.para)}</span><span>Motivo: ${esc(e.motivo)}</span></li>`).join('');
+    return `<div class="det-conta conta-cli"><small>Você agendou</small><div class="cc-prev"><span>${esc(prev.items.map((x) => x.name).join(' + '))}</span><b class="num">${money(prev.total)}</b></div>
+      <small>${mud.length ? 'O que foi feito' : 'O que foi feito · igual ao agendado'}</small>${feitos}${tir}${d}
+      <div class="tot"><span>Total pago</span><b class="preco">${money(c.total)}</b></div>
+      ${dif ? `<span class="cc-dif" data-k="${dif > 0 ? 'laranja' : 'verde'}">${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que você agendou</span>` : ''}
+      ${eds ? `<small>Mudanças depois do atendimento</small><ul class="cc-eds">${eds}</ul>` : ''}</div>`;
+  }
+
   // ===== Detalhes de um horário (Meus horários): ver tudo, mudar dia/hora ou cancelar =====
   function sheetDetalhe() {
     const a = MYAP.find((x) => String(x.id) === String(V.detalhe));
@@ -425,14 +512,15 @@
         <div style="min-width:0"><b>${cap(longDate(a.date))}</b><span>${ic('clock', 14)}${a.time} às ${endOf(a.time, a.dur)} · ${tempo(a.dur)}</span></div>${pil}</div>
       ${a.forName ? `<div class="det-l">${ic('users', 16)}<span>Para <b>${esc(a.forName)}</b></span></div>` : ''}
       ${a.origin === 'espera' ? `<div class="faixa fina" data-t="ok"><span class="f-ico">${ic('bell', 15)}</span><p>Esse horário veio da <b>lista de espera</b>: vagou e a gente marcou para você.</p></div>` : ''}
-      <div class="det-conta"><small>${it.length > 1 ? 'Serviços' : 'Serviço'}</small>${it.map((x) => `<div><span>${esc(x.name)}</span><b class="num">${money(x.price)}</b></div>`).join('')}
-        ${a.discount ? `<div class="desc"><span>Desconto</span><b class="num">− ${money(a.discount)}</b></div>` : ''}<div class="tot"><span>${fut ? 'Total, pago na barbearia' : 'Total'}</span><b class="preco">${money(a.price)}</b></div></div>
+      ${a.conta && a.status === 'realizado' ? contaCli(a) : `<div class="det-conta"><small>${it.length > 1 ? 'Serviços' : 'Serviço'}</small>${it.map((x) => `<div><span>${esc(x.name)}</span><b class="num">${money(x.price)}</b></div>`).join('')}
+        ${a.discount ? `<div class="desc"><span>Desconto</span><b class="num">− ${money(a.discount)}</b></div>` : ''}<div class="tot"><span>${fut ? 'Total, pago na barbearia' : 'Total'}</span><b class="preco">${money(a.price)}</b></div></div>`}
       ${lemb ? `<div class="det-l">${ic('whats', 16)}<span>${lemb}</span></div>` : ''}
       ${fut && addr ? `<a class="det-l link-l" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${ic('pin', 16)}<span>${esc(addr)}</span>${ic('right', 16)}</a>` : ''}
       ${fut ? (String(V.cancelAsk) === String(a.id) ? `<div class="faixa pisca" data-t="erro"><span class="f-ico">${ic('alert', 18)}</span><div><strong>Cancelar esse horário?</strong><p>A vaga fica livre para outra pessoa. Se quiser só trocar o dia ou a hora, use <b>Mudar dia ou horário</b>.</p><div class="acoes" style="margin-top:10px"><button type="button" class="btn p" style="background:var(--vermelho);border-color:var(--vermelho);color:#fff" data-a="cancel-yes" data-id="${a.id}" ${V.busyAction ? 'disabled' : ''}>Sim, cancelar</button><button type="button" class="btn p" data-a="cancel-no">Manter horário</button></div></div></div>`
         : `<div class="det-acoes"><button type="button" class="btn pri bloco-btn" data-a="rem" data-id="${a.id}">${ic('repeat', 18)}Mudar dia ou horário</button>
           <div class="duas-b">${S.settings.phone ? `<a class="btn" href="${waLink(`Olá! Tenho horário ${diaCurto(a.date)} às ${a.time} (${a.service}).`)}" target="_blank" rel="noopener">${ic('whats', 16)}Falar com a barbearia</a>` : ''}<button type="button" class="btn verm" data-a="cancel" data-id="${a.id}">${ic('x', 16)}Cancelar horário</button></div></div>`) : ''}`;
-    return [fut ? 'Seu horário' : 'Horário passado', fut ? 'Tudo sobre o seu agendamento.' : '', body];
+    const volta = V.deAvisos ? `<button type="button" class="volta-topo" data-a="avisos">${ic('left', 16)}Voltar para as notificações</button>` : '';
+    return [fut ? 'Seu horário' : 'Horário passado', fut ? 'Tudo sobre o seu agendamento.' : a.conta && A.mudancasConta(a.conta).length ? 'O que você agendou e o que foi feito no dia.' : '', volta + body];
   }
   const diaCurto = (ds) => `${DOW[A.parse(ds).getDay()].toLowerCase()}, ${shortDate(ds)}`;
 
@@ -556,7 +644,7 @@
       </div>`;
   }
   /** Tags do horário: para quem é e se veio da lista de espera. */
-  const tagsAp = (a, fut) => `${a.forName ? `<span class="para-quem">para ${esc(a.forName)}</span>` : ''}${a.origin === 'espera' && fut ? `<span class="para-quem esp">${ic('bell', 11)}da lista de espera</span>` : ''}`;
+  const tagsAp = (a, fut) => `${a.forName ? `<span class="para-quem">para ${esc(a.forName)}</span>` : ''}${a.origin === 'espera' && fut ? `<span class="para-quem esp">${ic('bell', 11)}da lista de espera</span>` : ''}${!fut && a.conta && A.mudancasConta(a.conta).length ? `<span class="para-quem aj">${ic('tag', 11)}valor ajustado</span>` : ''}`;
   /** Próximo horário: cartão escuro tipo bilhete, com a data grande, a contagem e as ações. */
   function heroAp(a) {
     const d = A.parse(a.date); const dd = daysTo(a.date); const l = itensAp(a);
@@ -965,8 +1053,12 @@
       case 'svc': pickSvc(el.dataset.id); break;
       case 'continue': goConfirm(); break;
       case 'sheet-close': if (!V.busyAction) { V.sheet = null; V.errs = {}; V.cancelAsk = null; if (V.acao === 'espera') { V.acao = 'agendar'; V.esp = null; } render(true); } break;
-      case 'notme': store.set(TOKEN_KEY, null); ME = null; MYAP = []; MYESP = []; V.sheet = 'quem'; render(true); break;
-      case 'det': V.detalhe = el.dataset.id; V.cancelAsk = null; V.sheet = 'detalhe'; render(true); break;
+      case 'notme': store.set(TOKEN_KEY, null); ME = null; MYAP = []; MYESP = []; AVISOS = AVISOS.filter((n) => n.para === 'todos'); V.sheet = 'quem'; render(true); break;
+      case 'det': V.detalhe = el.dataset.id; V.cancelAsk = null; V.deAvisos = false; V.sheet = 'detalhe'; render(true); break;
+      case 'avisos': V.sheet = 'avisos'; V.avF = V.avF || 'todas'; V.apg = 1; render(true); break;
+      case 'av-f': V.avF = el.dataset.v; V.apg = 1; render(true); break;
+      case 'aviso': abrirAviso(el.dataset.id); break;
+      case 'av-todas': marcarLidos(AVISOS.map((n) => String(n.id))).then(() => render(true)); render(true); break;
       case 'rem': comecaRemarca(el.dataset.id); break;
       case 'rem-x': largaRemarca(); goTab('horarios'); alerta('info', 'Nada mudou', 'Seu horário continua o mesmo.'); break;
       case 'rem-ok': run(remarcar); break;
@@ -980,7 +1072,7 @@
       case 'esp-dia': trocaDiaEspera(el.dataset.id); break;
       case 'esp-troca-x': { const tr = trocaEsp(); Object.assign(V, { espTroca: null, svcs: [], date: null, time: null, step: 1 }); goTab('horarios'); if (tr) alerta('info', 'Nada mudou', `Você continua na fila de ${diaCurto(tr.date)}.`); break; }
       case 'esp-livre': marcarLivre(el.dataset.t); break;
-      case 'pag': { const k = el.dataset.k; const de = V[k] || 1; V[k] = Number(el.dataset.p); render(true); window.U.mov.animaLista($('#hist-lista'), V[k] - de); break; }
+      case 'pag': { const k = el.dataset.k; const de = V[k] || 1; V[k] = Number(el.dataset.p); render(true); window.U.mov.animaLista($(k === 'apg' ? '#av-lista' : '#hist-lista'), V[k] - de); break; }
       case 'esp-sai': V.espSai = el.dataset.id; render(true); break;
       case 'esp-sai-no': V.espSai = null; render(true); break;
       case 'esp-sai-ok': { const id = el.dataset.id; run(async () => { await api('DELETE', `/api/public/me/espera/${id}`, null, authH()); V.espSai = null; V.sheet = null; await loadMe(); setTimeout(() => alerta('info', 'Você saiu da lista de espera', 'Quando quiser, é só entrar de novo.'), 30); }); break; }
@@ -988,7 +1080,7 @@
       case 'to-new': toNew(); break;
       case 'confirm': run(book); break;
       case 'para': V.para = el.dataset.v; V.errs = {}; render(true); if (V.para === 'outro') setTimeout(() => { const i = $('#para-n'); if (i) i.focus(); }, 30); break;
-      case 'logout': store.set(TOKEN_KEY, null); ME = null; MYAP = []; MYESP = []; V.phone = ''; V.tab = 'inicio'; render(); alerta('info', 'Você saiu', 'Para ver seus horários, entre de novo com seu WhatsApp.'); break;
+      case 'logout': store.set(TOKEN_KEY, null); ME = null; MYAP = []; MYESP = []; AVISOS = AVISOS.filter((n) => n.para === 'todos'); loadAvisos().then(() => render(true)); V.phone = ''; V.tab = 'inicio'; render(); alerta('info', 'Você saiu', 'Para ver seus horários, entre de novo com seu WhatsApp.'); break;
       case 'cancel': V.cancelAsk = el.dataset.id; render(true); break;
       case 'cancel-no': V.cancelAsk = null; render(true); break;
       case 'cancel-yes': {

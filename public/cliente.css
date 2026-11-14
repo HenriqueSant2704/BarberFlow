@@ -63,6 +63,13 @@ h1,h2,h3,h4,.disp{font-family:var(--f-display);font-weight:600;letter-spacing:-.
 .c-tema{width:38px;height:38px;display:grid;place-items:center;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--ouro-d);padding:0;margin-left:auto}
 .c-tema:hover{background:rgba(255,255,255,.12)}
 .c-nav+.c-tema{margin-left:0}
+.c-sino{position:relative;width:38px;height:38px;display:grid;place-items:center;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--ouro-d);padding:0;margin-left:auto}
+.c-sino:hover{background:rgba(255,255,255,.12)}
+.c-nav+.c-sino,.c-sino+.c-tema{margin-left:0}
+.c-sino b{position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 5px;border-radius:99px;display:grid;place-items:center;background:#dc2626;color:#fff;font-size:10.5px;font-weight:800;border:2px solid var(--bloco);font-family:var(--f-body,inherit)}
+.c-sino.tem svg{animation:balanca 2.4s ease-in-out infinite;transform-origin:50% 0}
+@keyframes balanca{0%,70%,100%{transform:rotate(0)}75%{transform:rotate(14deg)}82%{transform:rotate(-11deg)}89%{transform:rotate(6deg)}95%{transform:rotate(-3deg)}}
+@media (prefers-reduced-motion:reduce){.c-sino.tem svg{animation:none}}
 .c-portal{display:inline-flex;align-items:center;gap:5px;padding:6px 8px;border-radius:8px;color:#9a9aa0;font-size:11.5px;font-weight:500;text-decoration:none;opacity:.65}
 .c-portal:hover{opacity:1;color:var(--ouro-d)}
 .listra{height:5px;background:repeating-linear-gradient(-45deg,#b91c1c 0 9px,#fff 9px 18px,#1e3a8a 18px 27px,#fff 27px 36px)}
@@ -787,4 +794,59 @@ a.info-cab{border-top:1px solid var(--line)}
   .mh-mes>.mh-rot{padding:12px 14px 4px}
   .mh-esp-pe>div{width:100%}
   .mh-esp-pe .btn{flex:1}
+}
+
+/* ---------- Sininho: notificações da barbearia ---------- */
+.folha.f-avisos{width:min(560px,calc(100% - 32px))}
+.av-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line)}
+.av-seg button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 6px;border:0;border-radius:9px;background:none;color:var(--muted);font-weight:700;font-size:13px;white-space:nowrap}
+.av-seg button b{min-width:20px;padding:1px 6px;border-radius:99px;background:var(--line);color:inherit;font-size:11px}
+.av-seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.av-seg button.on b{background:var(--ouro);color:var(--on-ouro)}
+.av-acoes{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--muted);font-weight:700}
+.av-acoes .link{display:inline-flex;align-items:center;gap:5px;font-size:13px}
+.av-lista{display:flex;flex-direction:column;gap:8px}
+.av-it{position:relative;width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:flex-start;padding:13px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:inherit;text-align:left;transition:border-color .2s,transform .25s var(--spring)}
+.av-it:hover{border-color:var(--ink)}
+.av-it.novo{background:var(--ouro-soft);border-color:color-mix(in srgb,var(--ouro) 40%,transparent)}
+.av-ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--k-soft);color:var(--k);flex:none}
+.av-tx{display:flex;flex-direction:column;gap:3px;min-width:0}
+.av-tx small{color:var(--muted);font-size:11.5px;font-weight:700}
+.av-tx b{font-size:14.5px;line-height:1.3}
+.av-tx>span{color:var(--ink-soft);font-size:13px;line-height:1.5}
+.av-ir{display:inline-flex;align-items:center;gap:3px;margin-top:3px;color:var(--ouro);font-style:normal;font-weight:700;font-size:12.5px}
+.av-dot{width:9px;height:9px;margin-top:6px;border-radius:50%;background:var(--ouro);box-shadow:0 0 0 3px color-mix(in srgb,var(--ouro) 22%,transparent)}
+.av-vazio{display:flex;flex-direction:column;align-items:center;gap:6px;padding:26px 10px;text-align:center;color:var(--muted);font-size:13px}
+.av-vazio b{color:var(--ink);font-size:15px}
+.av-entrar{margin-top:4px}
+.ini-aviso{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 16px;border-radius:14px;border:1px solid color-mix(in srgb,var(--ouro) 45%,transparent);background:var(--ouro-soft);color:var(--ink);text-align:left;animation:entra .4s var(--ease) both}
+.ini-aviso:hover{border-color:var(--ouro)}
+.ini-aviso>span:nth-child(2){display:flex;flex-direction:column;gap:2px;min-width:0}
+.ini-aviso small{display:inline-flex;align-items:center;gap:5px;color:var(--ouro);font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.ini-aviso b{font-size:15px}
+.ini-aviso>span:nth-child(2)>span{color:var(--ink-soft);font-size:13px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ini-aviso>svg{color:var(--muted)}
+/* Histórico do atendimento: o que agendou x o que foi feito */
+.conta-cli .cc-prev{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 12px;border-radius:10px;background:var(--surface-2);color:var(--ink-soft);font-size:13.5px}
+.conta-cli .cc-prev b{color:var(--muted);white-space:nowrap}
+.conta-cli>small:not(:first-child){margin-top:4px}
+.conta-cli .cc-l{align-items:flex-start}
+.conta-cli .cc-l span{min-width:0}
+.conta-cli .cc-l em{display:block;margin-top:2px;font-style:normal;font-size:12px;line-height:1.4;color:var(--muted)}
+.conta-cli .cc-l.mudou em{color:var(--ouro);font-weight:600}
+.conta-cli .cc-l.tirado{color:var(--muted)}
+.conta-cli .cc-l.tirado em{color:var(--vermelho);font-weight:600}
+.conta-cli .cc-l.desc{color:var(--verde)}
+.conta-cli .cc-l.desc em{color:var(--verde);opacity:.9}
+.conta-cli .cc-l b{white-space:nowrap}
+.cc-dif{align-self:flex-start;padding:4px 10px;border-radius:99px;background:var(--k-soft);color:var(--k);font-size:12px;font-weight:700}
+.cc-eds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.cc-eds li{display:flex;flex-direction:column;gap:1px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);border-left:3px solid var(--ouro);font-size:13px}
+.cc-eds li span{color:var(--ink-soft)}
+.para-quem.aj{gap:4px}
+@media (max-width:760px){
+  .c-sino{margin-left:auto!important;width:36px;height:36px}
+  .c-sino+.c-tema{margin-left:0!important}
+  .folha.f-avisos{width:100%}
+  .av-seg button{font-size:12.5px;padding:8px 4px}
 }
