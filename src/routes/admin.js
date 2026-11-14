@@ -179,7 +179,7 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
 }));
 
 r.post('/agendamentos', ah(async (req, res) => {
-  const { clientId, name, phone, date, time, serviceId } = req.body;
+  const { clientId, name, phone, date, time, serviceId, serviceIds } = req.body;
   const appt = await db.tx(async (c) => {
     let cid;
     if (clientId) {
@@ -190,7 +190,7 @@ r.post('/agendamentos', ah(async (req, res) => {
       cid = Number((await findOrCreateClient(c, cleanName(name), cleanPhone(phone))).id);
     }
     // O barbeiro pode encaixar fora do período aberto aos clientes
-    return createAppointment(c, { clientId: cid, date, time, serviceId, origin: 'painel', enforceWindow: false });
+    return createAppointment(c, { clientId: cid, date, time, serviceId, serviceIds, origin: 'painel', enforceWindow: false });
   });
   res.status(201).json({ appointment: appt });
 }));
