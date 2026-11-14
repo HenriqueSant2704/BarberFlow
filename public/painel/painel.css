@@ -983,3 +983,140 @@ button.g-bar:focus-visible{outline:2px solid var(--ouro);outline-offset:2px;bord
 .p-menu-in.com-marca .p-item.on{background:none;box-shadow:none}
 .sino-p .pag{margin-top:12px;justify-content:center}
 .sino-p .pag small{width:100%;text-align:center}
+
+/* ---------- Novo agendamento em passos (1 dia, 2 horário, 3 serviço, 4 cliente), dentro da janela ---------- */
+.janela.nv{width:min(660px,calc(100% - 32px));gap:14px;padding:22px 24px 0;top:max(20px,calc(50dvh - 350px));transform:translateX(-50%);max-height:calc(100dvh - 2 * max(20px,calc(50dvh - 350px)));animation-name:nv-entra}
+@keyframes nv-entra{from{opacity:0;transform:translate(-50%,14px)}}
+.janela.nv>.folha-topo{margin-bottom:-2px}
+.nv-topo{display:flex;flex-direction:column;gap:8px}
+.nv-passos{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.nv-passos .wp>button,.nv-passos .wp>div{width:100%;display:flex;align-items:center;gap:9px;padding:6px 8px;border:0;border-radius:10px;background:none;color:var(--muted);text-align:left;min-width:0;font:inherit}
+.nv-passos .wp>button:hover{background:var(--surface-2)}
+.nv-passos .n{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:none;border:1.5px solid var(--line-strong);background:var(--surface);font-weight:800;font-size:12.5px;transition:background-color .25s,border-color .25s,box-shadow .25s}
+.nv-passos .wp-t{min-width:0;display:flex;flex-direction:column}
+.nv-passos .wp-t b{font-size:12.5px;font-weight:700}
+.nv-passos .wp-t small{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-passos .feito .n{background:var(--ouro);border-color:var(--ouro);color:var(--on-ouro)}
+.nv-passos .feito .wp-t b,.nv-passos .atual .wp-t b{color:var(--ink)}
+.nv-passos .atual .n{background:var(--accent);border-color:var(--accent);color:var(--on-accent);box-shadow:0 0 0 4px var(--accent-ring)}
+.nv-barra{height:3px;border-radius:99px;background:var(--line)}
+.nv-barra i{display:block;height:100%;min-width:3px;border-radius:inherit;background:var(--ouro);transition:width .5s var(--ease)}
+.nv-linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:28px}
+.nv-linha small{color:var(--ouro);font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.nv-volta{display:inline-flex;align-items:center;gap:4px;padding:5px 11px 5px 7px;border-radius:99px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-weight:700;font-size:12.5px;transition:border-color .2s,transform .2s var(--spring)}
+.nv-volta:hover{border-color:var(--ink);transform:translateX(-2px)}
+.nv-tit h4{margin-top:2px;font-size:21px;line-height:1.2}
+.nv-tit p{margin:3px 0 0;color:var(--muted);font-size:13.5px}
+.nv-corpo{display:flex;flex-direction:column;gap:12px;padding-bottom:22px}
+.vai{animation:nv-vai .38s var(--ease) both}
+.volta{animation:nv-volta .38s var(--ease) both}
+@keyframes nv-vai{from{opacity:0;transform:translateX(24px)}}
+@keyframes nv-volta{from{opacity:0;transform:translateX(-24px)}}
+.nv-nota{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12.5px}
+.nv-nota.erro{color:var(--vermelho);font-weight:700}
+.janela.nv .legenda{gap:12px;font-size:11.5px}
+/* passo 1: atalhos e calendário compacto */
+.nv-ats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.nv-at{--k:var(--verde);display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);text-align:left;transition:border-color .2s,transform .2s var(--spring)}
+.nv-at b{font-size:14px}
+.nv-at small{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:700}
+.nv-at small::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--k)}
+.nv-at[data-st="poucas"]{--k:var(--laranja)}
+.nv-at[data-st="lotado"]{--k:var(--vermelho)}
+.nv-at[data-st="fechado"]{--k:var(--cinza)}
+.nv-at:not(:disabled):hover{border-color:var(--ink);transform:translateY(-1px)}
+.nv-at:disabled{opacity:.55;cursor:default}
+.nv-at.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.nv-cal{padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2)}
+.nv-mes-cab{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.nv-mes-cab b{font-size:14px}
+.nv-mes-cab .btn-icone{width:32px;height:32px;border-radius:9px}
+.nv-mes-cab .btn-icone:disabled{opacity:.3;cursor:default}
+.nv-mes{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin-top:8px}
+.nv-mes .dw{text-align:center;font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase}
+.nv-mes button{--k:var(--verde);position:relative;height:40px;min-width:0;padding:0;border-radius:9px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;transition:transform .2s var(--spring),border-color .2s}
+.nv-mes button::after{content:"";position:absolute;bottom:4px;left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:var(--k)}
+.nv-mes button:not(:disabled):hover{border-color:var(--ink);transform:translateY(-1px)}
+.nv-mes button small{position:absolute;top:1px;left:0;right:0;font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--ouro);line-height:1.2}
+.nv-mes button[data-st="poucas"]{--k:var(--laranja)}
+.nv-mes button[data-st="lotado"]{--k:var(--vermelho);background:var(--vermelho-soft);border-color:transparent;color:var(--vermelho)}
+.nv-mes button[data-st="fechado"]{--k:transparent;background:repeating-linear-gradient(135deg,var(--surface-2) 0 5px,var(--surface) 5px 10px);color:var(--muted)}
+.nv-mes button[data-st="fora"]{--k:transparent;background:transparent;border-color:transparent;color:var(--muted);opacity:.4;cursor:default}
+.nv-mes button.sel{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.nv-mes button.sel small{color:inherit}
+/* passo 2: horários */
+.nv-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.nv-info .legenda{margin-left:auto}
+.nv-per>span{display:block;margin-bottom:6px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.nv-horas{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px}
+.nv-hora{position:relative;height:42px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;transition:transform .2s var(--spring),border-color .2s,background-color .2s}
+.nv-hora::after{content:"";position:absolute;top:5px;right:5px;width:5px;height:5px;border-radius:50%;background:var(--verde)}
+.nv-hora:not(:disabled):hover{border-color:var(--verde);background:var(--verde-soft);transform:translateY(-2px)}
+.nv-hora.ocup{background:var(--vermelho-soft);border-color:transparent;color:var(--vermelho);cursor:default}
+.nv-hora.ocup::after{background:var(--vermelho)}
+.nv-hora.ocup .t{text-decoration:line-through;text-decoration-thickness:1.5px}
+.nv-hora small{max-width:100%;padding:0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px;font-weight:700;opacity:.85}
+.nv-hora.sel{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.nv-hora.sel::after{background:var(--ouro-d)}
+/* passo 3: serviços em cartõezinhos */
+.nv-svcs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.nv-svc{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);text-align:left;transition:transform .2s var(--spring),border-color .2s,background-color .2s}
+.nv-svc:hover{border-color:var(--ink);transform:translateY(-1px)}
+.nv-svc .ico-k{width:34px;height:34px;border-radius:50%;background:var(--surface-2);color:var(--ink)}
+.nv-svc-t{min-width:0;display:flex;flex-direction:column;gap:1px}
+.nv-svc-t b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-svc-t small{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:11.5px;font-weight:600}
+.nv-svc .preco{font-size:14.5px;font-weight:800}
+.nv-svc.sel{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink)}
+.nv-svc.sel .ico-k{background:var(--accent);color:var(--on-accent)}
+.nv-svc.sel .nv-svc-t small{color:var(--verde);font-weight:700}
+.nv-svc.nao-cabe{background:var(--vermelho-soft);border-color:color-mix(in srgb,var(--vermelho) 35%,transparent)}
+.nv-svc.nao-cabe .ico-k{background:var(--surface);color:var(--vermelho)}
+.nv-svc.nao-cabe .nv-svc-t small{color:var(--vermelho);font-weight:700}
+.nv-svc[aria-disabled="true"]:not(.nao-cabe){opacity:.55}
+.nv-soma{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:12px;background:var(--bloco);color:var(--bloco-ink);animation:entra .3s var(--spring) both}
+.nv-soma>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.nv-soma small{color:var(--ouro-d);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.nv-soma>div>b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-soma span{display:inline-flex;align-items:center;gap:5px;color:var(--bloco-muted);font-size:12px;font-weight:600}
+.nv-soma .preco{font-size:19px;color:#fff;flex:none}
+/* passo 4: cliente + bilhete do horário */
+.nv-cli-ok{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;border:1.5px solid color-mix(in srgb,var(--verde) 45%,transparent);background:var(--verde-soft)}
+.nv-cli-ok .nv-cli-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.nv-cli-ok b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-cli-ok small{color:var(--muted);font-size:12.5px;font-weight:600}
+.nv-ticket{position:relative;overflow:hidden;border-radius:12px;border:1px solid var(--line);background:var(--surface-2)}
+.nv-ticket::after{content:"";position:absolute;top:0;right:0;width:24px;height:24px;background:linear-gradient(225deg,var(--ouro) 0 48%,transparent 52%);opacity:.9;pointer-events:none}
+.nv-tk-topo{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1.5px dashed var(--line-strong)}
+.nv-tk-topo>div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.nv-tk-topo small{color:var(--muted);font-size:12px;font-weight:700}
+.nv-tk-topo b{font-family:var(--f-display);font-size:24px;line-height:1.05;color:var(--ouro)}
+.nv-tk-topo b i{font-style:normal;font-family:var(--f-body);font-size:13px;font-weight:700;color:var(--muted)}
+.nv-tk-itens{display:flex;flex-direction:column;gap:5px;padding:10px 14px 0}
+.nv-tk-itens div,.nv-tk-tot{display:flex;justify-content:space-between;gap:10px;font-size:13.5px}
+.nv-tk-itens span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-tk-tot{padding:8px 14px 12px;margin-top:6px;font-weight:700}
+.nv-tk-tot b{font-size:17px}
+/* rodapé fixo da janela: total + Continuar/Agendar */
+.nv-rodape{position:sticky;bottom:0;z-index:2;display:flex;align-items:center;gap:12px;margin:-8px -24px 0;padding:12px 24px;background:var(--surface);border-top:1px solid var(--line)}
+.nv-rod-txt{flex:1;min-width:0}
+.nv-rod-txt small{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nv-rod-txt b{display:block;font-size:19px}
+.nv-rodape .btn{padding:12px 20px}
+.nv-corpo:last-child{padding-bottom:24px}
+@media (max-width:900px){
+  .janela.nv{width:100%;padding:18px 16px 0;gap:12px;top:auto;transform:none;max-height:92dvh;animation-name:sobe}
+  .nv-passos{gap:2px}
+  .nv-passos .wp>button,.nv-passos .wp>div{flex-direction:column;gap:3px;padding:4px 2px;text-align:center}
+  .nv-passos .wp-t b{font-size:11.5px}
+  .nv-passos .wp-t small{font-size:10.5px}
+  .nv-tit h4{font-size:19px}
+  .nv-tit p{font-size:13px}
+  .nv-info .legenda{margin-left:0;width:100%}
+  .nv-mes button{height:auto;aspect-ratio:1/.92}
+  .nv-horas{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .nv-svcs{grid-template-columns:minmax(0,1fr)}
+  .nv-rodape{margin:-6px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px))}
+  .nv-corpo:last-child{padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+}
+@media (max-width:360px){.nv-horas{grid-template-columns:repeat(3,minmax(0,1fr))}}

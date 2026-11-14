@@ -1002,13 +1002,40 @@
       ${podeMandar ? `<button type="button" class="btn p" data-a="lembrar" data-id="${x.id}">${ic('whats', 15)}Mandar agora</button>` : l && l[2] && c.phone ? `<a class="btn p" href="${waLink(c.phone, waMsg(x))}" target="_blank" rel="noopener">${ic('whats', 15)}Mandar à mão</a>` : ''}</div>`;
   }
 
-  // ===== Novo agendamento (encaixe ou cliente que ligou) =====
+  // ===== Novo agendamento (encaixe ou cliente que ligou): em passos, igual ao site do cliente =====
+  // 1 Dia > 2 Horário > 3 Serviço (um ou mais) > 4 Cliente e confirmar. Tudo dentro da janela.
   const norm = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const NV_PASSOS = [['Dia', 'cal'], ['Horário', 'clock'], ['Serviço', 'scissors'], ['Cliente', 'user']];
+  const NV_MAX_SVC = 4;
+  const NV_DIAS = 120; // o barbeiro pode encaixar além do período aberto aos clientes
+  const nvSvcs = () => V.nv.svcs.map((id) => S.services.find((s) => s.id === id)).filter(Boolean);
+  const nvDur = (l) => l.reduce((t, s) => t + s.dur, 0);
+  const nvPreco = (l) => l.reduce((t, s) => t + Number(s.price || 0), 0);
+  const nvNomes = (l) => l.map((s) => s.name).join(' + ');
+  /** Situação de um dia no calendário da janela: livre, poucas, lotado, fechado ou fora. */
+  function nvDia(ds) {
+    if (ds < TODAY || ds > A.iso(A.addDays(NOW, NV_DIAS))) return { st: 'fora' };
+    const sl = daySlots(ds);
+    if (!sl.length) return { st: 'fechado', r: blockedOf(ds) ? 'folga' : 'fechado' };
+    const n = freeCount(ds);
+    return { st: !n ? 'lotado' : n <= 3 ? 'poucas' : 'livre', n };
+  }
   function novoAg() {
     V.menu = false; V.sino = false; V.lado = null;
-    V.nv = { cid: '', q: '', isNew: false, name: '', phone: '', date: TODAY, time: '', svc: S.services[0].id };
-    for (let i = 0; i < 60 && !freeCount(V.nv.date); i++) V.nv.date = A.iso(A.addDays(NOW, i + 1)); // primeiro dia com horário livre
-    render(); setTimeout(() => { const f = $('#nv-q'); if (f && matchMedia('(min-width:901px)').matches) f.focus(); }, 60);
+    V.nv = { step: 1, dir: 0, cid: '', q: '', isNew: false, name: '', phone: '', date: '', time: '', svcs: [], cm: TODAY.slice(0, 8) + '01' };
+    render();
+  }
+  /** Só deixa ir até o passo que já dá para abrir. */
+  function nvIr(n, dir) {
+    const nv = V.nv; const max = !nv.date ? 1 : !nv.time ? 2 : !nv.svcs.length ? 3 : 4;
+    const alvo = Math.min(Math.max(1, n), max);
+    nv.dir = dir != null ? dir : Math.sign(alvo - nv.step); nv.step = alvo; paintNv();
+    if (alvo === 4 && !nv.cid && !nv.isNew && matchMedia('(min-width:901px)').matches) setTimeout(() => { const f = $('#nv-q'); if (f) f.focus(); }, 60);
+  }
+  /** Redesenha só o miolo da janela (sem repetir a animação de abrir). */
+  function paintNv() {
+    const f = $('#nvForm'); if (!f) { render(); return; }
+    f.innerHTML = nvMiolo(); f.scrollTop = 0;
   }
   function nvSug(q) {
     q = String(q || '').trim();
@@ -1019,32 +1046,89 @@
     return l.map((c) => `<button type="button" data-a="nv-pick" data-id="${c.id}">${avk(c, 30)}<span><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}</small></span></button>`).join('')
       + `<button type="button" class="novo" data-a="nv-new"><span class="ico-k p" style="width:30px;height:30px">${ic('userplus', 16)}</span><span><b>Cadastrar cliente novo</b><small>${l.length ? 'Não é nenhum desses?' : 'Ninguém com esse nome ainda'}</small></span></button>`;
   }
-  function nvAviso() {
-    const nv = V.nv; const s = S.services.find((x) => x.id === nv.svc) || S.services[0];
-    if (!nv.time) return '';
-    if (fits(nv.date, nv.time, s.dur)) return `<div class="faixa" data-t="ok"><span class="f-ico">${ic('check', 18)}</span><div><strong>Cabe certinho</strong><p>${esc(s.name)} das ${nv.time} às ${endOf(nv.time, s.dur)}.</p></div></div>`;
-    const r = whyNot(nv.date, nv.time, s.dur) || { m: 'ocupado' };
-    const mot = r.m === 'fecha' ? `Terminaria às ${endOf(nv.time, s.dur)}, depois do fechamento.` : r.m === 'almoco' ? 'Entraria no horário de almoço.' : `Às ${r.t || 'esse horário'} já tem cliente.`;
-    return `<div class="faixa pisca" data-t="erro"><span class="f-ico">${ic('ban', 18)}</span><div><strong>${esc(s.name)} não cabe às ${nv.time}</strong><p>${mot} Escolha outro horário ou serviço.</p></div></div>`;
+  // ----- passo 1: dia -----
+  function nvPasso1() {
+    const nv = V.nv; const m = A.parse(nv.cm);
+    const f = new Date(m.getFullYear(), m.getMonth(), 1); const last = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+    let cells = DOW.map((d) => `<span class="dw">${d.slice(0, 3)}</span>`).join('');
+    for (let i = 0; i < f.getDay(); i++) cells += '<span></span>';
+    for (let d = 1; d <= last.getDate(); d++) {
+      const ds = A.iso(new Date(m.getFullYear(), m.getMonth(), d)); const x = nvDia(ds);
+      const rot = x.st === 'fora' ? '' : x.st === 'fechado' ? (x.r === 'folga' ? ', folga' : ', fechado') : x.st === 'lotado' ? ', lotado' : `, ${x.n} livre${x.n === 1 ? '' : 's'}`;
+      cells += `<button type="button" class="${nv.date === ds ? 'sel' : ''} ${ds === TODAY ? 'hoje' : ''}" data-st="${x.st}" ${x.st === 'fora' ? 'disabled' : `data-a="nv-dia" data-d="${ds}"`} aria-label="${longDate(ds)}${rot}">${d}${ds === TODAY ? '<small>hoje</small>' : ''}</button>`;
+    }
+    const min = TODAY.slice(0, 8) + '01'; const lim = A.iso(A.addDays(NOW, NV_DIAS));
+    const next = A.iso(new Date(m.getFullYear(), m.getMonth() + 1, 1));
+    // Atalhos para o encaixe do dia: hoje e amanhã com quantos horários livres
+    const atalho = (ds, t) => { const x = nvDia(ds); const ok = x.st === 'livre' || x.st === 'poucas';
+      return `<button type="button" class="nv-at ${nv.date === ds ? 'on' : ''}" data-st="${x.st}" ${ok ? `data-a="nv-dia" data-d="${ds}"` : 'disabled'}><b>${t}</b><small>${x.st === 'fechado' ? 'Fechado' : x.st === 'lotado' ? 'Lotado' : `${x.n} livre${x.n === 1 ? '' : 's'}`}</small></button>`; };
+    return `<div class="nv-ats">${atalho(TODAY, 'Hoje')}${atalho(TOMORROW, 'Amanhã')}</div>
+      <div class="nv-cal"><div class="nv-mes-cab"><button type="button" class="btn-icone" data-a="nv-cm" data-n="-1" ${nv.cm <= min ? 'disabled' : ''} aria-label="Mês anterior">${ic('left', 16)}</button><b>${cap(MESES[m.getMonth()])} de ${m.getFullYear()}</b><button type="button" class="btn-icone" data-a="nv-cm" data-n="1" ${next > lim ? 'disabled' : ''} aria-label="Próximo mês">${ic('right', 16)}</button></div>
+      <div class="nv-mes">${cells}</div></div>
+      <div class="legenda"><span data-k="verde"><i></i>Com vagas</span><span data-k="laranja"><i></i>Poucas vagas</span><span data-k="vermelho"><i></i>Lotado</span><span data-k="cinza"><i></i>Fechado</span></div>`;
+  }
+  // ----- passo 2: horário -----
+  function nvPasso2() {
+    const nv = V.nv; const bz = busy(nv.date); const sl = daySlots(nv.date).filter((t) => !isPast(nv.date, t));
+    const livres = sl.filter((t) => !bz.has(t)).length;
+    const quem = (t) => { const x = S.appts.find((y) => y.date === nv.date && y.status !== 'cancelado' && A.toMin(y.time) <= A.toMin(t) && A.toMin(t) < A.toMin(y.time) + y.dur); return x ? first(cById(x.clientId).name) : ''; };
+    const grp = (t, l) => (l.length ? `<div class="nv-per"><span>${t}</span><div class="nv-horas">${l.map((x) => { const oc = bz.has(x); const q = oc ? quem(x) : '';
+      return `<button type="button" class="nv-hora ${oc ? 'ocup' : ''} ${nv.time === x ? 'sel' : ''}" ${oc ? 'disabled' : `data-a="nv-hora" data-t="${x}"`} aria-label="${x}${oc ? `, ocupado${q ? ' com ' + esc(q) : ''}` : ', livre'}" ${q ? `title="Ocupado · ${esc(q)}"` : ''}><span class="t">${x}</span>${oc && q ? `<small>${esc(q)}</small>` : ''}</button>`; }).join('')}</div></div>` : '');
+    if (!livres) return `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${sl.length ? 'Esse dia está cheio' : 'Os horários de hoje já passaram'}</strong><p>Volte e escolha outro dia.</p></div></div>`;
+    return `<div class="nv-info"><span class="pilula" data-k="${livres <= 3 ? 'laranja' : 'verde'}">${livres} horário${livres === 1 ? '' : 's'} livre${livres === 1 ? '' : 's'}</span><div class="legenda"><span data-k="verde"><i></i>Livre</span><span data-k="vermelho"><i></i>Ocupado</span></div></div>
+      ${grp('Manhã', sl.filter((x) => A.toMin(x) < 720))}${grp('Tarde', sl.filter((x) => A.toMin(x) >= 720 && A.toMin(x) < 1080))}${grp('Noite', sl.filter((x) => A.toMin(x) >= 1080))}
+      ${hasLunch() ? `<div class="nv-nota">${ic('coffee', 14)}Almoço das ${S.settings.lunchStart} às ${S.settings.lunchEnd}</div>` : ''}`;
+  }
+  // ----- passo 3: serviço (um ou mais) -----
+  function nvPasso3() {
+    const nv = V.nv; const l = nvSvcs(); const base = nvDur(l);
+    const noFit = S.services.filter((s) => !nv.svcs.includes(s.id) && !fits(nv.date, nv.time, base + s.dur));
+    const cheio = l.length >= NV_MAX_SVC;
+    const soma = l.length ? `<div class="nv-soma"><div><small>${l.length === 1 ? '1 serviço' : `${l.length} serviços`}</small><b>${esc(nvNomes(l))}</b><span>${ic('clock', 13)}${tempo(base)} · ${nv.time} às ${endOf(nv.time, base)}</span></div><b class="preco num">${money(nvPreco(l))}</b></div>` : '';
+    return `${soma}
+      ${noFit.length ? `<div class="nv-nota erro">${ic('ban', 14)}${noFit.length === 1 ? '1 serviço não cabe' : `${noFit.length} serviços não cabem`} ${l.length ? 'junto' : `às ${nv.time}`}. Estão em vermelho.</div>` : ''}
+      <div class="nv-svcs">${S.services.map((s) => { const on = nv.svcs.includes(s.id); const nc = noFit.includes(s); const trava = !on && (nc || cheio);
+        return `<button type="button" class="nv-svc ${on ? 'sel' : ''} ${nc ? 'nao-cabe' : ''}" data-a="nv-svc" data-id="${s.id}" aria-pressed="${on}" ${trava ? 'aria-disabled="true"' : ''}>
+        <span class="ico-k">${svcIcon(s.name).replace('<svg', '<svg width="17" height="17"')}</span><span class="nv-svc-t"><b>${esc(s.name)}</b><small>${nc ? `${ic('ban', 12)}${l.length ? 'Não cabe junto' : 'Não cabe'}` : on ? `${ic('check', 12)}Escolhido · ${tempo(s.dur)}` : l.length ? `${ic('plus', 12)}Somar · +${tempo(s.dur)}` : `${tempo(s.dur)} · até ${endOf(nv.time, s.dur)}`}</small></span>
+        <span class="preco num">${l.length && !on ? '+ ' : ''}${money0(s.price)}</span></button>`; }).join('')}</div>
+      <div class="nv-nota">${ic('plus', 14)}Fez mais de uma coisa? Toque em outro serviço para somar (até ${NV_MAX_SVC}).</div>`;
+  }
+  // ----- passo 4: cliente e confirmar -----
+  function nvPasso4() {
+    const nv = V.nv; const l = nvSvcs(); const dur = nvDur(l);
+    let cli;
+    if (nv.cid) { const c = cById(nv.cid); cli = `<div class="nv-cli-ok">${avk(c, 38)}<span class="nv-cli-t"><b>${esc(c.name)}</b><small>${maskPhone(c.phone)}${c.blocked ? ' · bloqueado no site' : ''}</small></span><button type="button" class="link" data-a="nv-clear">${ic('repeat', 14)}Trocar</button></div>`; }
+    else if (nv.isNew) cli = `<div class="duas"><div class="entrada" id="e-nvn">${ic('user', 18)}<input id="nv-name" data-in="nv-name" value="${esc(nv.name)}" placeholder="Nome e sobrenome" autocomplete="off" aria-label="Nome do cliente"></div><div class="entrada" id="e-nvp">${ic('whats', 18)}<input id="nv-phone" data-in="nv-phone" value="${esc(maskPhone(nv.phone))}" placeholder="WhatsApp com DDD" inputmode="tel" autocomplete="off" aria-label="WhatsApp do cliente"></div></div><button type="button" class="link" data-a="nv-clear" style="align-self:flex-start">${ic('search', 15)}Buscar cliente cadastrado</button>`;
+    else cli = `<div class="entrada" id="e-nvq">${ic('search', 18)}<input id="nv-q" data-in="nv-q" placeholder="Digite o nome ou o WhatsApp" value="${esc(nv.q)}" autocomplete="off" aria-controls="nvSug" aria-label="Buscar cliente"></div><div class="sugest" id="nvSug">${nvSug(nv.q)}</div>`;
+    return `<div class="campo"><span class="lab">${nv.isNew ? 'Cliente novo' : 'Quem vai ser atendido'}</span>${cli}</div>
+      <div class="nv-ticket"><div class="nv-tk-topo"><div><small>${cap(longDate(nv.date))}</small><b class="num">${nv.time} <i>às ${endOf(nv.time, dur)}</i></b></div><span class="tag">${ic('clock', 12)}${tempo(dur)}</span></div>
+        <div class="nv-tk-itens">${l.map((s) => `<div><span>${esc(s.name)}</span><b class="num">${money(s.price)}</b></div>`).join('')}</div>
+        <div class="nv-tk-tot"><span>Total</span><b class="preco num">${money(nvPreco(l))}</b></div></div>`;
+  }
+  function nvMiolo() {
+    const nv = V.nv; const l = nvSvcs();
+    const c = nv.cid ? cById(nv.cid) : null;
+    const valor = [nv.date ? `${DOW[A.parse(nv.date).getDay()]}, ${shortDate(nv.date)}` : '', nv.time || '', l.length > 1 ? `${l.length} serviços` : l.length ? l[0].name : '', c ? first(c.name) : nv.isNew && nv.name.trim() ? first(nv.name.trim()) : ''];
+    const tit = ['Qual dia?', 'Qual horário?', 'O que vai fazer?', 'Para quem é?'][nv.step - 1];
+    const sub = ['Toque em um dia com vaga.', nv.date ? cap(longDate(nv.date)) : '', nv.time ? `${cap(longDate(nv.date))} às ${nv.time}` : '', 'Busque o cliente ou cadastre na hora.'][nv.step - 1];
+    const stepper = `<ol class="nv-passos" aria-label="Passos do agendamento">${NV_PASSOS.map(([t], k) => {
+      const n = k + 1; const atual = n === nv.step; const feito = n < nv.step || (n === 3 && l.length) || (n === 4 && valor[3]); const pode = n < nv.step || (n > nv.step && valor[n - 2] && (n < 4 || l.length));
+      return `<li class="wp ${feito && !atual ? 'feito' : ''} ${atual ? 'atual' : ''}">${pode ? `<button type="button" data-a="nv-passo" data-n="${n}" aria-label="Ir para ${t}">` : '<div>'}
+        <span class="n">${feito && !atual ? ic('check', 13) : n}</span><span class="wp-t"><b>${t}</b><small>${esc(valor[k] || (atual ? 'Agora' : ''))}</small></span>${pode ? '</button>' : '</div>'}</li>`;
+    }).join('')}</ol>`;
+    const corpo = [nvPasso1, nvPasso2, nvPasso3, nvPasso4][nv.step - 1]();
+    const anim = nv.dir ? (nv.dir > 0 ? 'vai' : 'volta') : ''; nv.dir = 0;
+    const pronto = nv.step === 3 ? l.length > 0 : nv.step === 4;
+    const rodape = nv.step >= 3 ? `<div class="nv-rodape">
+        <div class="nv-rod-txt"><small>${esc(nv.step === 3 ? (l.length ? `${valor[0]} · ${nv.time} · ${tempo(nvDur(l))}` : 'Escolha um ou mais serviços') : `${c ? c.name : nv.isNew && nv.name.trim() ? A.tidyName(nv.name) : 'Falta o cliente'} · ${valor[0]} às ${nv.time}`)}</small><b class="preco num">${money(nvPreco(l))}</b></div>
+        ${nv.step === 3 ? `<button type="button" class="btn pri ${pronto ? '' : 'apagado'}" data-a="nv-seguir">Continuar${ic('right', 17)}</button>` : `<button type="submit" class="btn pri">${ic('check', 17)}Agendar</button>`}</div>` : '';
+    return `<div class="folha-topo"><div><h3>Novo agendamento</h3><p>Para encaixe ou cliente que ligou.</p></div><button type="button" class="btn-icone" data-a="nv-x" aria-label="Fechar">${ic('x', 18)}</button></div>
+      <div class="nv-topo">${stepper}<div class="nv-barra" aria-hidden="true"><i style="width:${((nv.step - 1) / 3) * 100}%"></i></div></div>
+      <div class="nv-tit ${anim}"><div class="nv-linha">${nv.step > 1 ? `<button type="button" class="nv-volta" data-a="nv-passo" data-n="${nv.step - 1}">${ic('left', 15)}Voltar para ${NV_PASSOS[nv.step - 2][0].toLowerCase()}</button>` : ''}<small>Passo ${nv.step} de 4</small></div><h4>${tit}</h4>${sub ? `<p>${esc(sub)}</p>` : ''}</div>
+      <div class="nv-corpo ${anim}" id="nvCorpo">${corpo}</div>${rodape}`;
   }
   function vNovo() {
-    const nv = V.nv; const dias = [];
-    for (let i = 0; i < 60 && dias.length < 30; i++) { const ds = A.iso(A.addDays(NOW, i)); if (daySlots(ds).length) dias.push(ds); }
-    if (!dias.includes(nv.date)) dias.unshift(nv.date);
-    const bz = busy(nv.date); const livres = daySlots(nv.date).filter((t) => !bz.has(t) && !isPast(nv.date, t));
-    if (nv.time && !livres.includes(nv.time)) nv.time = '';
-    let cli;
-    if (nv.cid) { const c = cById(nv.cid); cli = `<div class="sel-cli">${ic('userok', 18)}<span>${esc(c.name)} <small>${maskPhone(c.phone)}</small></span><button type="button" class="link" data-a="nv-clear">Trocar</button></div>`; }
-    else if (nv.isNew) cli = `<div class="duas"><div class="entrada" id="e-nvn">${ic('user', 18)}<input id="nv-name" data-in="nv-name" value="${esc(nv.name)}" placeholder="Nome e sobrenome" autocomplete="off" aria-label="Nome do cliente"></div><div class="entrada" id="e-nvp">${ic('whats', 18)}<input id="nv-phone" data-in="nv-phone" value="${esc(maskPhone(nv.phone))}" placeholder="WhatsApp com DDD" inputmode="tel" autocomplete="off" aria-label="WhatsApp do cliente"></div></div><button type="button" class="link" data-a="nv-clear" style="align-self:flex-start">${ic('search', 15)}Buscar cliente cadastrado</button>`;
-    else cli = `<div class="entrada" id="e-nvq">${ic('search', 18)}<input id="nv-q" data-in="nv-q" placeholder="Digite o nome ou o WhatsApp" value="${esc(nv.q)}" autocomplete="off" aria-controls="nvSug"></div><div class="sugest" id="nvSug">${nvSug(nv.q)}</div>`;
-    return `<div class="overlay" data-a="nv-x"></div><form class="janela" id="nvForm" novalidate role="dialog" aria-modal="true" aria-label="Novo agendamento">
-      <div class="folha-topo"><div><h3>Novo agendamento</h3><p>Para encaixe ou cliente que ligou.</p></div><button type="button" class="btn-icone" data-a="nv-x" aria-label="Fechar">${ic('x', 18)}</button></div>
-      <div class="campo"><label for="nv-q">${nv.isNew ? 'Cliente novo' : 'Cliente'}</label>${cli}</div>
-      <div class="duas"><div class="campo"><label for="nv-d">Dia</label><div class="entrada">${ic('cal', 18)}<select id="nv-d" data-nv="date">${dias.map((ds) => `<option value="${ds}" ${ds === nv.date ? 'selected' : ''}>${DOW[A.parse(ds).getDay()]}, ${shortDate(ds)}${ds === TODAY ? ' (hoje)' : ds === TOMORROW ? ' (amanhã)' : ''}</option>`).join('')}</select></div></div>
-        <div class="campo"><label for="nv-h">Horário livre</label><div class="entrada" id="e-nvh">${ic('clock', 18)}<select id="nv-h" data-nv="time" ${livres.length ? '' : 'disabled'}><option value="">${livres.length ? 'Escolha' : 'Sem horário livre'}</option>${livres.map((t) => `<option value="${t}" ${nv.time === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div></div>
-      <div class="campo"><label for="nv-s">Serviço</label><div class="entrada" id="e-nvs">${ic('scissors', 18)}<select id="nv-s" data-nv="svc">${S.services.map((s) => `<option value="${s.id}" ${nv.svc === s.id ? 'selected' : ''}>${esc(s.name)} · ${tempo(s.dur)} · ${money(s.price)}</option>`).join('')}</select></div></div>
-      <div id="nvAviso">${livres.length ? nvAviso() : `<div class="faixa" data-t="aviso"><span class="f-ico">${ic('alert', 18)}</span><div><strong>${daySlots(nv.date).length ? 'Esse dia está cheio' : 'A barbearia está fechada nesse dia'}</strong><p>Escolha outro dia.</p></div></div>`}</div>
-      <button type="submit" class="btn pri bloco">${ic('check', 18)}Agendar</button></form>`;
+    return `<div class="overlay" data-a="nv-x"></div><form class="janela nv" id="nvForm" novalidate role="dialog" aria-modal="true" aria-label="Novo agendamento">${nvMiolo()}</form>`;
   }
 
   // ===== Fechar atendimento: confere o que foi feito, troca/adiciona serviço, desconto =====
@@ -1185,19 +1269,24 @@
       act(() => put('/api/admin/clientes/' + f.dataset.id, { name, phone }), () => alerta('ok', 'Cliente atualizado', `${name} · ${maskPhone(phone)}`));
     }
     if (f.id === 'nvForm') {
-      const nv = V.nv; const s = S.services.find((x) => x.id === nv.svc);
-      const body = { date: nv.date, time: nv.time, serviceId: nv.svc }; let nome;
+      const nv = V.nv; if (nv.step !== 4 || nv.busy) return;
+      const l = nvSvcs(); const dur = nvDur(l);
+      const body = { date: nv.date, time: nv.time, serviceIds: l.map((x) => x.id) }; let nome;
       if (nv.cid) { body.clientId = nv.cid; nome = cById(nv.cid).name; }
       else if (nv.isNew) {
         const ne = A.nameError(nv.name), pe = A.phoneError(nv.phone);
         if (ne || pe) { alerta('erro', 'Confira o cliente', ne || pe); marcar(ne ? '#e-nvn' : '#e-nvp'); return; }
         body.name = A.tidyName(nv.name); body.phone = A.phoneDigits(nv.phone); nome = body.name;
       } else { alerta('erro', 'Escolha o cliente', 'Digite o nome e toque nele na lista, ou cadastre um cliente novo.'); marcar('#e-nvq'); return; }
-      if (!nv.time) { alerta('erro', 'Escolha o horário', 'Só aparecem horários livres na lista.'); marcar('#e-nvh'); return; }
-      if (!fits(nv.date, nv.time, s.dur)) { alerta('erro', `${s.name} não cabe às ${nv.time}`, 'Esse serviço precisa de mais tempo livre. Troque o horário ou o serviço.'); marcar('#e-nvs'); return; }
+      if (!fits(nv.date, nv.time, dur)) { alerta('erro', `Não cabe mais às ${nv.time}`, 'Alguém marcou nesse meio tempo. Escolha outro horário.'); nv.time = ''; nvIr(2, -1); return; }
+      nv.busy = true; const bt = f.querySelector('[type=submit]'); if (bt) { bt.disabled = true; bt.lastChild.textContent = 'Agendando…'; }
       api('POST', '/api/admin/agendamentos', body)
-        .then(async () => { V.nv = null; await reload(); render(); alerta('ok', 'Agendamento criado', `${nome} · ${diaTxt(body.date)} às ${body.time}. O horário já aparece ocupado no site.`); })
-        .catch((err) => alerta('erro', 'Não foi possível agendar', err.message));
+        .then(async () => { V.nv = null; await reload(); render(); alerta('ok', 'Agendamento criado', `${nome} · ${diaTxt(body.date)} às ${body.time} · ${nvNomes(l)}. O horário já aparece ocupado no site.`); })
+        .catch(async (err) => {
+          if (!V.nv) return; V.nv.busy = false;
+          if (err.status === 409) { try { await reload(); } catch (e) { /* segue com o que tem */ } V.nv.time = ''; render(); nvIr(2, -1); alerta('erro', 'Esse horário acabou de ser ocupado', err.message); return; }
+          paintNv(); alerta('erro', 'Não foi possível agendar', err.message);
+        });
     }
     if (f.id === 'profForm') {
       const name = $('#pp-n').value.trim(), user = $('#pp-u').value.trim(), email = $('#pp-e').value.trim();
@@ -1306,14 +1395,34 @@
         break; }
       case 'novo': novoAg(); break;
       case 'nv-x': V.nv = null; render(); break;
-      case 'nv-pick': V.nv.cid = id; V.nv.isNew = false; render(); break;
+      case 'nv-passo': nvIr(Number(el.dataset.n)); break;
+      case 'nv-cm': { const m = A.parse(V.nv.cm); V.nv.cm = A.iso(new Date(m.getFullYear(), m.getMonth() + Number(el.dataset.n), 1)); paintNv(); break; }
+      case 'nv-dia': { const d = el.dataset.d; const x = nvDia(d);
+        if (x.st === 'fechado') { alerta('aviso', x.r === 'folga' ? 'Dia de folga' : 'A barbearia está fechada nesse dia', 'Escolha outro dia.'); break; }
+        if (x.st === 'lotado') { alerta('aviso', 'Esse dia está cheio', 'Não tem horário livre. Escolha outro dia.'); break; }
+        if (V.nv.date !== d) { V.nv.date = d; V.nv.time = ''; V.nv.svcs = []; }
+        nvIr(2, 1); break; }
+      case 'nv-hora': { if (V.nv.time !== el.dataset.t) { V.nv.time = el.dataset.t; V.nv.svcs = []; } nvIr(3, 1); break; }
+      case 'nv-svc': {
+        const nv = V.nv; const s = S.services.find((x) => x.id === id); if (!s) break;
+        if (nv.svcs.includes(id)) { nv.svcs = nv.svcs.filter((x) => x !== id); paintNv(); break; }
+        const l = nvSvcs();
+        if (l.length >= NV_MAX_SVC) { alerta('aviso', `Até ${NV_MAX_SVC} serviços por horário`, 'Tire um para trocar por outro.'); break; }
+        if (!fits(nv.date, nv.time, nvDur(l) + s.dur)) {
+          const m = l.length ? `Somando ${s.name.toLowerCase()}, terminaria às ${endOf(nv.time, nvDur(l) + s.dur)}.` : (() => { const r = whyNot(nv.date, nv.time, s.dur) || {}; return r.m === 'fecha' ? `Terminaria às ${endOf(nv.time, s.dur)}, depois do fechamento.` : r.m === 'almoco' ? 'Entraria no horário de almoço.' : `Às ${r.t || 'esse horário'} já tem cliente.`; })();
+          alerta('erro', l.length ? 'Não cabe junto' : `${s.name} não cabe às ${nv.time}`, `${m} Troque o horário ou o serviço.`, [{ r: 'Trocar horário', fn: () => nvIr(2, -1) }]); marcar(el); break;
+        }
+        nv.svcs.push(id); paintNv(); break;
+      }
+      case 'nv-seguir': if (!V.nv.svcs.length) { alerta('aviso', 'Falta o serviço', 'Toque em um ou mais serviços.'); marcar('.nv-svcs'); } else nvIr(4, 1); break;
+      case 'nv-pick': V.nv.cid = id; V.nv.isNew = false; paintNv(); break;
       case 'nv-new': {
         const q = V.nv.q.trim(); V.nv.isNew = true; V.nv.cid = '';
         if (digits(q).length >= 8 && !/[a-zà-ú]/i.test(q)) V.nv.phone = q; else V.nv.name = q;
-        render(); const f = $(V.nv.name ? '#nv-phone' : '#nv-name'); if (f) f.focus();
+        paintNv(); const f = $(V.nv.name ? '#nv-phone' : '#nv-name'); if (f) f.focus();
         break;
       }
-      case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; render(); { const f = $('#nv-q'); if (f) f.focus(); } break;
+      case 'nv-clear': V.nv.cid = ''; V.nv.isNew = false; V.nv.q = ''; paintNv(); { const f = $('#nv-q'); if (f) f.focus(); } break;
       // configurações
       case 'cor': V.draft.color = v; render(); break;
       case 'fonte': V.draft.font = v; render(); break;
@@ -1413,12 +1522,6 @@
     if (V.fecha && el.dataset.fi && el.dataset.k === 'sid') {
       const it = V.fecha.items[Number(el.dataset.fi)]; const sv = S.services.find((y) => y.id === el.value);
       if (it && sv) { it.sid = sv.id; it.name = sv.name; it.price = num2(sv.price); render(); }
-      return;
-    }
-    if (el.dataset.nv) {
-      V.nv[el.dataset.nv] = el.value;
-      if (el.dataset.nv === 'date') { V.nv.time = ''; render(); return; }
-      $('#nvAviso').innerHTML = nvAviso();
       return;
     }
     if (V.draft && (el.dataset.d === 'shopName' || el.dataset.d === 'tagline' || el.dataset.svc)) { const p = document.querySelector('.previa-cel'); if (p) p.outerHTML = previa(V.draft); }
