@@ -114,6 +114,22 @@ function cleanConta(items, discount) {
   return { items: lista, discount: disc, total: Math.round((sub - disc) * 100) / 100 };
 }
 
+// Quantas faltas seguidas o cliente tem agora: olha os horários do mais recente para o mais
+// antigo e para no primeiro atendimento. Cancelados e ainda marcados não contam para nada.
+async function faltasSeguidas(c, clientId) {
+  const { rows } = await c.query(
+    `SELECT a.status, a.updated_at <= cl.faltas_zeradas_em AS zerada
+       FROM appointments a JOIN clients cl ON cl.id = a.client_id
+      WHERE a.client_id = $1 AND a.status IN ('realizado', 'faltou')
+      ORDER BY a.date DESC, a.time DESC, a.id DESC LIMIT 50`, [clientId]);
+  let n = 0;
+  for (const x of rows) {
+    if (x.status !== 'faltou' || x.zerada) break;
+    n++;
+  }
+  return n;
+}
+
 r.patch('/agendamentos/:id', ah(async (req, res) => {
   const id = cleanId(req.params.id);
   const status = req.body.status;
@@ -140,16 +156,17 @@ r.patch('/agendamentos/:id', ah(async (req, res) => {
            service_id = COALESCE($6, service_id), updated_at = now() WHERE id = $7 RETURNING *`,
         [status, unico ? null : JSON.stringify(conta.items), conta.discount, conta.total, conta.items.map((x) => x.name).join(' + ').slice(0, 200), unico ? conta.items[0].serviceId : null, id]);
     } else up = await c.query('UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2 RETURNING *', [status, id]);
-    // Bloqueio automático: o cliente faltou X vezes e não pode mais marcar pelo site
+    // Bloqueio automático: só por faltas SEGUIDAS. Um atendimento no meio zera a conta,
+    // e desbloquear também (faltas marcadas antes do desbloqueio não contam mais).
     let blockedClient = null;
     if (status === 'faltou' && a.status !== 'faltou') {
       const settings = await repo.getSettings(c);
       if (settings.autoBlock > 0) {
-        const { rows: f } = await c.query("SELECT count(*)::int AS n FROM appointments WHERE client_id = $1 AND status = 'faltou'", [a.client_id]);
-        if (f[0].n >= settings.autoBlock) {
+        const seguidas = await faltasSeguidas(c, a.client_id);
+        if (seguidas >= settings.autoBlock) {
           const { rows: cl } = await c.query(
             'UPDATE clients SET blocked = true, blocked_reason = $2 WHERE id = $1 AND NOT blocked RETURNING *',
-            [a.client_id, `Faltou ${f[0].n} vezes sem avisar`]);
+            [a.client_id, `Faltou ${seguidas} vezes seguidas sem avisar`]);
           if (cl[0]) blockedClient = repo.mapClient(cl[0]);
         }
       }
@@ -242,7 +259,7 @@ r.post('/clientes/:id/bloquear', ah(async (req, res) => {
   espera.vagou(...out.cancelled.map((x) => x.date));
 }));
 r.post('/clientes/:id/desbloquear', ah(async (req, res) => {
-  const { rows } = await db.query("UPDATE clients SET blocked = false, blocked_reason = '' WHERE id = $1 RETURNING *", [cleanId(req.params.id)]);
+  const { rows } = await db.query("UPDATE clients SET blocked = false, blocked_reason = '', faltas_zeradas_em = now() WHERE id = $1 RETURNING *", [cleanId(req.params.id)]);
   if (!rows[0]) fail(404, 'Cliente não encontrado.');
   res.json({ client: repo.mapClient(rows[0]) });
 }));
