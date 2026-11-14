@@ -840,6 +840,9 @@ button.rank-i:hover>span svg{transform:translateX(3px);color:var(--ouro)}
 .cchip.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
 .cchip.on svg{color:var(--ouro-d)}
 .cchip.on b{background:color-mix(in srgb,var(--surface) 18%,transparent);color:inherit}
+.cli-regra{display:flex;align-items:flex-start;gap:9px;margin:0;padding:11px 14px;border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:13.5px;line-height:1.45}
+.cli-regra svg{flex:none;margin-top:1px;color:var(--ouro-d)}
+.cli-regra b{color:var(--ink)}
 .cli-grid{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}
 .cli{gap:14px;padding:18px 18px 16px;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
 .cli:hover{box-shadow:0 12px 30px rgba(15,23,42,.08)}
