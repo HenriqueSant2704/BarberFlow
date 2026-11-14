@@ -89,9 +89,10 @@ CREATE INDEX IF NOT EXISTS notifications_created_idx ON notifications(created_at
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS max_active  smallint NOT NULL DEFAULT 2;  -- horários marcados ao mesmo tempo por cliente
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS max_per_day smallint NOT NULL DEFAULT 1;  -- horários no mesmo dia por cliente
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS max_device  smallint NOT NULL DEFAULT 3;  -- agendamentos novos pelo site por aparelho em 24 h
-ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_block  smallint NOT NULL DEFAULT 2;  -- bloqueia depois de N faltas (0 = nunca)
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS auto_block  smallint NOT NULL DEFAULT 2;  -- bloqueia depois de N faltas SEGUIDAS (0 = nunca)
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS blocked        boolean NOT NULL DEFAULT false;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS blocked_reason text    NOT NULL DEFAULT '';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS faltas_zeradas_em timestamptz;  -- desbloqueou: faltas marcadas antes disso não contam mais
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS device text;   -- código do aparelho (só para contar agendamentos)
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS ip_hash text;  -- IP embaralhado, nunca o IP de verdade
 CREATE INDEX IF NOT EXISTS appointments_created_idx ON appointments(created_at);
