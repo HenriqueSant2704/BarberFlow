@@ -26,6 +26,7 @@ const mapAppt = (r) => ({
   remind: r.remind_status ? { status: r.remind_status, at: r.remind_at } : null,
   items: Array.isArray(r.items) && r.items.length ? r.items : null, discount: Number(r.discount) || 0,
   forName: r.for_name || null, movedFrom: r.moved_from || null,
+  conta: r.conta && typeof r.conta === 'object' ? r.conta : null,
 });
 /** Pedido na lista de espera. */
 const mapEspera = (r) => ({

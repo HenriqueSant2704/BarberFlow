@@ -28,7 +28,7 @@
   // Sininho: avisos só para este cliente (valor do atendimento mudou, bloqueio...) e para todos (serviço novo, preço, nome...)
   let AVISOS = [];
   const LIDOS_KEY = 'barbearia_avisos_lidos'; // quem não entrou guarda neste aparelho o que já leu
-  const lidosLocal = () => { const l = store.get(LIDOS_KEY); return Array.isArray(l) ? l.map(String) : []; };
+  const lidosLocal = () => { try { const l = JSON.parse(store.get(LIDOS_KEY) || '[]'); return Array.isArray(l) ? l.map(String) : []; } catch (e) { return []; } };
   const naoLidos = () => AVISOS.filter((n) => !n.lido);
 
   const token = () => store.get(TOKEN_KEY);
@@ -160,7 +160,7 @@
   async function marcarLidos(ids) {
     const l = AVISOS.filter((n) => ids.includes(String(n.id)) && !n.lido); if (!l.length) return;
     l.forEach((n) => { n.lido = true; });
-    if (!ME) { store.set(LIDOS_KEY, [...new Set([...lidosLocal(), ...l.map((n) => String(n.id))])].slice(-200)); return; }
+    if (!ME) { store.set(LIDOS_KEY, JSON.stringify([...new Set([...lidosLocal(), ...l.map((n) => String(n.id))])].slice(-200))); return; }
     try { await api('POST', '/api/public/avisos/lidos', { ids: l.map((n) => n.id) }, authH()); } catch (e) { /* tenta de novo na próxima vez */ }
   }
   async function loadMe() {
