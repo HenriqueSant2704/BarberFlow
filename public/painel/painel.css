@@ -792,7 +792,7 @@ button.rank-i:hover>span svg{transform:translateX(3px);color:var(--ouro)}
 .pd-1 .pd-base span{font-size:36px;color:var(--ouro-d);opacity:1}
 .pd-3 .pd-base{height:48px}
 .pd.vazio{cursor:default;opacity:.4}
-.rk-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;margin:0 -28px;padding:16px 28px 22px;background:rgba(255,255,255,.03);border-top:1px solid rgba(255,255,255,.08)}
+.rk-lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:0 -28px;padding:16px 28px 22px;background:rgba(255,255,255,.03);border-top:1px solid rgba(255,255,255,.08)}
 .rk-l{display:grid;grid-template-columns:30px auto minmax(0,1fr) 70px auto;gap:10px;align-items:center;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.03);color:inherit;text-align:left;transition:background-color .2s,border-color .2s}
 .rk-l:hover{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18)}
 .rk-l .n{font-weight:800;font-size:13px;color:var(--bloco-muted)}

@@ -505,6 +505,7 @@
 
   // ----- Ranking: pódio com 1º, 2º e 3º lugar -----
   const RK = { gasto: ['Quem mais gasta', 'wallet'], freq: ['Mais frequentes', 'repeat'], sumidos: ['Quem sumiu', 'clock'] };
+  const RK_MAX = 5; // o ranking mostra só os 5 primeiros (pódio + 4º e 5º)
   const RK_PER = { mes: 'Este mês', '3m': '3 meses', tudo: 'Desde sempre' };
   function rankDados() {
     const ini = V.rkPer === 'mes' ? TODAY.slice(0, 8) + '01' : V.rkPer === '3m' ? A.iso(A.addDays(NOW, -90)) : '0000';
@@ -523,14 +524,14 @@
     if (V.rk === 'sumidos') {
       const { arr } = clientStats();
       const l = arr.filter(sumido).sort(ORD.sumido[1]);
-      corpo = l.length ? `<div class="rk-sumidos">${l.slice(0, 6).map((x, i) => {
+      corpo = l.length ? `<div class="rk-sumidos">${l.slice(0, RK_MAX).map((x, i) => {
         const d = diasDesde(x.last); const atraso = x.cada ? d - x.cada : 0;
         const msg = `Olá, ${first(x.c.name)}! Aqui é da ${S.settings.shopName}. Faz um tempinho que você não aparece. Bora dar aquele trato? É só marcar pelo nosso site.`;
         return `<div class="rk-sum ${i === 0 ? 'pior' : ''}"><button type="button" class="rk-sum-q" data-a="cli" data-id="${x.c.id}">${avk(x.c, 42)}<div><b>${esc(x.c.name)}</b><small>${x.visits} visita${x.visits > 1 ? 's' : ''} · ${esc(x.fav || 'Corte')}</small></div></button>
           <div class="rk-dias"><b class="num">${d}</b><span>dias sem vir</span></div>
           <p>${x.cada ? (atraso > 0 ? `Costumava vir a cada <b>${x.cada} dias</b>. Está <b>${atraso} dias</b> atrasado.` : `Costuma vir a cada <b>${x.cada} dias</b>.`) : `Veio só uma vez, em ${shortDate(x.last)}.`}</p>
           ${x.c.phone ? `<a class="btn p" href="${waLink(x.c.phone, msg)}" target="_blank" rel="noopener">${ic('whats', 15)}Chamar de volta</a>` : ''}</div>`;
-      }).join('')}</div>${l.length > 6 ? `<button type="button" class="link rk-mais" data-a="cli-f" data-v="sumidos" data-rola="1">Ver os ${l.length} sumidos${ic('right', 15)}</button>` : ''}`
+      }).join('')}</div>${l.length > RK_MAX ? `<button type="button" class="link rk-mais" data-a="cli-f" data-v="sumidos" data-rola="1">Ver os ${l.length} sumidos${ic('right', 15)}</button>` : ''}`
         : `<div class="rk-vazio">${ic('check', 22)}<b>Ninguém sumido</b><span>Todo mundo que costuma vir já voltou este mês ou tem horário marcado.</span></div>`;
     } else {
       const l = rankDados();
@@ -541,7 +542,7 @@
           <span class="pd-av">${esc(initials(p.c.name))}<i>${pos}</i></span>
           <b class="pd-nome">${esc(p.c.name)}</b><span class="pd-val num">${val(p)}</span><small>${sub(p)}</small>
           <div class="pd-base"><span>${pos}º</span></div></button>`;
-      const resto = l.slice(3, 10); const max = l[0] ? (V.rk === 'freq' ? l[0].n : l[0].val) : 1;
+      const resto = l.slice(3, RK_MAX); const max = l[0] ? (V.rk === 'freq' ? l[0].n : l[0].val) : 1;
       corpo = l.length ? `<div class="podio">${lugar(l[1], 2)}${lugar(l[0], 1)}${lugar(l[2], 3)}</div>
         ${resto.length ? `<div class="rk-lista">${resto.map((p, i) => `<button type="button" class="rk-l" data-a="cli" data-id="${p.c.id}"><span class="n">${i + 4}º</span>${avk(p.c, 34)}<b>${esc(p.c.name)}</b><span class="barra"><i style="width:${((V.rk === 'freq' ? p.n : p.val) / max) * 100}%"></i></span><span class="v num">${val(p)}</span></button>`).join('')}</div>` : ''}`
         : `<div class="rk-vazio">${ic('star', 22)}<b>Ninguém no ranking ainda</b><span>Quando você marcar atendimentos como atendidos, o pódio aparece aqui.</span></div>`;
