@@ -754,6 +754,56 @@ button.rank-i:hover>span svg{transform:translateX(3px);color:var(--ouro)}
 .fecha-rap{gap:6px;align-items:center}
 .fecha-rap .chip{padding:8px 12px;font-size:13px}
 .fecha-bts{display:grid;grid-template-columns:auto 1fr;gap:10px}
+/* Fechar atendimento: o que mudou do agendado e o motivo de cada mudança */
+.mini-lab{display:block;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.fecha-it-w{display:flex;flex-direction:column;gap:6px}
+.fecha-nota{display:flex;flex-direction:column;gap:6px;padding-left:44px}
+.fecha-nota:empty{display:none}
+.fecha-tags{display:flex;gap:6px;flex-wrap:wrap}
+.fecha-tags .tag svg{flex:none}
+.motivo{display:flex;flex-direction:column;gap:7px;padding:9px;border-radius:12px;background:var(--ouro-soft);border:1px dashed color-mix(in srgb,var(--ouro) 45%,transparent);animation:entra .25s var(--ease) both}
+.motivo .entrada.mini{height:40px;border-width:1px}
+.motivo .entrada.mini svg{color:var(--ouro);flex:none}
+.motivo .entrada.mini input{font-weight:600;font-size:13.5px}
+.motivo.falta{background:var(--vermelho-soft);border:1px solid var(--vermelho)}
+.motivo.falta .entrada.mini{border-color:var(--vermelho)}
+.mot-chips{display:flex;gap:5px;flex-wrap:wrap}
+.mot-chips .chip{padding:5px 10px;font-size:12px;border-radius:99px;gap:4px}
+.fecha-tirados{display:flex;flex-direction:column;gap:10px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-strong)}
+.fecha-tirado{display:flex;flex-direction:column;gap:6px}
+.fecha-tir-l{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;font-size:14px;color:var(--muted)}
+.fecha-tir-l .ico-k{width:28px;height:28px;border-radius:50%;background:var(--vermelho-soft);color:var(--vermelho)}
+.fecha-tir-l s{text-decoration-thickness:1.5px}
+.fecha-tir-l .link{font-size:12.5px}
+#fdMot:empty{display:none}
+#fdMot{margin-top:8px}
+.conta .l.prev{font-size:13px;padding-bottom:8px;border-bottom:1px dashed var(--line)}
+.conta .l.prev b{color:var(--muted)}
+.fecha-aviso{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--ouro);font-size:13px;line-height:1.5}
+.fecha-aviso>svg{flex:none;margin-top:2px;color:var(--ouro)}
+.fecha-aviso b{display:block;font-size:13px}
+.fecha-aviso p{margin:2px 0 0;color:var(--ink-soft)}
+.fecha-aviso i{font-style:normal;font-weight:700;color:var(--ink)}
+.fecha-aviso.calmo{border-left-color:var(--verde);align-items:center}
+.fecha-aviso.calmo>svg{color:var(--verde);margin:0}
+.fecha-aviso.calmo p{margin:0}
+/* Ficha do pedido: agendado x feito */
+.conta-dia .mini-lab{margin-top:2px}
+.cd-prev{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 12px;border-radius:10px;background:var(--surface-2);color:var(--ink-soft);font-size:13.5px}
+.cd-prev b{color:var(--muted);white-space:nowrap}
+.pedido-itens .l span em{display:block;margin-top:2px;font-style:normal;font-size:12px;line-height:1.4;color:var(--muted)}
+.pedido-itens .l.mudou em{color:var(--ouro);font-weight:600}
+.pedido-itens .l.tirado{color:var(--muted)}
+.pedido-itens .l.tirado .ico-k{border-radius:50%;background:var(--vermelho-soft);color:var(--vermelho)}
+.pedido-itens .l.tirado em{color:var(--vermelho);font-weight:600}
+.pedido-itens .l.desc em{color:var(--verde);opacity:.9}
+.conta-dia .dif{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:4px 10px;border-radius:99px;background:var(--k-soft);color:var(--k);font-size:12px;font-weight:700}
+.cd-eds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.cd-eds li{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);border-left:3px solid var(--ouro);font-size:13px}
+.cd-eds li span{color:var(--ink-soft)}
+.cd-eds li small{display:inline-flex;align-items:center;gap:4px;margin-top:2px;color:var(--muted);font-size:11.5px;font-weight:700}
+.cd-eds li small[data-k="verde"]{color:var(--verde)}
+.hist .aj{display:inline-flex;align-items:center;gap:3px;color:var(--ouro);font-weight:700}
 .fecha-bts .btn.verde{height:52px;font-size:15px}
 
 /* ---------- Clientes: ranking com pódio ---------- */
@@ -890,6 +940,9 @@ button.rank-i:hover>span svg{transform:translateX(3px);color:var(--ouro)}
   .fecha-it .btn-icone{width:40px}
   .entrada.mini{padding:0 10px}
   .fecha-it .ico-k{display:none}
+  .fecha-nota{padding-left:0}
+  .fecha-tir-l{grid-template-columns:auto minmax(0,1fr) auto;row-gap:2px}
+  .fecha-tir-l .link{grid-column:2/-1;justify-self:start}
   .fecha-desc .entrada.mini{flex:1;width:auto}
   .fecha-bts{grid-template-columns:1fr}
   .fecha-bts .btn:first-child{order:2}

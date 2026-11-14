@@ -870,10 +870,11 @@
     const mudouSvc = d.svcs.filter((s) => { const o = S.services.find((x) => x.id === s.id); return o && (o.name !== s.name.trim() || o.dur !== s.dur || o.price !== parseFloat(String(s.price).replace(',', '.'))); });
     V.saving = true;
     try {
-      await api('PUT', '/api/admin/configuracoes', patch);
-      for (const s of mudouSvc) await api('PUT', '/api/admin/servicos/' + s.id, { name: s.name.trim(), dur: s.dur, price: parseFloat(String(s.price).replace(',', '.')) });
+      // O servidor avisa os clientes no sininho do site quando muda algo que todos precisam saber (nome, serviço, preço, horário...)
+      const avisos = [...((await api('PUT', '/api/admin/configuracoes', patch)) || {}).avisos || []];
+      for (const s of mudouSvc) avisos.push(...((await api('PUT', '/api/admin/servicos/' + s.id, { name: s.name.trim(), dur: s.dur, price: parseFloat(String(s.price).replace(',', '.')) })) || {}).avisos || []);
       await reload(); V.draft = mkDraft();
-      alerta('ok', 'Configurações salvas', 'O site do cliente já está com as mudanças.');
+      alerta('ok', 'Configurações salvas', avisos.length ? `Os clientes receberam no sininho do site: ${avisos.join('; ')}.` : 'O site do cliente já está com as mudanças.', [], avisos.length ? 7000 : undefined);
       return true;
     } catch (e) {
       alerta('erro', 'Não deu para salvar', e.message);
@@ -942,11 +943,11 @@
       b = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pilula" data-k="${pil[0]}">${pil[1]}</span><span class="muted" style="font-size:12.5px">${x.origin === 'site' ? 'Marcado pelo site' : x.origin === 'espera' ? 'Veio da lista de espera' : 'Marcado no painel'} · ${tempo(x.dur)}</span></div>
         <div class="pedido">
           <div class="pedido-quem"><span class="av-k">${esc(initials(quem))}</span><div><small>${x.forName ? 'Quem vai cortar' : 'Cliente'}</small><b>${esc(quem)}</b>${x.forName ? `<span>Pedido feito por ${esc(c.name)}</span>` : ''}</div></div>
-          <div class="pedido-itens"><small>${x.status === 'realizado' ? 'O que foi cobrado' : it.length > 1 ? 'Serviços pedidos' : 'Serviço pedido'}</small>
+          ${x.status === 'realizado' && x.conta ? contaDia(x) : `<div class="pedido-itens"><small>${x.status === 'realizado' ? 'O que foi cobrado' : it.length > 1 ? 'Serviços pedidos' : 'Serviço pedido'}</small>
             ${it.map((y) => `<div class="l"><span class="ico-k p">${svcIcon(y.name).replace('<svg', '<svg width="15" height="15"')}</span><span>${esc(y.name)}</span><b class="num">${money(y.price)}</b></div>`).join('')}
             ${x.discount ? `<div class="l desc"><span></span><span>Desconto</span><b class="num">− ${money(x.discount)}</b></div>` : ''}
             <div class="l tot"><span>${x.status === 'realizado' ? 'Pagou' : 'Total, pago na barbearia'}</span><b class="num">${money(x.price)}</b></div>
-            ${x.status === 'realizado' ? `<button type="button" class="link" data-a="fecha-edit" data-id="${x.id}" style="align-self:flex-start">${ic('tag', 15)}Editar valores</button>` : ''}</div>
+            ${x.status === 'realizado' ? `<button type="button" class="link" data-a="fecha-edit" data-id="${x.id}" style="align-self:flex-start">${ic('tag', 15)}Editar valores</button>` : ''}</div>`}
         </div>
         ${x.movedFrom && x.status === 'agendado' ? `<div class="faixa fina" data-t="info"><span class="f-ico">${ic('repeat', 15)}</span><div><strong>Mudou de ${diaTxt(x.movedFrom.slice(0, 10))} às ${x.movedFrom.slice(11, 16)}</strong><p>O cliente trocou o horário pelo site.</p></div></div>` : ''}
         ${x.origin === 'espera' && x.status === 'agendado' ? `<div class="faixa fina" data-t="ok"><span class="f-ico">${ic('bell', 15)}</span><div><strong>Vaga preenchida pela lista de espera</strong><p>Alguém cancelou e o sistema marcou para ${esc(first(c.name))}, que era o primeiro da fila. Ele recebeu a mensagem no WhatsApp.</p></div></div>` : ''}
@@ -973,7 +974,7 @@
         <form id="cliForm" data-id="${x.c.id}" class="form-g" novalidate><div class="campo"><label for="cd-n">Nome</label><div class="entrada" id="e-cdn"><input id="cd-n" value="${esc(x.c.name)}"></div></div>
           <div class="campo"><label for="cd-p">WhatsApp</label><div class="entrada" id="e-cdp">${ic('whats', 18)}<input id="cd-p" value="${esc(maskPhone(x.c.phone))}" data-in="mask" inputmode="tel"></div></div>
           <div class="acoes"><button type="submit" class="btn pri">${ic('check', 16)}Salvar dados</button>${x.c.phone ? `<a class="btn" href="${waLink(x.c.phone)}" target="_blank" rel="noopener">${ic('whats', 16)}WhatsApp</a>` : ''}</div></form>
-        <div><span class="lab" id="histTopo" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico${histTodo.length ? ` · ${histTodo.length} ${histTodo.length === 1 ? 'horário' : 'horários'}` : ''}</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}${y.discount ? ' com desconto' : ''}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div><div class="hist-pag">${hp.html}</div></div>
+        <div><span class="lab" id="histTopo" style="font-size:13px;font-weight:700;color:var(--ink-soft)">Histórico${histTodo.length ? ` · ${histTodo.length} ${histTodo.length === 1 ? 'horário' : 'horários'}` : ''}</span><div class="hist" style="margin-top:8px">${hist.map((y) => `<button type="button" data-a="ap" data-id="${y.id}"><b class="num">${shortDate(y.date)}</b><div style="min-width:0"><b>${esc(y.service)}</b><small>${y.time} · ${money0(y.price)}${y.conta && A.mudancasConta(y.conta).length ? ` · <span class="aj">${ic('tag', 11)}ajustado</span>` : y.discount ? ' com desconto' : ''}</small></div><span class="pilula" data-k="${pilHist[y.status][0]}">${pilHist[y.status][1]}</span></button>`).join('') || '<span class="muted" style="font-size:13px">Sem histórico ainda.</span>'}</div><div class="hist-pag">${hp.html}</div></div>
         ${x.c.blocked ? '' : V.ladoAsk === 'block' ? `<div class="confirma"><span>Bloquear ${esc(first(x.c.name))}? Não vai conseguir mais marcar pelo site${fut ? ` e ${fut === 1 ? 'o horário já marcado será cancelado' : `os ${fut} horários já marcados serão cancelados`}` : ''}.</span><div><button type="button" class="btn p sim" data-a="bloq" data-id="${x.c.id}">Sim, bloquear</button><button type="button" class="btn p" data-a="lado-no">Voltar</button></div></div>`
           : `<button type="button" class="btn verm" data-a="lado-ask" data-v="block">${ic('ban', 16)}Bloquear cliente</button>`}`;
     }
@@ -1131,73 +1132,187 @@
     return `<div class="overlay" data-a="nv-x"></div><form class="janela nv" id="nvForm" novalidate role="dialog" aria-modal="true" aria-label="Novo agendamento">${nvMiolo()}</form>`;
   }
 
-  // ===== Fechar atendimento: confere o que foi feito, troca/adiciona serviço, desconto =====
+  // ===== Fechar atendimento: o que o cliente agendou x o que foi feito, com o motivo de cada mudança =====
+  // Fica tudo guardado no atendimento (x.conta) e aparece no histórico do painel e do site do cliente.
+  const MOT = {
+    sobe: ['Ficou devendo da última vez', 'Deu mais trabalho', 'Preço combinado'],
+    desce: ['Serviço mais simples', 'Cortesia', 'Preço combinado'],
+    tira: ['Não foi feito', 'Cliente desistiu', 'Fica para a próxima'],
+    desc: ['Cliente fiel', 'Aniversário', 'Promoção', 'Combinado na hora'],
+    edit: ['Valor lançado errado', 'Cliente pagou diferente', 'Esqueci um serviço'],
+  };
+  /** O que o cliente marcou, antes de qualquer ajuste do barbeiro. */
+  const previstoDe = (x) => (x.conta && x.conta.previsto ? x.conta.previsto : { items: itensDe(x), total: subDe(x) });
+  const r2 = (v) => Math.round(Number(v || 0) * 100) / 100;
   function abrirFecha(id, edit) {
     const x = S.appts.find((y) => y.id === id); if (!x) return;
-    V.fecha = {
-      id, edit: !!edit, outro: false,
-      items: itensDe(x).map((it) => ({ sid: it.serviceId || '', name: it.name, price: num2(it.price) })),
-      dTipo: 'R$', dVal: x.discount ? num2(x.discount) : '',
-    };
+    const c = x.conta; let items; let tirados = []; let dTipo = 'R$', dVal = '', dMot = '';
+    if (c) {
+      items = c.feitos.map((f) => ({ sid: f.serviceId || '', name: f.name, price: num2(f.price), base0: f.base, mot: f.motivo || '',
+        orig: f.tipo === 'agendado' ? { sid: f.serviceId || '', name: f.name, price: f.base } : f.tipo === 'trocado' && f.de ? { sid: f.de.serviceId || '', name: f.de.name, price: f.de.price } : null }));
+      tirados = (c.tirados || []).map((t) => ({ sid: t.serviceId || '', name: t.name, price: t.price, mot: t.motivo || '' }));
+      if (c.desconto) { dTipo = c.desconto.tipo; dVal = c.desconto.tipo === '%' ? String(c.desconto.pct).replace('.', ',') : num2(c.desconto.valor); dMot = c.desconto.motivo || ''; }
+    } else {
+      items = itensDe(x).map((it) => ({ sid: it.serviceId || '', name: it.name, price: num2(it.price), mot: '', orig: { sid: it.serviceId || '', name: it.name, price: Number(it.price) } }));
+      if (x.discount) dVal = num2(x.discount);
+    }
+    V.fecha = { id, edit: !!edit, items, tirados, dTipo, dVal, dMot, edMot: '', tentou: false };
     V.menu = false; V.sino = false; V.cancel = null; render();
   }
+  const ehOrig = (it) => it.orig && (it.orig.sid ? it.orig.sid === it.sid : it.orig.name === it.name);
+  const tipoDe = (it) => (ehOrig(it) ? 'agendado' : it.orig ? 'trocado' : 'acrescentado');
+  /** Preço de referência do item: o que o cliente agendou ou o da tabela. Extra avulso não tem. */
+  function baseDe(it) {
+    if (ehOrig(it)) return Number(it.orig.price);
+    const sv = it.sid && S.services.find((y) => y.id === it.sid);
+    return sv ? Number(sv.price) : it.sid && it.base0 != null ? Number(it.base0) : null;
+  }
+  const difDe = (it) => { const b = baseDe(it); return b == null ? 0 : r2(pf(it.price) - b); };
   function contaFecha() {
     const f = V.fecha; const sub = f.items.reduce((s, it) => s + pf(it.price), 0);
     const dv = pf(f.dVal);
     const desc = Math.round(Math.min(sub, Math.max(0, f.dTipo === '%' ? (sub * Math.min(dv, 100)) / 100 : dv)) * 100) / 100;
     return { sub, desc, total: Math.round((sub - desc) * 100) / 100 };
   }
+  /** A conta como vai ser guardada: o agendado, o feito (com motivos), o que saiu e o desconto. */
+  function montaConta() {
+    const f = V.fecha; const x = S.appts.find((y) => y.id === f.id); const { desc, total } = contaFecha();
+    const feitos = f.items.map((it) => {
+      const tipo = tipoDe(it); const b = baseDe(it); const mud = b != null && difDe(it) !== 0;
+      return { serviceId: it.sid || null, name: String(it.name).trim(), price: r2(pf(it.price)), base: b, tipo, de: tipo === 'trocado' ? { serviceId: it.orig.sid || null, name: it.orig.name, price: it.orig.price } : null, motivo: mud ? it.mot.trim() : '' };
+    });
+    const tirados = f.tirados.map((t) => ({ serviceId: t.sid || null, name: t.name, price: t.price, motivo: t.mot.trim() }));
+    const desconto = desc > 0 ? { tipo: f.dTipo, pct: f.dTipo === '%' ? Math.min(pf(f.dVal), 100) : null, valor: desc, motivo: f.dMot.trim() } : null;
+    const antes = x.conta ? x.conta.edicoes || [] : [];
+    const edicoes = f.edit ? [...antes, { at: new Date().toISOString(), motivo: f.edMot.trim(), de: x.price, para: total }] : antes;
+    return { previsto: previstoDe(x), feitos, tirados, desconto, total, edicoes };
+  }
   function fechaTotal() {
     const f = V.fecha; const x = S.appts.find((y) => y.id === f.id); const { sub, desc, total } = contaFecha();
-    const base = f.edit ? x.price : subDe(x); const dif = Math.round((total - base) * 100) / 100;
-    const difTxt = !dif ? '' : f.edit ? `${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que estava no financeiro` : `${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que o cliente marcou`;
-    return `<div class="l"><span>Serviços (${f.items.length})</span><b class="num">${money(sub)}</b></div>
+    const prev = previstoDe(x).total;
+    const base = f.edit ? x.price : prev; const dif = Math.round((total - base) * 100) / 100;
+    const difTxt = !dif ? '' : f.edit ? `${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que estava no financeiro` : `${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que o cliente agendou`;
+    return `<div class="l prev"><span>Agendado pelo cliente</span><b class="num">${money(prev)}</b></div>
+      <div class="l"><span>Serviços feitos (${f.items.length})</span><b class="num">${money(sub)}</b></div>
       ${desc ? `<div class="l desc"><span>Desconto${f.dTipo === '%' && pf(f.dVal) ? ` de ${String(Math.min(pf(f.dVal), 100)).replace('.', ',')}%` : ''}</span><b class="num">− ${money(desc)}</b></div>` : ''}
       <div class="l tot"><span>Total que entra no caixa</span><b class="num">${money(total)}</b></div>
       ${difTxt ? `<span class="dif" data-k="${dif > 0 ? 'verde' : 'laranja'}">${ic(dif > 0 ? 'trend' : 'down', 14)}${difTxt}</span>` : ''}`;
   }
+  /** Campo de motivo: chips com os motivos mais comuns e um campo para escrever. */
+  function motivo(k, val, chips, ph) {
+    const falta = V.fecha.tentou && !String(val || '').trim();
+    return `<div class="motivo ${falta ? 'falta' : ''}" id="mot-${k}"><div class="entrada mini">${ic('info', 15)}<input data-mot="${k}" value="${esc(val || '')}" placeholder="${ph}" maxlength="120" aria-label="${ph}"></div>
+      <div class="mot-chips">${chips.map((t) => `<button type="button" class="chip ${val === t ? 'on' : ''}" data-a="mot" data-k="${k}" data-v="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
+  }
+  /** Embaixo de cada item: se foi trocado, acrescentado ou se o preço mudou (e aí pede o motivo). */
+  function notaItem(it, i) {
+    const tipo = tipoDe(it); const b = baseDe(it); const d = difDe(it); let h = '';
+    if (tipo === 'trocado') h += `<span class="tag" data-k="azul">${ic('repeat', 12)}No lugar de ${esc(it.orig.name)}</span>`;
+    if (tipo === 'acrescentado') h += `<span class="tag" data-k="verde">${ic('plus', 12)}${it.sid ? 'Acrescentado na hora' : 'Extra'}</span>`;
+    if (d) h += `<span class="tag" data-k="ouro">${ic('tag', 12)}${money(b)} → ${money(pf(it.price))} (${d > 0 ? '+' : '−'}${money(Math.abs(d))})</span>`;
+    return (h ? `<div class="fecha-tags">${h}</div>` : '') + (d ? motivo('i' + i, it.mot, d > 0 ? MOT.sobe : MOT.desce, d > 0 ? 'Por que cobrou a mais? (obrigatório)' : 'Por que cobrou a menos? (obrigatório)') : '');
+  }
+  function fechaAviso() {
+    const f = V.fecha; const x = S.appts.find((y) => y.id === f.id); const c = cById(x.clientId);
+    const conta = montaConta(); const mud = A.mudancasConta(conta);
+    if (!f.edit && !mud.length) return `<div class="fecha-aviso calmo">${ic('check', 16)}<p>Igual ao que ${esc(first(c.name))} agendou. Fica no histórico dele assim.</p></div>`;
+    if (f.edit && !f.edMot.trim()) return `<div class="fecha-aviso">${ic('bell', 16)}<div><b>${esc(first(c.name))} vai ser avisado no sininho do site</b><p>Escreva o motivo da mudança para ele entender.</p></div></div>`;
+    const av = A.avisoConta(conta, { date: x.date, time: x.time, edit: f.edit });
+    return `<div class="fecha-aviso">${ic('bell', 16)}<div><b>${esc(first(c.name))} vai ver no histórico e receber no sininho:</b><p><i>${esc(av.titulo)}</i> · ${esc(av.texto)}</p></div></div>`;
+  }
   function paintFecha() {
+    const f = V.fecha;
     const t = $('#fechaTotal'); if (t) t.innerHTML = fechaTotal();
-    const b = $('#fechaOk'); if (b) b.innerHTML = `${ic('check', 18)}${V.fecha.edit ? 'Salvar valores' : 'Confirmar atendimento'} · ${money(contaFecha().total)}`;
+    f.items.forEach((it, i) => { const n = $('#fn-' + i); if (n) { const tem = !!n.querySelector('input:focus'); if (!tem) n.innerHTML = notaItem(it, i); } });
+    const dm = $('#fdMot'); if (dm && !dm.querySelector('input:focus')) dm.innerHTML = contaFecha().desc ? motivo('d', f.dMot, MOT.desc, 'Motivo do desconto (obrigatório)') : '';
+    const av = $('#fechaAviso'); if (av) av.innerHTML = fechaAviso();
+    const b = $('#fechaOk'); if (b) b.innerHTML = `${ic('check', 18)}${f.edit ? 'Salvar valores' : 'Confirmar atendimento'} · ${money(contaFecha().total)}`;
   }
   function vFecha() {
     const f = V.fecha; const x = S.appts.find((y) => y.id === f.id);
     if (!x) { V.fecha = null; return ''; }
-    const c = cById(x.clientId);
+    const c = cById(x.clientId); const prev = previstoDe(x);
     const usados = new Set(f.items.map((it) => it.sid).filter(Boolean));
     const faltam = S.services.filter((sv) => !usados.has(sv.id));
-    const itens = f.items.map((it, i) => `<div class="fecha-it">
+    const itens = f.items.map((it, i) => `<div class="fecha-it-w"><div class="fecha-it">
         <span class="ico-k p">${svcIcon(it.name || 'outro').replace('<svg', '<svg width="16" height="16"')}</span>
         ${it.sid ? `<div class="entrada mini sel"><select data-fi="${i}" data-k="sid" aria-label="Serviço ${i + 1}">${S.services.filter((sv) => sv.id === it.sid || !usados.has(sv.id)).map((sv) => `<option value="${sv.id}" ${sv.id === it.sid ? 'selected' : ''}>${esc(sv.name)}</option>`).join('')}${S.services.some((sv) => sv.id === it.sid) ? '' : `<option value="${esc(it.sid)}" selected>${esc(it.name)}</option>`}</select></div>`
           : `<div class="entrada mini"><input data-fi="${i}" data-k="name" value="${esc(it.name)}" placeholder="Ex.: Pomada, hidratação" maxlength="60" aria-label="O que foi feito"></div>`}
         <div class="entrada mini preco"><span class="muted">R$</span><input data-fi="${i}" data-k="price" value="${esc(it.price)}" inputmode="decimal" aria-label="Valor de ${esc(it.name || 'item')}"></div>
-        <button type="button" class="btn-icone" data-a="fi-del" data-v="${i}" ${f.items.length < 2 ? 'disabled' : ''} aria-label="Tirar ${esc(it.name || 'item')}" title="Tirar">${ic('trash', 16)}</button></div>`).join('');
+        <button type="button" class="btn-icone" data-a="fi-del" data-v="${i}" ${f.items.length < 2 ? 'disabled' : ''} aria-label="Tirar ${esc(it.name || 'item')}" title="Tirar">${ic('trash', 16)}</button></div>
+        <div class="fecha-nota" id="fn-${i}">${notaItem(it, i)}</div></div>`).join('');
+    const tirados = f.tirados.map((t, j) => `<div class="fecha-tirado"><div class="fecha-tir-l"><span class="ico-k p">${ic('x', 14)}</span><s>${esc(t.name)}</s><s class="num">${money(t.price)}</s><button type="button" class="link" data-a="ti-volta" data-v="${j}">${ic('undo', 14)}Devolver</button></div>
+        ${motivo('t' + j, t.mot, MOT.tira, 'Por que saiu? (obrigatório)')}</div>`).join('');
     const rap = [['%', '5', '5%'], ['%', '10', '10%'], ['R$', '5', 'R$ 5'], ['R$', '10', 'R$ 10']];
     return `<div class="overlay" data-a="fecha-x"></div><form class="janela fecha" id="fechaForm" novalidate role="dialog" aria-modal="true" aria-label="${f.edit ? 'Editar valores' : 'Fechar atendimento'}">
-      <div class="folha-topo"><div><h3>${f.edit ? 'Editar valores' : 'Fechar atendimento'}</h3><p>${f.edit ? 'Corrija o que foi cobrado. O financeiro muda junto.' : 'Confira o que foi feito. O financeiro usa o valor final.'}</p></div><button type="button" class="btn-icone" data-a="fecha-x" aria-label="Fechar">${ic('x', 18)}</button></div>
-      <div class="fecha-cli">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${cap(diaTxt(x.date))} às ${x.time} · marcou ${esc(x.items && x.items.length ? x.items[0].name : x.service)}</small></div></div>
+      <div class="folha-topo"><div><h3>${f.edit ? 'Editar valores' : 'Fechar atendimento'}</h3><p>${f.edit ? 'Corrija o que foi cobrado. O cliente é avisado e o financeiro muda junto.' : 'Confira o que foi feito. Toda mudança fica no histórico, com o motivo.'}</p></div><button type="button" class="btn-icone" data-a="fecha-x" aria-label="Fechar">${ic('x', 18)}</button></div>
+      <div class="fecha-cli">${avk(c, 44)}<div><b>${esc(c.name)}</b><small>${cap(diaTxt(x.date))} às ${x.time} · agendou ${esc(prev.items.map((it) => it.name).join(' + '))} · ${money(prev.total)}</small></div></div>
       <div class="campo"><span class="lab">O que foi feito</span><div class="fecha-itens">${itens}</div>
-        <div class="fecha-add">${faltam.map((sv) => `<button type="button" class="chip" data-a="fi-add" data-id="${sv.id}">${ic('plus', 14)}${esc(sv.name)}<b>${money0(sv.price)}</b></button>`).join('')}<button type="button" class="chip tracejado" data-a="fi-outro">${ic('plus', 14)}Outro (produto, extra)</button></div></div>
+        ${tirados ? `<div class="fecha-tirados"><small class="mini-lab">Tirado do que ele agendou</small>${tirados}</div>` : ''}
+        <div class="fecha-add">${faltam.map((sv) => { const volta = f.tirados.findIndex((t) => t.sid === sv.id); return `<button type="button" class="chip" data-a="fi-add" data-id="${sv.id}">${ic(volta >= 0 ? 'undo' : 'plus', 14)}${esc(sv.name)}<b>${money0(sv.price)}</b></button>`; }).join('')}<button type="button" class="chip tracejado" data-a="fi-outro">${ic('plus', 14)}Outro (produto, extra)</button></div></div>
       <div class="campo"><span class="lab">Desconto</span><div class="fecha-desc">
         <div class="seg"><button type="button" class="${f.dTipo === 'R$' ? 'on' : ''}" data-a="fd-tipo" data-v="R$">R$</button><button type="button" class="${f.dTipo === '%' ? 'on' : ''}" data-a="fd-tipo" data-v="%">%</button></div>
         <div class="entrada mini" id="e-fd"><span class="muted">${f.dTipo === '%' ? '%' : 'R$'}</span><input id="fd-val" data-fd="1" value="${esc(f.dVal)}" inputmode="decimal" placeholder="${f.dTipo === '%' ? '0' : '0,00'}" aria-label="Valor do desconto"></div>
-        <div class="chips fecha-rap">${rap.map(([t, v, r]) => `<button type="button" class="chip ${f.dTipo === t && pf(f.dVal) === Number(v) ? 'on' : ''}" data-a="fd-rap" data-t="${t}" data-v="${v}">${r}</button>`).join('')}${pf(f.dVal) ? '<button type="button" class="link" data-a="fd-rap" data-t="R$" data-v="">Tirar desconto</button>' : ''}</div></div></div>
+        <div class="chips fecha-rap">${rap.map(([t, v, r]) => `<button type="button" class="chip ${f.dTipo === t && pf(f.dVal) === Number(v) ? 'on' : ''}" data-a="fd-rap" data-t="${t}" data-v="${v}">${r}</button>`).join('')}${pf(f.dVal) ? '<button type="button" class="link" data-a="fd-rap" data-t="R$" data-v="">Tirar desconto</button>' : ''}</div></div>
+        <div id="fdMot">${contaFecha().desc ? motivo('d', f.dMot, MOT.desc, 'Motivo do desconto (obrigatório)') : ''}</div></div>
+      ${f.edit ? `<div class="campo"><span class="lab">Por que está mudando? <small class="muted">(o cliente vê)</small></span>${motivo('e', f.edMot, MOT.edit, 'Motivo da mudança (obrigatório)')}</div>` : ''}
       <div class="conta fecha-total" id="fechaTotal" aria-live="polite">${fechaTotal()}</div>
+      <div id="fechaAviso">${fechaAviso()}</div>
       <div class="fecha-bts"><button type="button" class="btn" data-a="fecha-x">Voltar</button><button type="submit" class="btn verde" id="fechaOk">${ic('check', 18)}${f.edit ? 'Salvar valores' : 'Confirmar atendimento'} · ${money(contaFecha().total)}</button></div></form>`;
   }
   function salvarFecha() {
     const f = V.fecha; const x = S.appts.find((y) => y.id === f.id); if (!x) return;
     const ruim = f.items.findIndex((it) => !String(it.name).trim());
     if (ruim >= 0) { alerta('erro', 'Falta o nome do item', 'Escreva o que foi feito ou vendido. Ex.: Pomada.'); const i = document.querySelector(`[data-fi="${ruim}"][data-k="name"]`); if (i) { marcar(i.closest('.entrada')); i.focus(); } return; }
+    // Todo ajuste precisa de motivo: preço diferente, serviço tirado, desconto e a edição de um atendimento já fechado
     const { desc, total } = contaFecha();
-    const items = f.items.map((it) => ({ serviceId: it.sid || null, name: String(it.name).trim(), price: Math.round(pf(it.price) * 100) / 100 }));
-    const c = cById(x.clientId); const edit = f.edit; const antes = { items: itensDe(x), discount: x.discount || 0, status: x.status };
-    act(() => api('PATCH', '/api/admin/agendamentos/' + x.id, { status: 'realizado', items, discount: desc }), () => {
+    const faltas = [];
+    f.items.forEach((it, i) => { if (difDe(it) && !it.mot.trim()) faltas.push(['i' + i, `Por que ${it.name} ficou ${difDe(it) > 0 ? 'mais caro' : 'mais barato'}?`]); });
+    f.tirados.forEach((t, j) => { if (!t.mot.trim()) faltas.push(['t' + j, `Por que ${t.name} saiu?`]); });
+    if (desc && !f.dMot.trim()) faltas.push(['d', 'Qual o motivo do desconto?']);
+    if (f.edit && !f.edMot.trim()) faltas.push(['e', 'Por que está mudando os valores?']);
+    if (faltas.length) {
+      f.tentou = true; render();
+      alerta('erro', 'Falta o motivo', `${faltas[0][1]} Fica no histórico e o cliente também vê.`);
+      const el = $('#mot-' + faltas[0][0]); if (el) { marcar(el); const i = el.querySelector('input'); if (i) i.focus(); }
+      return;
+    }
+    const conta = montaConta();
+    const items = conta.feitos.map((it) => ({ serviceId: it.serviceId, name: it.name, price: it.price }));
+    const c = cById(x.clientId); const edit = f.edit; const antes = x.status;
+    const avisa = edit || A.mudancasConta(conta).length;
+    act(() => api('PATCH', '/api/admin/agendamentos/' + x.id, { status: 'realizado', items, discount: desc, conta: { feitos: conta.feitos, tirados: conta.tirados, desconto: conta.desconto, motivoEdicao: edit ? f.edMot.trim() : '' } }), () => {
       V.fecha = null;
       const nomes = items.map((it) => it.name).join(' + ');
-      if (edit) alerta('ok', 'Valores atualizados', `${first(c.name)} · ${nomes} · ${money(total)}. O financeiro já mudou.`);
-      else alerta('ok', `${first(c.name)} atendido!`, `${nomes} · ${money(total)} entrou no ${x.date === TODAY ? 'caixa de hoje' : 'financeiro'}.`, [{ r: 'Desfazer', fn: () => act(() => api('PATCH', '/api/admin/agendamentos/' + x.id, { status: antes.status, items: antes.items, discount: antes.discount }), () => alerta('info', 'Pronto, desfeito', 'O horário voltou para aguardando.')) }], 6000);
+      const aviso = avisa ? ` ${first(c.name)} foi avisado no sininho do site.` : '';
+      if (edit) alerta('ok', 'Valores atualizados', `${first(c.name)} · ${nomes} · ${money(total)}. O financeiro já mudou.${aviso}`);
+      else alerta('ok', `${first(c.name)} atendido!`, `${nomes} · ${money(total)} entrou no ${x.date === TODAY ? 'caixa de hoje' : 'financeiro'}.${aviso}`, [{ r: 'Desfazer', fn: () => act(() => api('PATCH', '/api/admin/agendamentos/' + x.id, { status: antes }), () => alerta('info', 'Pronto, desfeito', 'O horário voltou para aguardando.')) }], 6000);
     });
+  }
+
+  /** Histórico do atendimento: o que foi agendado, o que foi feito e por quê (ficha do pedido). */
+  function contaDia(x) {
+    const c = x.conta; const mud = A.mudancasConta(c);
+    const prev = c.previsto; const tit = (t) => `<small class="mini-lab">${t}</small>`;
+    const linha = (ico, nome, val, nota, cls = '') => `<div class="l ${cls}"><span class="ico-k p">${ico}</span><span>${nome}${nota ? `<em>${nota}</em>` : ''}</span><b class="num">${val}</b></div>`;
+    const feitos = c.feitos.map((f) => {
+      const notas = [];
+      if (f.tipo === 'trocado') notas.push(`No lugar de ${esc(f.de.name)}`);
+      if (f.tipo === 'acrescentado') notas.push(f.serviceId ? 'Acrescentado na hora' : 'Extra');
+      if (A.mudouPreco(f)) notas.push(`${money(f.base)} → ${money(f.price)}${f.motivo ? ` · ${esc(f.motivo)}` : ''}`);
+      return linha(svcIcon(f.name).replace('<svg', '<svg width="15" height="15"'), esc(f.name), money(f.price), notas.join(' · '), f.tipo !== 'agendado' || A.mudouPreco(f) ? 'mudou' : '');
+    }).join('');
+    const tirados = (c.tirados || []).map((t) => linha(ic('x', 14), `<s>${esc(t.name)}</s>`, `<s>${money(t.price)}</s>`, `Tirado${t.motivo ? ` · ${esc(t.motivo)}` : ''}`, 'tirado')).join('');
+    const d = c.desconto && c.desconto.valor > 0 ? `<div class="l desc"><span></span><span>Desconto${c.desconto.tipo === '%' ? ` de ${A.pctTxt(c.desconto.pct)}` : ''}${c.desconto.motivo ? `<em>${esc(c.desconto.motivo)}</em>` : ''}</span><b class="num">− ${money(c.desconto.valor)}</b></div>` : '';
+    const dif = r2(c.total - prev.total);
+    const eds = (c.edicoes || []).map((e) => `<li><b>Editado ${diaTxt(e.at.slice(0, 10))} às ${hm(e.at)}</b><span>${money(e.de)} → ${money(e.para)} · ${esc(e.motivo)}</span>${e.visto ? `<small data-k="verde">${ic('check', 12)}Cliente viu</small>` : `<small>${ic('bell', 12)}Cliente avisado</small>`}</li>`).join('');
+    return `<div class="pedido-itens conta-dia">
+        ${tit('Agendado pelo cliente')}<div class="cd-prev"><span>${esc(prev.items.map((it) => it.name).join(' + '))}</span><b class="num">${money(prev.total)}</b></div>
+        ${tit(mud.length ? 'O que foi feito' : 'O que foi feito · igual ao agendado')}${feitos}${tirados}${d}
+        <div class="l tot"><span>Pagou</span><b class="num">${money(c.total)}</b></div>
+        ${dif ? `<span class="dif" data-k="${dif > 0 ? 'verde' : 'laranja'}">${ic(dif > 0 ? 'trend' : 'down', 13)}${money(Math.abs(dif))} ${dif > 0 ? 'a mais' : 'a menos'} do que o agendado</span>` : ''}
+        ${eds ? `${tit('Mudanças depois de fechado')}<ul class="cd-eds">${eds}</ul>` : ''}
+        <button type="button" class="link" data-a="fecha-edit" data-id="${x.id}" style="align-self:flex-start">${ic('tag', 15)}Editar valores</button></div>`;
   }
 
   // ===== Ações =====
@@ -1354,9 +1469,28 @@
       case 'st': e.stopPropagation(); if (el.dataset.s === 'realizado') abrirFecha(id); else setStatus(id, el.dataset.s); break;
       case 'fecha-edit': abrirFecha(id, true); break;
       case 'fecha-x': V.fecha = null; render(); break;
-      case 'fi-add': { const sv = S.services.find((y) => y.id === id); if (!sv) break; V.fecha.items.push({ sid: sv.id, name: sv.name, price: num2(sv.price) }); render(); break; }
-      case 'fi-outro': V.fecha.items.push({ sid: '', name: '', price: '' }); render(); { const l = document.querySelectorAll('[data-fi][data-k="name"]'); const i = l[l.length - 1]; if (i) i.focus(); } break;
-      case 'fi-del': if (V.fecha.items.length > 1) { V.fecha.items.splice(Number(v), 1); render(); } break;
+      case 'fi-add': {
+        const sv = S.services.find((y) => y.id === id); if (!sv) break;
+        const j = V.fecha.tirados.findIndex((t) => t.sid === sv.id); // era do agendado: volta como estava
+        if (j >= 0) { const t = V.fecha.tirados.splice(j, 1)[0]; V.fecha.items.push({ sid: t.sid, name: t.name, price: num2(t.price), mot: '', orig: { sid: t.sid, name: t.name, price: t.price } }); }
+        else V.fecha.items.push({ sid: sv.id, name: sv.name, price: num2(sv.price), mot: '', orig: null });
+        render(); break;
+      }
+      case 'fi-outro': V.fecha.items.push({ sid: '', name: '', price: '', mot: '', orig: null }); render(); { const l = document.querySelectorAll('[data-fi][data-k="name"]'); const i = l[l.length - 1]; if (i) i.focus(); } break;
+      case 'fi-del': if (V.fecha.items.length > 1) {
+        const it = V.fecha.items.splice(Number(v), 1)[0];
+        // Tirou algo que o cliente agendou: fica guardado como "tirado", com o motivo
+        if (it.orig) V.fecha.tirados.push({ sid: it.orig.sid, name: it.orig.name, price: Number(it.orig.price), mot: 'Não foi feito' });
+        render();
+      } break;
+      case 'ti-volta': { const t = V.fecha.tirados.splice(Number(v), 1)[0]; if (t) V.fecha.items.push({ sid: t.sid, name: t.name, price: num2(t.price), mot: '', orig: { sid: t.sid, name: t.name, price: t.price } }); render(); break; }
+      case 'mot': {
+        const k = el.dataset.k; const f = V.fecha;
+        if (k === 'd') f.dMot = v; else if (k === 'e') f.edMot = v; else if (k[0] === 'i') f.items[Number(k.slice(1))].mot = v; else f.tirados[Number(k.slice(1))].mot = v;
+        const box = $('#mot-' + k); if (box) { box.classList.remove('falta'); box.querySelector('input').value = v; box.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', b.dataset.v === v)); }
+        const av = $('#fechaAviso'); if (av) av.innerHTML = fechaAviso();
+        break;
+      }
       case 'fd-tipo': V.fecha.dTipo = v; V.fecha.dVal = ''; render(); { const i = $('#fd-val'); if (i) i.focus(); } break;
       case 'fd-rap': V.fecha.dTipo = el.dataset.t; V.fecha.dVal = v; render(); break;
       case 'svc-ver': V.pg.svc = 1; openLado('svc', v); break;
@@ -1368,9 +1502,9 @@
       case 'lado-ask': V.ladoAsk = v; render(); break;
       case 'lado-no': V.ladoAsk = null; render(); break;
       case 'bloq': V.ladoAsk = null;
-        act(() => api('POST', `/api/admin/clientes/${id}/bloquear`, {}), (r) => alerta('aviso', 'Cliente bloqueado no site', `${first(cById(id).name)} não consegue mais marcar pelo site.${r && r.cancelled && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`, [{ r: 'Desfazer', fn: () => act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('info', 'Bloqueio desfeito', 'O cliente já pode marcar pelo site de novo.')) }]));
+        act(() => api('POST', `/api/admin/clientes/${id}/bloquear`, {}), (r) => alerta('aviso', 'Cliente bloqueado no site', `${first(cById(id).name)} não consegue mais marcar pelo site e foi avisado no sininho.${r && r.cancelled && r.cancelled.length ? ` ${r.cancelled.length === 1 ? '1 horário futuro foi cancelado' : `${r.cancelled.length} horários futuros foram cancelados`} e ficou livre.` : ''}`, [{ r: 'Desfazer', fn: () => act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('info', 'Bloqueio desfeito', 'O cliente já pode marcar pelo site de novo.')) }]));
         break;
-      case 'desbloq': e.stopPropagation(); act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('ok', `${first(cById(id).name)} desbloqueado`, 'Já pode agendar pelo site de novo.')); break;
+      case 'desbloq': e.stopPropagation(); act(() => api('POST', `/api/admin/clientes/${id}/desbloquear`, {}), () => alerta('ok', `${first(cById(id).name)} desbloqueado`, 'Já pode agendar pelo site de novo. Ele foi avisado no sininho.')); break;
       case 'fam': {
         e.stopPropagation(); const n = Number(v) || 0; const c = cById(id); const antes = famDe(c);
         if (n === antes) break;
@@ -1501,6 +1635,13 @@
   document.addEventListener('input', (e) => {
     const el = e.target;
     if (V.fecha && el.dataset.fi) { const it = V.fecha.items[Number(el.dataset.fi)]; if (it && el.dataset.k !== 'sid') { it[el.dataset.k] = el.value; paintFecha(); } return; }
+    if (V.fecha && el.dataset.mot) {
+      const k = el.dataset.mot; const f = V.fecha; const t = el.value;
+      if (k === 'd') f.dMot = t; else if (k === 'e') f.edMot = t; else if (k[0] === 'i') f.items[Number(k.slice(1))].mot = t; else f.tirados[Number(k.slice(1))].mot = t;
+      const box = el.closest('.motivo'); if (box) { if (t.trim()) box.classList.remove('falta'); box.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', b.dataset.v === t)); }
+      const av = $('#fechaAviso'); if (av) av.innerHTML = fechaAviso();
+      return;
+    }
     if (V.fecha && el.dataset.fd) { V.fecha.dVal = el.value; paintFecha(); document.querySelectorAll('.fecha-rap .chip').forEach((b) => b.classList.toggle('on', b.dataset.t === V.fecha.dTipo && pf(el.value) === Number(b.dataset.v))); return; }
     if (el.dataset.in) {
       const k = el.dataset.in;
@@ -1521,7 +1662,7 @@
     const el = e.target;
     if (V.fecha && el.dataset.fi && el.dataset.k === 'sid') {
       const it = V.fecha.items[Number(el.dataset.fi)]; const sv = S.services.find((y) => y.id === el.value);
-      if (it && sv) { it.sid = sv.id; it.name = sv.name; it.price = num2(sv.price); render(); }
+      if (it && sv) { it.sid = sv.id; it.name = sv.name; it.price = num2(ehOrig(it) ? it.orig.price : sv.price); it.mot = ''; render(); }
       return;
     }
     if (V.draft && (el.dataset.d === 'shopName' || el.dataset.d === 'tagline' || el.dataset.svc)) { const p = document.querySelector('.previa-cel'); if (p) p.outerHTML = previa(V.draft); }
