@@ -435,8 +435,16 @@
   }
 
   // ===== Clientes =====
+  // Fiel = mais de 10 atendimentos E veio em cada um dos últimos 3 meses fechados
+  // (o mês atual não entra porque ainda está correndo). Quem só vem "de vez em quando",
+  // mesmo com muitas visitas no total, fica como Cliente.
+  const FIEL_VISITAS = 10, FIEL_MESES = 3;
+  function mesesFiel() {
+    const d = A.parse(TODAY);
+    return Array.from({ length: FIEL_MESES }, (_, i) => A.iso(new Date(d.getFullYear(), d.getMonth() - FIEL_MESES + i, 1)).slice(0, 7));
+  }
   function clientStats() {
-    const ms = TODAY.slice(0, 8) + '01';
+    const ms = TODAY.slice(0, 8) + '01'; const mf = mesesFiel();
     const by = {}; for (const x of S.appts) (by[x.clientId] = by[x.clientId] || []).push(x);
     const arr = S.clients.map((c) => {
       const ap = by[c.id] || []; const done = ap.filter((x) => x.status === 'realizado');
@@ -449,6 +457,7 @@
         c, visits: done.length, spent, ticket: done.length ? spent / done.length : 0, last: datas[datas.length - 1] || null, cada, fav: fav ? fav[0] : '',
         next: ap.filter((x) => x.status === 'agendado' && x.date >= TODAY).map((x) => x.date).sort()[0] || null,
         faltas: ap.filter((x) => x.status === 'faltou').length, thisMonth: done.some((x) => x.date >= ms),
+        fiel: done.length > FIEL_VISITAS && mf.every((m) => datas.some((d) => d.startsWith(m))),
       };
     });
     const top = arr.filter((x) => x.spent > 0).sort((p, q) => q.spent - p.spent).slice(0, 5);
@@ -456,7 +465,7 @@
     arr.forEach((x) => {
       x.pos = posGasto[x.c.id] || 0;
       // Nível principal (um só, para o card ficar limpo)
-      x.nivel = x.c.blocked ? ['vermelho', 'ban', 'Bloqueado'] : top.includes(x) ? ['ouro', 'crown', 'VIP'] : x.visits >= 4 ? ['verde', 'repeat', 'Fiel'] : sumido(x) ? ['laranja', 'clock', 'Sumido'] : x.visits <= 1 ? ['azul', 'spark', 'Novo'] : ['cinza', 'user', 'Cliente'];
+      x.nivel = x.c.blocked ? ['vermelho', 'ban', 'Bloqueado'] : top.includes(x) ? ['ouro', 'crown', 'VIP'] : x.fiel ? ['verde', 'repeat', 'Fiel'] : sumido(x) ? ['laranja', 'clock', 'Sumido'] : x.visits <= 1 ? ['azul', 'spark', 'Novo'] : ['cinza', 'user', 'Cliente'];
       const t = [];
       if (sumido(x) && x.nivel[2] !== 'Sumido') t.push(['laranja', 'Sumido no mês']);
       if (famDe(x.c)) t.push(['ouro', `Família · ${x.c.perDay} por dia`]);
@@ -477,7 +486,7 @@
   const FILTROS = [
     ['todos', 'Todos', 'users', () => true],
     ['vip', 'VIP', 'crown', (x, top) => top.includes(x)],
-    ['fieis', 'Fiéis', 'repeat', (x) => x.visits >= 4],
+    ['fieis', 'Fiéis', 'repeat', (x) => x.fiel],
     ['novos', 'Novos', 'spark', (x) => x.visits <= 1 && !x.c.blocked],
     ['sumidos', 'Sumidos no mês', 'clock', sumido],
     ['familia', 'Família', 'users', (x) => famDe(x.c) > 0],
@@ -496,6 +505,7 @@
 
   // ----- Ranking: pódio com 1º, 2º e 3º lugar -----
   const RK = { gasto: ['Quem mais gasta', 'wallet'], freq: ['Mais frequentes', 'repeat'], sumidos: ['Quem sumiu', 'clock'] };
+  const RK_MAX = 5; // o ranking mostra só os 5 primeiros (pódio + 4º e 5º)
   const RK_PER = { mes: 'Este mês', '3m': '3 meses', tudo: 'Desde sempre' };
   function rankDados() {
     const ini = V.rkPer === 'mes' ? TODAY.slice(0, 8) + '01' : V.rkPer === '3m' ? A.iso(A.addDays(NOW, -90)) : '0000';
@@ -514,14 +524,14 @@
     if (V.rk === 'sumidos') {
       const { arr } = clientStats();
       const l = arr.filter(sumido).sort(ORD.sumido[1]);
-      corpo = l.length ? `<div class="rk-sumidos">${l.slice(0, 6).map((x, i) => {
+      corpo = l.length ? `<div class="rk-sumidos">${l.slice(0, RK_MAX).map((x, i) => {
         const d = diasDesde(x.last); const atraso = x.cada ? d - x.cada : 0;
         const msg = `Olá, ${first(x.c.name)}! Aqui é da ${S.settings.shopName}. Faz um tempinho que você não aparece. Bora dar aquele trato? É só marcar pelo nosso site.`;
         return `<div class="rk-sum ${i === 0 ? 'pior' : ''}"><button type="button" class="rk-sum-q" data-a="cli" data-id="${x.c.id}">${avk(x.c, 42)}<div><b>${esc(x.c.name)}</b><small>${x.visits} visita${x.visits > 1 ? 's' : ''} · ${esc(x.fav || 'Corte')}</small></div></button>
           <div class="rk-dias"><b class="num">${d}</b><span>dias sem vir</span></div>
           <p>${x.cada ? (atraso > 0 ? `Costumava vir a cada <b>${x.cada} dias</b>. Está <b>${atraso} dias</b> atrasado.` : `Costuma vir a cada <b>${x.cada} dias</b>.`) : `Veio só uma vez, em ${shortDate(x.last)}.`}</p>
           ${x.c.phone ? `<a class="btn p" href="${waLink(x.c.phone, msg)}" target="_blank" rel="noopener">${ic('whats', 15)}Chamar de volta</a>` : ''}</div>`;
-      }).join('')}</div>${l.length > 6 ? `<button type="button" class="link rk-mais" data-a="cli-f" data-v="sumidos" data-rola="1">Ver os ${l.length} sumidos${ic('right', 15)}</button>` : ''}`
+      }).join('')}</div>${l.length > RK_MAX ? `<button type="button" class="link rk-mais" data-a="cli-f" data-v="sumidos" data-rola="1">Ver os ${l.length} sumidos${ic('right', 15)}</button>` : ''}`
         : `<div class="rk-vazio">${ic('check', 22)}<b>Ninguém sumido</b><span>Todo mundo que costuma vir já voltou este mês ou tem horário marcado.</span></div>`;
     } else {
       const l = rankDados();
@@ -532,7 +542,7 @@
           <span class="pd-av">${esc(initials(p.c.name))}<i>${pos}</i></span>
           <b class="pd-nome">${esc(p.c.name)}</b><span class="pd-val num">${val(p)}</span><small>${sub(p)}</small>
           <div class="pd-base"><span>${pos}º</span></div></button>`;
-      const resto = l.slice(3, 10); const max = l[0] ? (V.rk === 'freq' ? l[0].n : l[0].val) : 1;
+      const resto = l.slice(3, RK_MAX); const max = l[0] ? (V.rk === 'freq' ? l[0].n : l[0].val) : 1;
       corpo = l.length ? `<div class="podio">${lugar(l[1], 2)}${lugar(l[0], 1)}${lugar(l[2], 3)}</div>
         ${resto.length ? `<div class="rk-lista">${resto.map((p, i) => `<button type="button" class="rk-l" data-a="cli" data-id="${p.c.id}"><span class="n">${i + 4}º</span>${avk(p.c, 34)}<b>${esc(p.c.name)}</b><span class="barra"><i style="width:${((V.rk === 'freq' ? p.n : p.val) / max) * 100}%"></i></span><span class="v num">${val(p)}</span></button>`).join('')}</div>` : ''}`
         : `<div class="rk-vazio">${ic('star', 22)}<b>Ninguém no ranking ainda</b><span>Quando você marcar atendimentos como atendidos, o pódio aparece aqui.</span></div>`;
@@ -552,7 +562,12 @@
         <div class="entrada ordem">${ic('sort', 17)}<select data-ch="cli-ord" aria-label="Ordenar">${Object.entries(ORD).map(([k, [r]]) => `<option value="${k}" ${V.cliOrd === k ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
       </div>
       <div class="cli-chips">${FILTROS.map((f) => `<button type="button" class="cchip ${V.cliF === f[0] ? 'on' : ''}" data-a="cli-f" data-v="${f[0]}">${ic(f[2], 15)}${f[1]}<b>${n(f)}</b></button>`).join('')}</div>
+      ${V.cliF === 'fieis' ? regraFiel() : ''}
       <div id="cliLista">${cliLista()}</div></section>`;
+  }
+  function regraFiel() {
+    const ms = mesesFiel().map((m) => MESES[+m.slice(5, 7) - 1]);
+    return `<p class="cli-regra">${ic('repeat', 16)}<span><b>Fiel</b> é quem já veio <b>mais de ${FIEL_VISITAS} vezes</b> e cortou em <b>todos os últimos ${FIEL_MESES} meses</b> (${ms.slice(0, -1).join(', ')} e ${ms[ms.length - 1]}).</span></p>`;
   }
   function cliCard(x) {
     const [k, i, r] = x.nivel;
@@ -570,7 +585,7 @@
     const { l } = listaClientes(); const { itens, html } = pagina(l, 'cli');
     setTimeout(() => { const e = $('#cliCont'); if (e) e.textContent = `${l.length} ${l.length === 1 ? 'cliente' : 'clientes'}`; });
     if (!itens.length) {
-      const msg = !S.clients.length ? ['Nenhum cliente ainda', 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'] : V.cliQ ? ['Nenhum cliente encontrado', 'Confira o nome ou tente buscar pelo WhatsApp.'] : V.cliF === 'sumidos' ? ['Ninguém sumido', 'Todo mundo que costuma vir já voltou este mês ou tem horário marcado.'] : V.cliF === 'bloq' ? ['Ninguém bloqueado', 'Para bloquear alguém, abra a ficha do cliente.'] : ['Ninguém nesta lista', 'Assim que tiver atendimentos, a lista enche.'];
+      const msg = !S.clients.length ? ['Nenhum cliente ainda', 'Os clientes aparecem aqui assim que fizerem o primeiro agendamento.'] : V.cliQ ? ['Nenhum cliente encontrado', 'Confira o nome ou tente buscar pelo WhatsApp.'] : V.cliF === 'sumidos' ? ['Ninguém sumido', 'Todo mundo que costuma vir já voltou este mês ou tem horário marcado.'] : V.cliF === 'fieis' ? ['Nenhum cliente fiel ainda', `Fiel é quem já veio mais de ${FIEL_VISITAS} vezes e cortou em todos os últimos ${FIEL_MESES} meses.`] : V.cliF === 'bloq' ? ['Ninguém bloqueado', 'Para bloquear alguém, abra a ficha do cliente.'] : ['Ninguém nesta lista', 'Assim que tiver atendimentos, a lista enche.'];
       return `<div class="cartao"><div class="vazio"><span class="ico-k" data-k="laranja">${ic('search', 26)}</span><h4>${msg[0]}</h4><p>${msg[1]}</p></div></div>`;
     }
     return `<div class="cli-grid">${itens.map(cliCard).join('')}</div>${html}`;
